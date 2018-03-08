@@ -2,7 +2,6 @@ package stun
 
 import (
 	"github.com/pkg/errors"
-	"golang.org/x/net/ipv4"
 )
 import "encoding/binary"
 
