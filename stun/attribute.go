@@ -2,6 +2,8 @@ package stun
 
 import "fmt"
 
+// AttrType represents an attribute type
+// https://tools.ietf.org/html/rfc5389#section-15
 type AttrType uint16
 
 // STUN Attribute Registry
@@ -31,7 +33,17 @@ const (
 	AttrFingerprint     AttrType = 0x8028
 )
 
+// https://tools.ietf.org/html/rfc5245#section-19.1
+// ICE STUN Attributes
+const (
+	AttrPriority       AttrType = 0x0024
+	AttrUseCandidate   AttrType = 0x0025
+	AttrIceControlled  AttrType = 0x8029
+	AttrIceControlling AttrType = 0x802A
+)
+
 var attrNames = map[AttrType]string{
+	// - Comprehension-Required
 	AttrMappedAddress:     "MAPPED-ADDRESS",
 	AttrResponseAddress:   "RESPONSE-ADDRESS",
 	AttrChangeAddress:     "CHANGE-ADDRESS",
@@ -46,9 +58,15 @@ var attrNames = map[AttrType]string{
 	AttrRealm:             "REALM",
 	AttrNonce:             "NONCE",
 	AttrXORMappedAddress:  "XOR-MAPPED-ADDRESS",
-	AttrSoftware:          "SOFTWARE",
-	AttrAlternateServer:   "ALTERNATE-SERVER",
-	AttrFingerprint:       "FINGERPRINT",
+	// - Comprehension-Optional
+	AttrSoftware:        "SOFTWARE",
+	AttrAlternateServer: "ALTERNATE-SERVER",
+	AttrFingerprint:     "FINGERPRINT",
+	// - ICE STUN
+	AttrPriority:       "PRIORITY",
+	AttrUseCandidate:   "USE-CANDIDATE",
+	AttrIceControlled:  "ICE-CONTROLLED",
+	AttrIceControlling: "ICE-CONTROLLING",
 }
 
 func (t AttrType) String() string {
@@ -58,4 +76,18 @@ func (t AttrType) String() string {
 		return fmt.Sprintf("0x%x", uint16(t))
 	}
 	return s
+}
+
+// RawAttribute represents an unprocessed view of the TLV structure
+// for an attribute
+// https://tools.ietf.org/html/rfc5389#section-15
+type RawAttribute struct {
+	Type   AttrType
+	Length uint16
+	Value  []byte
+	Pad    uint16
+}
+
+func (a RawAttribute) String() string {
+	return fmt.Sprintf("%v: 0x%x (%d)", a.Type, a.Value, a.Length)
 }
