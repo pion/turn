@@ -1,6 +1,13 @@
 package main
 
 import "gitlab.com/pions/pion/turn/stun"
+import (
+	"fmt"
+	"net"
+	"time"
+
+	"gitlab.com/pions/pion/turn/server"
+)
 
 func main() {
 	msg1 := []byte("\x00\x01\x00\x58\x21\x12\xa4\x42\x48\x75\x38\x77\x4e\x4f\x49\x53\x62\x54\x65\x4a\x00\x06\x00\x1b\x35\x50\x4e\x32\x71\x6d\x57\x71\x42\x6c\x3a\x34\x68\x52\x42\x6d\x66\x4b\x48\x75\x58\x6a\x4f\x67\x6b\x56\x4a\x00\x80\x2a\x00\x08\xd2\xdb\x70\x25\x70\x6b\xcd\x98\x00\x25\x00\x00\x00\x24\x00\x04\x6e\x7f\x1e\xff\x00\x08\x00\x14\x5a\xca\x22\xd7\xf4\x39\xfa\xde\xaf\xd3\x9b\xd6\xec\x00\xd4\x96\xe2\x17\x09\x32\x80\x28\x00\x04\x78\x5d\x2e\xeb")
@@ -36,7 +43,28 @@ func main() {
 		"\x80\x28\x00\x04" +
 		"\xc8\xfb\x0b\x4c",
 	)
-	stun.NewMessage(msg1)
-	stun.NewMessage(msg)
-	stun.NewMessage(msg2)
+
+	s := server.NewStunServer()
+	errors := make(chan error)
+
+	go func() {
+		err := s.Listen("", stun.DefaultPort)
+		errors <- err
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	c, err := net.Dial("udp", fmt.Sprintf(":%d", stun.DefaultPort))
+	if err != nil {
+		panic(err)
+	}
+
+	c.Write(msg)
+	c.Write(msg1)
+	c.Write(msg2)
+
+	select {
+	case e := <-errors:
+		panic(e)
+	}
+
 }

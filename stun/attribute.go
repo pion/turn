@@ -87,7 +87,3 @@ type RawAttribute struct {
 	Value  []byte
 	Pad    uint16
 }
-
-func (a RawAttribute) String() string {
-	return fmt.Sprintf("%v: 0x%x (%d)", a.Type, a.Value, a.Length)
-}

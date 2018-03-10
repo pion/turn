@@ -3,7 +3,6 @@ package stun
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 
 	"github.com/pkg/errors"
 )
@@ -93,6 +92,8 @@ const (
 )
 
 type Message struct {
+	Class         MessageClass
+	Method        Method
 	Length        uint16
 	TransactionID []byte
 	Attributes    []RawAttribute
@@ -219,22 +220,23 @@ func NewMessage(packet []byte) (*Message, error) {
 
 	t := header[transactionIDStart : transactionIDStart+transactionIDLength]
 
-	method, class := getMessageType(header)
+	class, method := getMessageType(header)
 
+	ra := []RawAttribute{}
 	// TODO Check attr length <= attr slice remaining
 	attr := packet[headerLength:]
 	for len(attr) > 0 {
 		a := getAttribute(attr)
 		attr = attr[attrValueStart+a.Length+a.Pad:]
-
-		log.Printf("stun packet attribute: %v", a)
+		ra = append(ra, *a)
 	}
 
 	m := Message{}
+	m.Class = class
+	m.Method = method
 	m.Length = ml
 	m.TransactionID = t
-
-	log.Printf("created stun message: %v-%v", class, method)
+	m.Attributes = ra
 
 	return &m, nil
 }
