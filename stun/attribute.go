@@ -1,6 +1,9 @@
 package stun
 
-import "fmt"
+import (
+	"encoding/binary"
+	"fmt"
+)
 
 // AttrType represents an attribute type
 // https://tools.ietf.org/html/rfc5389#section-15
@@ -69,6 +72,17 @@ var attrNames = map[AttrType]string{
 	AttrIceControlling: "ICE-CONTROLLING",
 }
 
+const (
+	attrLengthStart    = 2
+	attrLengthLength   = 2
+	attrValueStart     = 4
+	attrLengthMultiple = 4
+)
+
+func getPadding(len int) int {
+	return (attrLengthMultiple - (len % attrLengthMultiple)) % attrLengthMultiple
+}
+
 func (t AttrType) String() string {
 	s, ok := attrNames[t]
 	if !ok {
@@ -86,4 +100,23 @@ type RawAttribute struct {
 	Length uint16
 	Value  []byte
 	Pad    uint16
+}
+
+func (r *RawAttribute) Pack(attribute []byte) int {
+	binary.BigEndian.PutUint16(attribute, uint16(r.Type))
+	binary.BigEndian.PutUint16(attribute[attrLengthStart:attrLengthStart+attrLengthLength], uint16(r.Length))
+	copy(attribute[attrValueStart:], r.Value)
+	return 4 + len(r.Value)
+}
+
+func (r *RawAttribute) Unpack(attribute []byte) *RawAttribute {
+	typ := AttrType(binary.BigEndian.Uint16(attribute))
+	len := binary.BigEndian.Uint16(attribute[attrLengthStart : attrLengthStart+attrLengthLength])
+	pad := (attrLengthMultiple - (len % attrLengthMultiple)) % attrLengthMultiple
+	return &RawAttribute{typ, len, attribute[attrValueStart : attrValueStart+len], pad}
+}
+
+type Attribute interface {
+	Pack(message *Message) (*RawAttribute, error)
+	Unpack(message *Message, rawAttribute *RawAttribute) error
 }

@@ -80,15 +80,8 @@ const (
 	messageLengthLength int = 2
 	magicCookieStart    int = 4
 	magicCookieLength   int = 4
-	transactionIDStart  int = 8
-	transactionIDLength int = 12
-)
-
-const (
-	attrLengthStart    = 2
-	attrLengthLength   = 2
-	attrValueStart     = 4
-	attrLengthMultiple = 4
+	transactionIDStart  int = 4
+	transactionIDLength int = 16
 )
 
 type Message struct {
@@ -96,7 +89,7 @@ type Message struct {
 	Method        Method
 	Length        uint16
 	TransactionID []byte
-	Attributes    []RawAttribute
+	Attributes    []*RawAttribute
 }
 
 // The most significant 2 bits of every STUN message MUST be zeroes.
@@ -116,7 +109,7 @@ func verifyMagicCookie(header []byte) error {
 	const magicCookie = 0x2112A442
 	c := header[magicCookieStart : magicCookieStart+magicCookieLength]
 	if binary.BigEndian.Uint32(c) != magicCookie {
-		return errors.Errorf("stun header magic cookie invalid; %v != %v (expected)", c, magicCookie)
+		return errors.Errorf("stun header magic cookie invalid; %v != %v (expected)", binary.BigEndian.Uint32(c), magicCookie)
 	}
 	return nil
 }
@@ -143,29 +136,41 @@ func getMessageLength(header []byte) (uint16, error) {
 // |M |M |M|M|M|C|M|M|M|C|M|M|M|M|
 // |11|10|9|8|7|1|6|5|4|0|3|2|1|0|
 // +--+--+-+-+-+-+-+-+-+-+-+-+-+-+
+const (
+	c0Mask   = 0x10 // 0b10000
+	c1Mask   = 0x01 // 0b00001
+	c0ShiftR = 4    // R 0b10000 -> 0b00001
+	c1ShiftL = 1    // L 0b00001 -> 0b00010
+
+	m0Mask   = 0x0F // 0b00001111
+	m4Mask   = 0xE0 // 0b11100000
+	m7Mask   = 0x3E // 0b00111110
+	m4ShiftR = 1    // R 0b01110000 -> 0b00111000
+	m7ShiftL = 5    // L 0b00111110 -> 0b0000011111000000
+)
+
+func setMessageType(header []byte, class MessageClass, method Method) {
+	m := uint16(method)
+	c := uint16(class)
+
+	mt := m & m0Mask
+	// Make room for c0
+	mt |= (m & (m4Mask >> m4ShiftR)) << 1
+	mt |= (m & (m7Mask << 6)) << 2
+	mt |= (c & 0x1) << 4
+	mt |= (c >> 1) << 8
+
+	binary.BigEndian.PutUint16(header[headerStart:], mt)
+}
+
 func getMessageType(header []byte) (MessageClass, Method) {
-	const (
-		c0Mask   = 0x01 // 0b00001
-		c1Mask   = 0x10 // 0b10000
-		c0ShiftL = 1    // L 0b00001 -> 0b00010
-		c1ShiftR = 4    // R 0b10000 -> 0b00001
+	mByte0 := header[0]
+	mByte1 := header[1]
 
-		m0Mask   = 0x0F // 0b00001111
-		m4Mask   = 0xE0 // 0b11100000
-		m7Mask   = 0x3E // 0b00111110
-		m4ShiftR = 1    // R 0b01110000 -> 0b00111000
-		m7ShiftL = 5    // L 0b00111110 -> 0b0000011111000000
-	)
-
-	messageClassByte := header[headerStart]
-
-	c0 := messageClassByte & c0Mask << c0ShiftL
-	c1 := (messageClassByte & c1Mask) >> c1ShiftR
+	c0 := (mByte1 & c0Mask) >> c0ShiftR
+	c1 := (mByte0 & c1Mask) << c1ShiftL
 
 	class := MessageClass(c1 | c0)
-
-	mByte1 := header[1]
-	mByte0 := header[0]
 
 	var m uint16
 	m = (uint16(mByte0) & m7Mask) << m7ShiftL
@@ -222,21 +227,40 @@ func NewMessage(packet []byte) (*Message, error) {
 
 	class, method := getMessageType(header)
 
-	ra := []RawAttribute{}
+	ra := []*RawAttribute{}
 	// TODO Check attr length <= attr slice remaining
 	attr := packet[headerLength:]
 	for len(attr) > 0 {
 		a := getAttribute(attr)
 		attr = attr[attrValueStart+a.Length+a.Pad:]
-		ra = append(ra, *a)
+		ra = append(ra, a)
 	}
 
 	m := Message{}
 	m.Class = class
 	m.Method = method
 	m.Length = ml
-	m.TransactionID = t
+	m.TransactionID = t[0:transactionIDLength]
 	m.Attributes = ra
 
 	return &m, nil
+}
+
+func (m *Message) Pack() []byte {
+	l := 0
+	for _, v := range m.Attributes {
+		l += int(4 + v.Length + v.Pad)
+	}
+	raw := make([]byte, headerLength+l)
+
+	setMessageType(raw[headerStart:2], m.Class, m.Method)
+	binary.BigEndian.PutUint16(raw[messageLengthStart:], uint16(l))
+	copy(raw[transactionIDStart:], m.TransactionID)
+
+	attrPos := headerLength
+	for _, v := range m.Attributes {
+		attrPos += v.Pack(raw[attrPos:])
+	}
+
+	return raw
 }
