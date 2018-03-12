@@ -27,8 +27,14 @@ const (
 type Method uint16
 
 const (
-	MethodBinding      Method = 0x01
-	MethodSharedSecret Method = 0x02
+	MethodBinding          Method = 0x01 // STUN
+	MethodSharedSecret     Method = 0x02 // STUN
+	MethodAllocate         Method = 0x03 // TURN (Req/Rsp)
+	MethodRefresh          Method = 0x04 // TURN (Req/Rsp)
+	MethodSend             Method = 0x06 // TURN (Ind)
+	MethodData             Method = 0x07 // TURN (Ind)
+	MethodCreatePermission Method = 0x08 // TURN (Req/Rsp)
+	MethodChannelBind      Method = 0x09 // TURN (Req/Rsp)
 )
 
 var messageClassName = map[MessageClass]string{
@@ -48,8 +54,14 @@ func (m MessageClass) String() string {
 }
 
 var methodName = map[Method]string{
-	MethodBinding:      "BINDING",
-	MethodSharedSecret: "SHARED-SECRET",
+	MethodBinding:          "BINDING",
+	MethodSharedSecret:     "SHARED-SECRET",
+	MethodAllocate:         "ALLOCATE",
+	MethodRefresh:          "REFRESH",
+	MethodSend:             "SEND",
+	MethodData:             "DATA",
+	MethodCreatePermission: "CREATE-PERMISSION",
+	MethodChannelBind:      "CHANNEL-BIND",
 }
 
 func (m Method) String() string {
@@ -244,6 +256,16 @@ func NewMessage(packet []byte) (*Message, error) {
 	m.Attributes = ra
 
 	return &m, nil
+}
+
+func (m *Message) GetAttribute(attrType AttrType) *RawAttribute {
+	for _, v := range m.Attributes {
+		if v.Type == attrType {
+			return v
+		}
+	}
+
+	return nil
 }
 
 func (m *Message) Pack() []byte {
