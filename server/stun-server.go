@@ -81,7 +81,7 @@ func (s *StunServer) handleUDPPacket() error {
 
 	m, err := stun.NewMessage(s.packet[:size])
 	if err != nil {
-		log.Printf("failed to create stun message from packet: %v", err)
+		return errors.Wrap(err, "failed to create stun message from packet")
 	}
 
 	if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {

@@ -14,8 +14,10 @@ func main() {
 		errors <- err
 	}()
 
-	select {
-	case e := <-errors:
-		panic(e)
+	for {
+		select {
+		case e := <-errors:
+			fmt.Println(e)
+		}
 	}
 }
