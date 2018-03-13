@@ -91,6 +91,28 @@ var attrNames = map[AttrType]string{
 	AttrIceControlling:     "ICE-CONTROLLING",
 }
 
+// https://tools.ietf.org/html/rfc5389#section-15.10
+// The SOFTWARE attribute contains a textual description of the software
+//  being used by the agent sending the message
+type Software struct {
+	Software string
+}
+
+func (s *Software) Pack(message *Message) (*RawAttribute, error) {
+	ra := &RawAttribute{}
+	ra.Type = AttrSoftware
+
+	ra.Value = []byte(s.Software)
+	ra.Length = uint16(len(ra.Value))
+
+	return ra, nil
+}
+
+func (s *Software) Unpack(message *Message, rawAttribute *RawAttribute) error {
+	s.Software = string(rawAttribute.Value)
+	return nil
+}
+
 const (
 	attrLengthStart    = 2
 	attrLengthLength   = 2

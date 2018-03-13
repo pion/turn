@@ -52,6 +52,9 @@ func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) er
 			IP:   addr.IP,
 			Port: addr.Port,
 		},
+		&stun.Software{
+			Software: "Pion",
+		},
 	)
 
 	b := rsp.Pack()

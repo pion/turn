@@ -1,8 +1,10 @@
 package main
 
-import "gitlab.com/pions/pion/turn/stun"
 import (
+	"fmt"
+
 	"gitlab.com/pions/pion/turn/server"
+	"gitlab.com/pions/pion/turn/stun"
 )
 
 func main() {
