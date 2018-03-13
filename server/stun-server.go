@@ -47,17 +47,12 @@ func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) er
 		TransactionID: m.TransactionID,
 	}
 
-	xorAddr := stun.XorMappedAddress{
-		IP:   addr.IP,
-		Port: addr.Port,
-	}
-
-	ra, err := xorAddr.Pack(rsp)
-	if err != nil {
-		return errors.Wrap(err, "unable to pack XOR-MAPPED-ADDRESS attribute")
-	}
-
-	rsp.Attributes = append(rsp.Attributes, ra)
+	rsp, err := stun.Build(stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+		&stun.XorMappedAddress{
+			IP:   addr.IP,
+			Port: addr.Port,
+		},
+	)
 
 	b := rsp.Pack()
 
