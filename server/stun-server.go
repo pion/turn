@@ -84,12 +84,12 @@ func (s *StunServer) handleUDPPacket() error {
 
 	m, err := stun.NewMessage(s.packet[:size])
 	if err != nil {
-		return errors.Wrap(err, "failed to create stun message from packet")
+		log.Printf("failed to create stun message from packet: %v", err)
 	}
 
 	if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
 		if err := v(addr, m); err != nil {
-			return errors.Wrapf(err, "unable to handle %v-%v from %v", m.Method, m.Class, addr)
+			log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
 		}
 	}
 
@@ -110,10 +110,13 @@ func (s *StunServer) Listen(address string, port int) error {
 
 	s.connection = conn
 
+	// Only fatal errors should bubble out to here
 	for {
-		err := s.handleUDPPacket()
+		err = s.handleUDPPacket()
 		if err != nil {
 			return errors.Wrap(err, "error handling udp packet")
 		}
 	}
+
+	return nil
 }

@@ -16,10 +16,8 @@ func main() {
 		errors <- err
 	}()
 
-	for {
-		select {
-		case e := <-errors:
-			fmt.Println(e)
-		}
+	select {
+	case e := <-errors:
+		fmt.Println(e)
 	}
 }
