@@ -117,6 +117,7 @@ func (x *XorMappedAddress) Pack(message *Message) (*RawAttribute, error) {
 	binary.BigEndian.PutUint16(v[portStart:portStart+portLength], uint16(x.Port))
 	xor(v[portStart:portStart+portLength], v[portStart:portStart+portLength], message.TransactionID[0:2])
 	// Address
+	copy(v[addressStart:], ip)
 	xor(v[addressStart:], v[addressStart:], message.TransactionID)
 
 	ra.Value = v
