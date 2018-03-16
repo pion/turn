@@ -32,8 +32,7 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//   mechanism of [RFC5389] unless the client and server agree to use
 	//   another mechanism through some procedure outside the scope of
 	//   this document.
-	r := m.GetAttribute(stun.AttrMessageIntegrity)
-	if r == nil {
+	if _, ok := m.GetAttribute(stun.AttrMessageIntegrity); ok {
 		//stun.AttrErrorCode, 401
 	}
 	// mi := MessageIntegrity{}
@@ -53,8 +52,7 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//    Request) error.  Otherwise, if the attribute is included but
 	//    specifies a protocol other that UDP, the server rejects the
 	//    request with a 442 (Unsupported Transport Protocol) error.
-	r = m.GetAttribute(stun.AttrRequestedTransport)
-	if r == nil {
+	if _, ok := m.GetAttribute(stun.AttrRequestedTransport); ok {
 		//stun.AttrErrorCode, 442
 	}
 	// rt := RequestedTransport{}
@@ -66,8 +64,7 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//    bit set to 1 (see Section 12), then the server treats the DONT-
 	//    FRAGMENT attribute in the Allocate request as an unknown
 	//    comprehension-required attribute.
-	r = m.GetAttribute(stun.AttrDontFragment)
-	if r != nil {
+	if _, ok := m.GetAttribute(stun.AttrDontFragment); ok {
 		// Should we handle manually building UDP packets to be able to set this bit?
 	}
 
@@ -79,10 +76,8 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	// corresponding relayed transport address is still available).  If
 	// the token is not valid for some reason, the server rejects the
 	// request with a 508 (Insufficient Capacity) error.
-	r = m.GetAttribute(stun.AttrReservationToken)
-	if r != nil {
-		re := m.GetAttribute(stun.AttrEvenPort)
-		if re != nil {
+	if _, ok := m.GetAttribute(stun.AttrReservationToken); ok {
+		if _, ok := m.GetAttribute(stun.AttrEvenPort); ok {
 			//stun.AttrErrorCode, 400
 		}
 
@@ -96,8 +91,7 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//    below).  If the server cannot satisfy the request, then the
 	//    server rejects the request with a 508 (Insufficient Capacity)
 	//    error.
-	r = m.GetAttribute(stun.AttrEvenPort)
-	if r != nil {
+	if _, ok := m.GetAttribute(stun.AttrEvenPort); ok {
 		// validate
 		// if unable to allocate { stun.AttrErrorCode, 508 }
 	}

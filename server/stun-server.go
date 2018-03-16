@@ -55,9 +55,21 @@ func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) er
 		&stun.Software{
 			Software: "Pion",
 		},
+		&stun.Fingerprint{},
 	)
 
 	b := rsp.Pack()
+
+	chk, err := stun.NewMessage(b)
+	if err != nil {
+		return errors.Wrap(err, "invalid fingerprint")
+	}
+	if fp, ok := chk.GetAttribute(stun.AttrFingerprint); ok {
+		err = (&stun.Fingerprint{}).Unpack(chk, fp)
+		if err != nil {
+			return errors.Wrap(err, "invalid fingerprint")
+		}
+	}
 
 	l, err := s.connection.WriteTo(b, addr)
 	if err != nil {
@@ -117,6 +129,4 @@ func (s *StunServer) Listen(address string, port int) error {
 			return errors.Wrap(err, "error handling udp packet")
 		}
 	}
-
-	return nil
 }

@@ -38,36 +38,31 @@ const (
 	errorCodeReasonStart     = 4
 )
 
-func (e *ErrorCode) Pack(message *Message) (*RawAttribute, error) {
+func (e *ErrorCode) Pack(message *Message) error {
 	if len(e.Reason) > errorCodeMaxReasonLength {
-		return nil, errors.Errorf("invalid reason length %d", len(e.Reason))
+		return errors.Errorf("invalid reason length %d", len(e.Reason))
 	}
 
 	if e.ErrorClass < 3 || e.ErrorClass > 6 {
-		return nil, errors.Errorf("invalid error class %d", e.ErrorClass)
+		return errors.Errorf("invalid error class %d", e.ErrorClass)
 	}
 
 	if e.ErrorNumber < 0 || e.ErrorNumber > 99 {
-		return nil, errors.Errorf("invalid error subcode %d", e.ErrorNumber)
+		return errors.Errorf("invalid error subcode %d", e.ErrorNumber)
 	}
 
 	len := errorCodeHeaderLength + len(e.Reason)
-	pad := getPadding(len)
 
-	v := make([]byte, pad+len)
+	v := make([]byte, len)
 
 	v[errorCodeClassStart] = byte(e.ErrorClass)
 	v[errorCodeNumberStart] = byte(e.ErrorNumber)
 
 	copy(v[errorCodeReasonStart:], e.Reason)
 
-	ra := &RawAttribute{}
-	ra.Type = AttrXORMappedAddress
-	ra.Value = v
-	ra.Length = uint16(len)
-	ra.Pad = uint16(pad)
+	message.AddAttribute(AttrErrorCode, v)
 
-	return ra, nil
+	return nil
 }
 
 func (x *ErrorCode) Unpack(message *Message, rawAttribute *RawAttribute) error {

@@ -86,8 +86,8 @@ func (m Method) String() string {
 //
 
 const (
-	headerStart         int = 0
-	headerLength        int = 20
+	messageHeaderStart  int = 0
+	messageHeaderLength int = 20
 	messageLengthStart  int = 2
 	messageLengthLength int = 2
 	magicCookieStart    int = 4
@@ -102,6 +102,7 @@ type Message struct {
 	Length        uint16
 	TransactionID []byte
 	Attributes    []*RawAttribute
+	Raw           []byte
 }
 
 // The most significant 2 bits of every STUN message MUST be zeroes.
@@ -114,7 +115,7 @@ func verifyHeaderMostSignificant2Bits(header []byte) bool {
 		mostSig2BitsShiftR uint = 6   // R 0b11000000 -> 0b00000011
 	)
 
-	return ((uint(header[headerStart]) & mostSig2BitsMask) >> mostSig2BitsShiftR) == 0
+	return ((uint(header[messageHeaderStart]) & mostSig2BitsMask) >> mostSig2BitsShiftR) == 0
 }
 
 func verifyMagicCookie(header []byte) error {
@@ -172,7 +173,7 @@ func setMessageType(header []byte, class MessageClass, method Method) {
 	mt |= (c & 0x1) << 4
 	mt |= (c >> 1) << 8
 
-	binary.BigEndian.PutUint16(header[headerStart:], mt)
+	binary.BigEndian.PutUint16(header[messageHeaderStart:], mt)
 }
 
 func getMessageType(header []byte) (MessageClass, Method) {
@@ -201,11 +202,11 @@ func getMessageType(header []byte) (MessageClass, Method) {
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |                         Value (variable)                ....
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-func getAttribute(attribute []byte) *RawAttribute {
+func getAttribute(attribute []byte, offset int) *RawAttribute {
 	typ := AttrType(binary.BigEndian.Uint16(attribute))
 	len := binary.BigEndian.Uint16(attribute[attrLengthStart : attrLengthStart+attrLengthLength])
 	pad := (attrLengthMultiple - (len % attrLengthMultiple)) % attrLengthMultiple
-	return &RawAttribute{typ, len, attribute[attrValueStart : attrValueStart+len], pad}
+	return &RawAttribute{typ, len, attribute[attrValueStart : attrValueStart+len], pad, offset}
 }
 
 // TODO Break this apart, too big
@@ -215,7 +216,7 @@ func NewMessage(packet []byte) (*Message, error) {
 		return nil, errors.Errorf("stun header must be at least 20 bytes, was %d", len(packet))
 	}
 
-	header := packet[headerStart : headerStart+headerLength]
+	header := packet[messageHeaderStart : messageHeaderStart+messageHeaderLength]
 
 	if !verifyHeaderMostSignificant2Bits(header) {
 		return nil, errors.New("stun header most significant 2 bits must equal 0b00")
@@ -231,8 +232,8 @@ func NewMessage(packet []byte) (*Message, error) {
 		return nil, errors.Wrap(err, "stun header invalid")
 	}
 
-	if len(packet) != headerLength+int(ml) {
-		return nil, errors.Errorf("stun header length invalid; %d != %d (expected)", headerLength+int(ml), len(packet))
+	if len(packet) != messageHeaderLength+int(ml) {
+		return nil, errors.Errorf("stun header length invalid; %d != %d (expected)", messageHeaderLength+int(ml), len(packet))
 	}
 
 	t := header[transactionIDStart : transactionIDStart+transactionIDLength]
@@ -241,9 +242,9 @@ func NewMessage(packet []byte) (*Message, error) {
 
 	ra := []*RawAttribute{}
 	// TODO Check attr length <= attr slice remaining
-	attr := packet[headerLength:]
+	attr := packet[messageHeaderLength:]
 	for len(attr) > 0 {
-		a := getAttribute(attr)
+		a := getAttribute(attr, cap(packet)-cap(attr))
 		attr = attr[attrValueStart+a.Length+a.Pad:]
 		ra = append(ra, a)
 	}
@@ -254,35 +255,53 @@ func NewMessage(packet []byte) (*Message, error) {
 	m.Length = ml
 	m.TransactionID = t[0:transactionIDLength]
 	m.Attributes = ra
+	m.Raw = packet
 
 	return &m, nil
 }
 
-func (m *Message) GetAttribute(attrType AttrType) *RawAttribute {
+func (m *Message) GetAttribute(attrType AttrType) (*RawAttribute, bool) {
 	for _, v := range m.Attributes {
 		if v.Type == attrType {
-			return v
+			return v, true
 		}
 	}
 
-	return nil
+	return nil, false
+}
+
+func (m *Message) CommitLength() {
+	binary.BigEndian.PutUint16(m.Raw[messageLengthStart:], uint16(m.Length))
+}
+
+func (m *Message) AddAttribute(attrType AttrType, v []byte) {
+
+	ra := RawAttribute{
+		Type:   attrType,
+		Value:  v,
+		Pad:    uint16(GetAttrPadding(len(v))),
+		Length: uint16(len(v)),
+		Offset: int(m.Length),
+	}
+
+	a := make([]byte, attrHeaderLength+ra.Length+ra.Pad)
+
+	binary.BigEndian.PutUint16(a, uint16(ra.Type))
+	binary.BigEndian.PutUint16(a[attrLengthStart:attrLengthStart+attrLengthLength], ra.Length)
+
+	copy(a[attrValueStart:], ra.Value)
+
+	m.Attributes = append(m.Attributes, &ra)
+	m.Raw = append(m.Raw, a...)
+	m.Length += uint16(len(a))
+	m.CommitLength()
 }
 
 func (m *Message) Pack() []byte {
-	l := 0
-	for _, v := range m.Attributes {
-		l += int(4 + v.Length + v.Pad)
-	}
-	raw := make([]byte, headerLength+l)
 
-	setMessageType(raw[headerStart:2], m.Class, m.Method)
-	binary.BigEndian.PutUint16(raw[messageLengthStart:], uint16(l))
-	copy(raw[transactionIDStart:], m.TransactionID)
+	setMessageType(m.Raw[messageHeaderStart:2], m.Class, m.Method)
+	m.CommitLength()
+	copy(m.Raw[transactionIDStart:], m.TransactionID)
 
-	attrPos := headerLength
-	for _, v := range m.Attributes {
-		attrPos += v.Pack(raw[attrPos:])
-	}
-
-	return raw
+	return m.Raw
 }

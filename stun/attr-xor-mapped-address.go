@@ -98,18 +98,14 @@ func getIPAndFamily(unkIP net.IP) (ip net.IP, family uint16, err error) {
 
 	return ip, family, err
 }
-func (x *XorMappedAddress) Pack(message *Message) (*RawAttribute, error) {
-	ra := &RawAttribute{}
-	ra.Type = AttrXORMappedAddress
-
+func (x *XorMappedAddress) Pack(message *Message) error {
 	ip, family, err := getIPAndFamily(x.IP)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to get IP and family")
+		return errors.Wrap(err, "unable to get IP and family")
 	}
 
 	len := familyLength + portLength + len(ip)
-	pad := getPadding(len)
-	v := make([]byte, len+pad)
+	v := make([]byte, len)
 
 	// Family
 	binary.BigEndian.PutUint16(v[familyStart:familyStart+familyLength], family)
@@ -120,12 +116,8 @@ func (x *XorMappedAddress) Pack(message *Message) (*RawAttribute, error) {
 	copy(v[addressStart:], ip)
 	xor(v[addressStart:], v[addressStart:], message.TransactionID)
 
-	ra.Value = v
-	ra.Length = uint16(len)
-	// Always a multiple of 4 due to addrs being 4 or 16 bytes
-	ra.Pad = uint16(pad)
-
-	return ra, nil
+	message.AddAttribute(AttrXORMappedAddress, v)
+	return nil
 }
 
 func (x *XorMappedAddress) Unpack(message *Message, rawAttribute *RawAttribute) error {

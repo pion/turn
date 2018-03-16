@@ -1,7 +1,6 @@
 package stun
 
 import (
-	"encoding/binary"
 	"fmt"
 )
 
@@ -91,36 +90,15 @@ var attrNames = map[AttrType]string{
 	AttrIceControlling:     "ICE-CONTROLLING",
 }
 
-// https://tools.ietf.org/html/rfc5389#section-15.10
-// The SOFTWARE attribute contains a textual description of the software
-//  being used by the agent sending the message
-type Software struct {
-	Software string
-}
-
-func (s *Software) Pack(message *Message) (*RawAttribute, error) {
-	ra := &RawAttribute{}
-	ra.Type = AttrSoftware
-
-	ra.Value = []byte(s.Software)
-	ra.Length = uint16(len(ra.Value))
-
-	return ra, nil
-}
-
-func (s *Software) Unpack(message *Message, rawAttribute *RawAttribute) error {
-	s.Software = string(rawAttribute.Value)
-	return nil
-}
-
 const (
+	attrHeaderLength   = 4
 	attrLengthStart    = 2
 	attrLengthLength   = 2
 	attrValueStart     = 4
 	attrLengthMultiple = 4
 )
 
-func getPadding(len int) int {
+func GetAttrPadding(len int) int {
 	return (attrLengthMultiple - (len % attrLengthMultiple)) % attrLengthMultiple
 }
 
@@ -141,23 +119,10 @@ type RawAttribute struct {
 	Length uint16
 	Value  []byte
 	Pad    uint16
-}
-
-func (r *RawAttribute) Pack(attribute []byte) int {
-	binary.BigEndian.PutUint16(attribute, uint16(r.Type))
-	binary.BigEndian.PutUint16(attribute[attrLengthStart:attrLengthStart+attrLengthLength], uint16(r.Length))
-	copy(attribute[attrValueStart:], r.Value)
-	return 4 + len(r.Value)
-}
-
-func (r *RawAttribute) Unpack(attribute []byte) *RawAttribute {
-	typ := AttrType(binary.BigEndian.Uint16(attribute))
-	len := binary.BigEndian.Uint16(attribute[attrLengthStart : attrLengthStart+attrLengthLength])
-	pad := (attrLengthMultiple - (len % attrLengthMultiple)) % attrLengthMultiple
-	return &RawAttribute{typ, len, attribute[attrValueStart : attrValueStart+len], pad}
+	Offset int
 }
 
 type Attribute interface {
-	Pack(message *Message) (*RawAttribute, error)
+	Pack(message *Message) error
 	Unpack(message *Message, rawAttribute *RawAttribute) error
 }
