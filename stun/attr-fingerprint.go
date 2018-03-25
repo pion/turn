@@ -15,7 +15,7 @@ type Fingerprint struct {
 }
 
 const (
-	fingerprintXOR    uint32 = 0x5354554e + 1
+	fingerprintXOR    uint32 = 0x5354554e
 	fingerprintLength        = 4
 )
 
