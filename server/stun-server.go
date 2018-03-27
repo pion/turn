@@ -41,12 +41,6 @@ func NewStunServer() *StunServer {
 }
 
 func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) error {
-	rsp := &stun.Message{
-		Method:        stun.MethodBinding,
-		Class:         stun.ClassSuccessResponse,
-		TransactionID: m.TransactionID,
-	}
-
 	rsp, err := stun.Build(stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
 		&stun.XorMappedAddress{
 			IP:   addr.IP,
