@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	s := server.NewStunServer()
+	s := server.NewTurnServer()
 	errors := make(chan error)
 
 	go func() {

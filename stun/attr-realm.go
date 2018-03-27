@@ -28,7 +28,7 @@ func (r *Realm) Pack(message *Message) error {
 	if len([]byte(r.Realm)) > realmMaxLength {
 		return errors.Errorf("invalid realm length %d", len([]byte(r.Realm)))
 	}
-	message.AddAttribute(AttrSoftware, []byte(r.Realm))
+	message.AddAttribute(AttrRealm, []byte(r.Realm))
 	return nil
 }
 

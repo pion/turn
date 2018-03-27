@@ -23,7 +23,7 @@ func (n *Nonce) Pack(message *Message) error {
 	if len([]byte(n.Nonce)) > nonceMaxLength {
 		return errors.Errorf("invalid nonce length %d", len([]byte(n.Nonce)))
 	}
-	message.AddAttribute(AttrSoftware, []byte(n.Nonce))
+	message.AddAttribute(AttrNonce, []byte(n.Nonce))
 	return nil
 }
 

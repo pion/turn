@@ -1,7 +1,13 @@
 package server
 
 import (
+	"crypto/md5"
+	"fmt"
+	"io"
+	"math/rand"
 	"net"
+	"strconv"
+	"time"
 
 	"gitlab.com/pions/pion/turn/stun"
 )
@@ -24,17 +30,58 @@ func min(a, b uint32) uint32 {
 	return b
 }
 
+//TODO
+func buildNonce() string {
+	h := md5.New()
+	now := time.Now().Unix()
+	_, _ = io.WriteString(h, strconv.FormatInt(now, 10))
+	_, _ = io.WriteString(h, strconv.FormatInt(rand.Int63(), 10))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 // https://tools.ietf.org/html/rfc5766#section-6.2
 func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) error {
+	validateMessageIntegrity := func() (ok bool) {
+		_, found := m.GetAttribute(stun.AttrMessageIntegrity)
+		if found == false {
+			rsp, err := stun.Build(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+				&stun.Err401Unauthorized,
+				&stun.Nonce{buildNonce()},
+				&stun.Realm{"pion.sh"},
+			)
+			if err != nil {
+				fmt.Println("Failed to build")
+				return
+			}
+
+			b := rsp.Pack()
+			l, err := s.stunServer.connection.WriteTo(b, addr)
+			if err != nil {
+				fmt.Println("failed to write")
+				return
+			}
+
+			if l != len(b) {
+				fmt.Printf("packet write smaller than packet %d != %d (expected)", l, len(b))
+				return
+			}
+			return
+		} else {
+			fmt.Println("Got integrity")
+		}
+
+		return
+	}
+
+	if !validateMessageIntegrity() {
+		return nil
+	}
 
 	//1. The server MUST require that the request be authenticated.  This
 	//   authentication MUST be done using the long-term credential
 	//   mechanism of [RFC5389] unless the client and server agree to use
 	//   another mechanism through some procedure outside the scope of
 	//   this document.
-	if _, ok := m.GetAttribute(stun.AttrMessageIntegrity); ok {
-		//stun.AttrErrorCode, 401
-	}
 	// mi := MessageIntegrity{}
 	// mi.Unpack(m,...)
 	// mi validation
@@ -146,6 +193,10 @@ func (s *TurnServer) handleSendIndication(addr *net.UDPAddr, m *stun.Message) er
 
 func (s *TurnServer) handleChannelBindRequest(addr *net.UDPAddr, m *stun.Message) error {
 	return nil
+}
+
+func (s *TurnServer) Listen(address string, port int) error {
+	return s.stunServer.Listen(address, port)
 }
 
 func NewTurnServer() *TurnServer {
