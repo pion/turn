@@ -8,7 +8,13 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
-	"gitlab.com/pions/pion/turn/stun"
+	"gitlab.com/pions/pion/pkg/go/stun"
+)
+
+// IANA assigned ports for "stun" protocol.
+const (
+	DefaultPort    = 3478
+	DefaultTLSPort = 5349
 )
 
 type StunHandler func(addr *net.UDPAddr, m *stun.Message) error
@@ -45,9 +51,6 @@ func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) er
 		&stun.XorMappedAddress{
 			IP:   addr.IP,
 			Port: addr.Port,
-		},
-		&stun.Software{
-			Software: "Pion",
 		},
 		&stun.Fingerprint{},
 	)

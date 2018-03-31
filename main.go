@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/pions/pion/turn/server"
-	"gitlab.com/pions/pion/turn/stun"
 )
 
 func main() {
@@ -12,7 +11,7 @@ func main() {
 	errors := make(chan error)
 
 	go func() {
-		err := s.Listen("", stun.DefaultPort)
+		err := s.Listen("", server.DefaultPort)
 		errors <- err
 	}()
 

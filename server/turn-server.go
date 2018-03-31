@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"gitlab.com/pions/pion/turn/stun"
+	"gitlab.com/pions/pion/pkg/go/stun"
 )
 
 const (
