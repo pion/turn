@@ -7,8 +7,10 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"gitlab.com/pions/pion/pkg/go/stun"
 )
 
@@ -30,7 +32,7 @@ func min(a, b uint32) uint32 {
 	return b
 }
 
-//TODO
+//TODO, include time info support stale nonces
 func buildNonce() string {
 	h := md5.New()
 	now := time.Now().Unix()
@@ -41,54 +43,69 @@ func buildNonce() string {
 
 // https://tools.ietf.org/html/rfc5766#section-6.2
 func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) error {
-	validateMessageIntegrity := func() (ok bool) {
-		_, found := m.GetAttribute(stun.AttrMessageIntegrity)
-		if found == false {
-			rsp, err := stun.Build(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+
+	// https://tools.ietf.org/html/rfc5389#section-10.2.2
+	validateAuthentication := func() (ok bool, err error) {
+		_, integrityFound := m.GetAttribute(stun.AttrMessageIntegrity)
+		if integrityFound == false {
+			err = buildAndSend(s.stunServer.connection, addr, stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 				&stun.Err401Unauthorized,
 				&stun.Nonce{buildNonce()},
-				&stun.Realm{"pion.sh"},
+				&stun.Realm{"pion.sh"}, //TODO use env variable, check for FQDN on startup
 			)
-			if err != nil {
-				fmt.Println("Failed to build")
-				return
-			}
-
-			b := rsp.Pack()
-			l, err := s.stunServer.connection.WriteTo(b, addr)
-			if err != nil {
-				fmt.Println("failed to write")
-				return
-			}
-
-			if l != len(b) {
-				fmt.Printf("packet write smaller than packet %d != %d (expected)", l, len(b))
-				return
-			}
-			return
 		} else {
-			fmt.Println("Got integrity")
-		}
+			usernameRawAttr, usernameFound := m.GetAttribute(stun.AttrUsername)
+			realmRawAttr, realmFound := m.GetAttribute(stun.AttrRealm)
+			nonceRawAttr, nonceFound := m.GetAttribute(stun.AttrNonce)
+			if !usernameFound {
+				err = errors.Errorf("Integrity found, but missing username")
+			}
+			if !realmFound {
+				err = errors.Errorf("Integrity found, but missing realm")
+			}
+			if !nonceFound {
+				err = errors.Errorf("Integrity found, but missing nonce")
+			}
+			if err != nil {
+				if sendErr := buildAndSend(s.stunServer.connection, addr, stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+					&stun.Err400BadRequest,
+				); sendErr != nil {
+					err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+				}
 
+				return
+			}
+			usernameAttr := &stun.Username{}
+			realmAttr := &stun.Realm{}
+			nonceAttr := &stun.Nonce{}
+
+			err = usernameAttr.Unpack(m, usernameRawAttr)
+			if err != nil {
+				return
+			}
+			err = realmAttr.Unpack(m, realmRawAttr)
+			if err != nil {
+				return
+			}
+			err = nonceAttr.Unpack(m, nonceRawAttr)
+			if err == nil {
+				ok = true
+			}
+		}
 		return
 	}
 
-	if !validateMessageIntegrity() {
-		return nil
+	if ok, err := validateAuthentication(); ok == false || err != nil {
+		return err
 	}
-
-	//1. The server MUST require that the request be authenticated.  This
-	//   authentication MUST be done using the long-term credential
-	//   mechanism of [RFC5389] unless the client and server agree to use
-	//   another mechanism through some procedure outside the scope of
-	//   this document.
-	// mi := MessageIntegrity{}
-	// mi.Unpack(m,...)
-	// mi validation
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
+	// 5-TUPLE source IP address/port number, destination
+	// IP address/port number and the protocol in use
+
+	// There shouldn't be one relay server, but a collection of them? TODO
 	if s.relayServer.isAllocated(addr) {
 		//stun.AttrErrorCode, 437
 	}

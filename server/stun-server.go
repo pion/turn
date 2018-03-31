@@ -6,7 +6,6 @@ import (
 
 	"log"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 	"gitlab.com/pions/pion/pkg/go/stun"
 )
@@ -47,40 +46,15 @@ func NewStunServer() *StunServer {
 }
 
 func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) error {
-	rsp, err := stun.Build(stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+	return buildAndSend(s.connection, addr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
 		&stun.XorMappedAddress{
 			IP:   addr.IP,
 			Port: addr.Port,
 		},
 		&stun.Fingerprint{},
 	)
-
-	b := rsp.Pack()
-
-	chk, err := stun.NewMessage(b)
-	if err != nil {
-		return errors.Wrap(err, "invalid fingerprint")
-	}
-	if fp, ok := chk.GetAttribute(stun.AttrFingerprint); ok {
-		err = (&stun.Fingerprint{}).Unpack(chk, fp)
-		if err != nil {
-			return errors.Wrap(err, "invalid fingerprint")
-		}
-	}
-
-	l, err := s.connection.WriteTo(b, addr)
-	if err != nil {
-		return errors.Wrap(err, "failed writing to socket")
-	}
-
-	if l != len(b) {
-		return errors.Errorf("packet write smaller than packet %d != %d (expected)", l, len(b))
-	}
-
-	log.Printf("received message from %v, %s", addr, spew.Sdump(m))
-	log.Printf("response message to %v of size %d, %s", addr, rsp.Length, spew.Sdump(rsp))
-
-	return nil
+	// log.Printf("received message from %v, %s", addr, spew.Sdump(m))
+	// log.Printf("response message to %v of size %d, %s", addr, rsp.Length, spew.Sdump(rsp))
 }
 
 func (s *StunServer) handleUDPPacket() error {
