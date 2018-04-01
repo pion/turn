@@ -25,3 +25,19 @@ func buildAndSend(conn *net.UDPConn, addr *net.UDPAddr, class stun.MessageClass,
 
 	return nil
 }
+
+func randomFreePort(protocol string) (port int, err error) {
+	addr, err := net.ResolveTCPAddr(protocol, "localhost:0")
+	if err != nil {
+		return
+	}
+
+	l, err := net.ListenTCP(protocol, addr)
+	if err != nil {
+		return
+	}
+
+	port = l.Addr().(*net.TCPAddr).Port
+	err = l.Close()
+	return
+}

@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	maximumLifetime = 3600 // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 recommendation
-	defaultLifetime = 600  // https://tools.ietf.org/html/rfc5766#section-2.2 defines 600 recommendation
+	maximumLifetime = uint32(3600) // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 recommendation
+	defaultLifetime = uint32(600)  // https://tools.ietf.org/html/rfc5766#section-2.2 defines 600 recommendation
 )
 
 type TurnServer struct {
@@ -168,11 +168,16 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	// request with a 508 (Insufficient Capacity) error.
 	if _, ok := m.GetAttribute(stun.AttrReservationToken); ok {
 		if _, ok := m.GetAttribute(stun.AttrEvenPort); ok {
-			//stun.AttrErrorCode, 400
+			err := errors.Errorf("no support for DONT-FRAGMENT")
+			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+				&stun.Err400BadRequest,
+			); sendErr != nil {
+				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+			}
+			return err
 		}
 
-		// Unpack reservation token
-		// if re not valid { stun.AttrErrorCode, 508 }
+		panic("TODO check reservation validity")
 	}
 
 	// 6. The server checks if the request contains an EVEN-PORT attribute.
@@ -182,8 +187,13 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//    server rejects the request with a 508 (Insufficient Capacity)
 	//    error.
 	if _, ok := m.GetAttribute(stun.AttrEvenPort); ok {
-		// validate
-		// if unable to allocate { stun.AttrErrorCode, 508 }
+		err := errors.Errorf("no support for EVEN-PORT")
+		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+			&stun.Err508InsufficentCapacity,
+		); sendErr != nil {
+			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+		}
+		return err
 	}
 
 	// 7. At any point, the server MAY choose to reject the request with a
@@ -202,24 +212,37 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	// Check current usage vs redis usage of other servers
 	// if bad, redirect { stun.AttrErrorCode, 300 }
 
-	//var lifetimeDuration uint32 = defaultLifetime
-	//r = m.GetAttribute(stun.AttrLifetime)
-	//if r != nil {
-	//	lt := turn.Lifetime{}
-	//	if err := lt.Unpack(m, r); err != nil {
-	//		return errors.Wrap(err, "invalid lifetime")
-	//	}
-	//
-	//	lifetimeDuration = min(lt.Duration, maximumLifetime)
-	//}
-	//
-	//rsp := stun.Message{}
-	//r, err := turn.Lifetime{Duration: lifetimeDuration}.Pack(m)
-	//if err != nil {
-	//	return errors.Wrap(err, "unable to pack lifetime")
-	//}
+	lifetimeDuration := defaultLifetime
+	if lifetimeRawAttr, ok := m.GetAttribute(stun.AttrLifetime); ok {
+		lifetimeAttr := stun.Lifetime{}
+		if err := lifetimeAttr.Unpack(m, lifetimeRawAttr); err == nil {
+			lifetimeDuration = min(lifetimeAttr.Duration, maximumLifetime)
+		}
+	}
 
-	return nil
+	// Once the allocation is created, the server replies with a success
+	// response.  The success response contains:
+	// *An XOR-RELAYED-ADDRESS attribute containing the relayed transport
+	//  address.
+	// *A LIFETIME attribute containing the current value of the time-to-
+	//  expiry timer.
+	// *A RESERVATION-TOKEN attribute (if a second relayed transport
+	//  address was reserved).
+	// *An XOR-MAPPED-ADDRESS attribute containing the client's IP address
+	//  and port (from the 5-tuple).
+	return curriedSend(stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+		// XOR-RELAYED-ADDRESS
+		&stun.Lifetime{
+			Duration: lifetimeDuration,
+		},
+		// RESERVATION-TOKEN
+		&stun.XorMappedAddress{
+			stun.XorAddress{
+				IP:   addr.IP,
+				Port: addr.Port,
+			},
+		},
+	)
 }
 
 func (s *TurnServer) handleRefreshRequest(addr *net.UDPAddr, m *stun.Message) error {

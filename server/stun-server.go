@@ -48,8 +48,10 @@ func NewStunServer() *StunServer {
 func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) error {
 	return buildAndSend(s.connection, addr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
 		&stun.XorMappedAddress{
-			IP:   addr.IP,
-			Port: addr.Port,
+			stun.XorAddress{
+				IP:   addr.IP,
+				Port: addr.Port,
+			},
 		},
 		&stun.Fingerprint{},
 	)
