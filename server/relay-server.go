@@ -9,3 +9,7 @@ type RelayServer struct {
 func (r *RelayServer) isAllocated(addr *net.UDPAddr) bool {
 	panic("not implemented")
 }
+
+func relayIsAllocated() bool {
+	return false
+}

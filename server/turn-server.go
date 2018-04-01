@@ -20,8 +20,7 @@ const (
 )
 
 type TurnServer struct {
-	stunServer  *StunServer
-	relayServer *RelayServer
+	stunServer *StunServer
 }
 
 // Is there really no stdlib for this?
@@ -43,71 +42,76 @@ func buildNonce() string {
 
 // https://tools.ietf.org/html/rfc5766#section-6.2
 func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) error {
-
-	// https://tools.ietf.org/html/rfc5389#section-10.2.2
-	validateAuthentication := func() (ok bool, err error) {
-		_, integrityFound := m.GetAttribute(stun.AttrMessageIntegrity)
-		if integrityFound == false {
-			err = buildAndSend(s.stunServer.connection, addr, stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-				&stun.Err401Unauthorized,
-				&stun.Nonce{buildNonce()},
-				&stun.Realm{"pion.sh"}, //TODO use env variable, check for FQDN on startup
-			)
-		} else {
-			usernameRawAttr, usernameFound := m.GetAttribute(stun.AttrUsername)
-			realmRawAttr, realmFound := m.GetAttribute(stun.AttrRealm)
-			nonceRawAttr, nonceFound := m.GetAttribute(stun.AttrNonce)
-			if !usernameFound {
-				err = errors.Errorf("Integrity found, but missing username")
-			}
-			if !realmFound {
-				err = errors.Errorf("Integrity found, but missing realm")
-			}
-			if !nonceFound {
-				err = errors.Errorf("Integrity found, but missing nonce")
-			}
-			if err != nil {
-				if sendErr := buildAndSend(s.stunServer.connection, addr, stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-					&stun.Err400BadRequest,
-				); sendErr != nil {
-					err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
-				}
-
-				return
-			}
-			usernameAttr := &stun.Username{}
-			realmAttr := &stun.Realm{}
-			nonceAttr := &stun.Nonce{}
-
-			err = usernameAttr.Unpack(m, usernameRawAttr)
-			if err != nil {
-				return
-			}
-			err = realmAttr.Unpack(m, realmRawAttr)
-			if err != nil {
-				return
-			}
-			err = nonceAttr.Unpack(m, nonceRawAttr)
-			if err == nil {
-				ok = true
-			}
-		}
-		return
+	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
+		return buildAndSend(s.stunServer.connection, addr, class, method, transactionID, attrs...)
 	}
 
-	if ok, err := validateAuthentication(); ok == false || err != nil {
-		return err
+	// 1.  The server MUST require that the request be authenticated.  This
+	// authentication MUST be done using the long-term credential
+	// mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
+	// unless the client and server agree to use another mechanism through
+	// some procedure outside the scope of this document.
+	if _, integrityFound := m.GetAttribute(stun.AttrMessageIntegrity); integrityFound == false {
+		return curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+			&stun.Err401Unauthorized,
+			&stun.Nonce{buildNonce()},
+			&stun.Realm{"pion.sh"}, //TODO use env variable, check for FQDN on startup
+		)
+	} else {
+		var err error
+		usernameAttr := &stun.Username{}
+		realmAttr := &stun.Realm{}
+		nonceAttr := &stun.Nonce{}
+
+		if usernameRawAttr, usernameFound := m.GetAttribute(stun.AttrUsername); true {
+			if usernameFound {
+				err = usernameAttr.Unpack(m, usernameRawAttr)
+			} else {
+				err = errors.Errorf("Integrity found, but missing username")
+			}
+		}
+
+		if realmRawAttr, realmFound := m.GetAttribute(stun.AttrRealm); true {
+			if realmFound {
+				err = realmAttr.Unpack(m, realmRawAttr)
+			} else {
+				err = errors.Errorf("Integrity found, but missing realm")
+			}
+		}
+
+		if nonceRawAttr, nonceFound := m.GetAttribute(stun.AttrNonce); true {
+			if nonceFound {
+				err = nonceAttr.Unpack(m, nonceRawAttr)
+			} else {
+				err = errors.Errorf("Integrity found, but missing nonce")
+			}
+		}
+
+		if err != nil {
+			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+				&stun.Err400BadRequest,
+			); sendErr != nil {
+				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+			}
+			return err
+		}
 	}
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
-	// 5-TUPLE source IP address/port number, destination
-	// IP address/port number and the protocol in use
-
-	// There shouldn't be one relay server, but a collection of them? TODO
-	if s.relayServer.isAllocated(addr) {
-		//stun.AttrErrorCode, 437
+	// 5-TUPLE
+	// * source IP address/port number,
+	// * destination IP address/port number
+	// * protocol (TODO only support UDP currently)
+	if relayIsAllocated() {
+		err := errors.Errorf("Relay already allocated for 5-TUPLE")
+		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+			&stun.Err437AllocationMismatch,
+		); sendErr != nil {
+			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+		}
+		return err
 	}
 
 	// 3. The server checks if the request contains a REQUESTED-TRANSPORT
@@ -116,12 +120,27 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//    Request) error.  Otherwise, if the attribute is included but
 	//    specifies a protocol other that UDP, the server rejects the
 	//    request with a 442 (Unsupported Transport Protocol) error.
-	if _, ok := m.GetAttribute(stun.AttrRequestedTransport); ok {
-		//stun.AttrErrorCode, 442
+	if requestedTransportRawAttr, ok := m.GetAttribute(stun.AttrRequestedTransport); true {
+		if ok == false {
+			err := errors.Errorf("Allocation request missing REQUESTED-TRANSPORT")
+			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+				&stun.Err400BadRequest,
+			); sendErr != nil {
+				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+			}
+			return err
+		}
+
+		requestedTransportAttr := &stun.RequestedTransport{}
+		if err := requestedTransportAttr.Unpack(m, requestedTransportRawAttr); err != nil {
+			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+				&stun.Err400BadRequest,
+			); sendErr != nil {
+				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+			}
+			return err
+		}
 	}
-	// rt := RequestedTransport{}
-	// rt.Unpack(m,...)
-	// rt validation
 
 	// 4. The request may contain a DONT-FRAGMENT attribute.  If it does,
 	//    but the server does not support sending UDP datagrams with the DF
@@ -129,7 +148,14 @@ func (s *TurnServer) handleAllocateRequest(addr *net.UDPAddr, m *stun.Message) e
 	//    FRAGMENT attribute in the Allocate request as an unknown
 	//    comprehension-required attribute.
 	if _, ok := m.GetAttribute(stun.AttrDontFragment); ok {
-		// Should we handle manually building UDP packets to be able to set this bit?
+		err := errors.Errorf("no support for DONT-FRAGMENT")
+		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+			&stun.Err420UnknownAttributes,
+			&stun.UnknownAttributes{[]stun.AttrType{stun.AttrDontFragment}},
+		); sendErr != nil {
+			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+		}
+		return err
 	}
 
 	// 5.  The server checks if the request contains a RESERVATION-TOKEN
