@@ -2,19 +2,21 @@ package server
 
 import (
 	"net"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"gitlab.com/pions/pion/pkg/go/stun"
+	"golang.org/x/net/ipv4"
 )
 
-func buildAndSend(conn *net.UDPConn, addr *net.UDPAddr, class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
+func buildAndSend(conn *ipv4.PacketConn, addr net.Addr, class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 	rsp, err := stun.Build(class, method, transactionID, attrs...)
 	if err != nil {
 		return err
 	}
 
 	b := rsp.Pack()
-	l, err := conn.WriteTo(b, addr)
+	l, err := conn.WriteTo(b, nil, addr)
 	if err != nil {
 		return errors.Wrap(err, "failed writing to socket")
 	}
@@ -26,18 +28,15 @@ func buildAndSend(conn *net.UDPConn, addr *net.UDPAddr, class stun.MessageClass,
 	return nil
 }
 
-func randomFreePort(protocol string) (port int, err error) {
-	addr, err := net.ResolveTCPAddr(protocol, "localhost:0")
+func netAddrIPPort(addr net.Addr) (net.IP, int, error) {
+	host, portStr, err := net.SplitHostPort(addr.String())
 	if err != nil {
-		return
+		return nil, 0, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	l, err := net.ListenTCP(protocol, addr)
-	if err != nil {
-		return
-	}
-
-	port = l.Addr().(*net.TCPAddr).Port
-	err = l.Close()
-	return
+	return net.ParseIP(host), port, nil
 }

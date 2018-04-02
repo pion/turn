@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"gitlab.com/pions/pion/pkg/go/stun"
+	"golang.org/x/net/ipv4"
 )
 
 // IANA assigned ports for "stun" protocol.
@@ -16,7 +17,7 @@ const (
 	DefaultTLSPort = 5349
 )
 
-type StunHandler func(addr *net.UDPAddr, m *stun.Message) error
+type StunHandler func(srcAddr net.Addr, dstIp net.IP, m *stun.Message) error
 
 type HandlerKey struct {
 	Class  stun.MessageClass
@@ -24,7 +25,7 @@ type HandlerKey struct {
 }
 
 type StunServer struct {
-	connection *net.UDPConn
+	connection *ipv4.PacketConn
 	packet     []byte
 	handlers   map[HandlerKey]StunHandler
 }
@@ -38,33 +39,38 @@ func NewStunServer() *StunServer {
 	s.packet = make([]byte, maxStunMessageSize)
 	s.handlers = make(map[HandlerKey]StunHandler)
 
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(addr *net.UDPAddr, m *stun.Message) error {
-		return s.handleBindingRequest(addr, m)
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr net.Addr, dstIp net.IP, m *stun.Message) error {
+		return s.handleBindingRequest(srcAddr, dstIp, m)
 	}
 
 	return &s
 }
 
-func (s *StunServer) handleBindingRequest(addr *net.UDPAddr, m *stun.Message) error {
-	return buildAndSend(s.connection, addr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+func (s *StunServer) handleBindingRequest(srcAddr net.Addr, dstIp net.IP, m *stun.Message) error {
+	ip, port, err := netAddrIPPort(srcAddr)
+	if err != nil {
+		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
+	}
+
+	return buildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
 		&stun.XorMappedAddress{
 			stun.XorAddress{
-				IP:   addr.IP,
-				Port: addr.Port,
+				IP:   ip,
+				Port: port,
 			},
 		},
 		&stun.Fingerprint{},
 	)
-	// log.Printf("received message from %v, %s", addr, spew.Sdump(m))
-	// log.Printf("response message to %v of size %d, %s", addr, rsp.Length, spew.Sdump(rsp))
 }
 
 func (s *StunServer) handleUDPPacket() error {
-
-	log.Println("Waiting for packet...")
-	size, addr, err := s.connection.ReadFromUDP(s.packet)
+	size, cm, addr, err := s.connection.ReadFrom(s.packet)
 	if err != nil {
 		return errors.Wrap(err, "failed to read packet from udp socket")
+	}
+
+	if _, err := s.connection.WriteTo([]byte{'A', 'B', 'C'}, nil, addr); err != nil {
+		log.Fatal(err)
 	}
 
 	m, err := stun.NewMessage(s.packet[:size])
@@ -73,7 +79,7 @@ func (s *StunServer) handleUDPPacket() error {
 	}
 
 	if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
-		if err := v(addr, m); err != nil {
+		if err := v(addr, cm.Dst, m); err != nil {
 			log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
 		}
 	}
@@ -82,24 +88,18 @@ func (s *StunServer) handleUDPPacket() error {
 }
 
 func (s *StunServer) Listen(address string, port int) error {
-	udpAddress, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", address, port))
+	c, err := net.ListenPacket("udp4", fmt.Sprintf("%s:%d", address, port))
 	if err != nil {
 		return err
 	}
-
-	log.Println("Listening...")
-	conn, err := net.ListenUDP("udp", udpAddress)
-	if err != nil {
+	s.connection = ipv4.NewPacketConn(c)
+	if err := s.connection.SetControlMessage(ipv4.FlagDst, true); err != nil {
 		return err
 	}
 
-	s.connection = conn
-
-	// Only fatal errors should bubble out to here
 	for {
-		err = s.handleUDPPacket()
-		if err != nil {
-			return errors.Wrap(err, "error handling udp packet")
+		if err := s.handleUDPPacket(); err != nil {
+			return err
 		}
 	}
 }
