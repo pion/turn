@@ -235,7 +235,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 	//  address was reserved).
 	// *An XOR-MAPPED-ADDRESS attribute containing the client's IP address
 	//  and port (from the 5-tuple).
-	return curriedSend(stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+	return curriedSend(stun.ClassSuccessResponse, stun.MethodAllocate, m.TransactionID,
 		&stun.XorRelayedAddress{
 			stun.XorAddress{
 				IP:   dstIp,
