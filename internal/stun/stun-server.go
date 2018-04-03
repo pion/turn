@@ -1,4 +1,4 @@
-package server
+package stunServer
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ const (
 	DefaultTLSPort = 5349
 )
 
-type StunHandler func(srcAddr net.Addr, dstIp net.IP, m *stun.Message) error
+type StunHandler func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error
 
 type HandlerKey struct {
 	Class  stun.MessageClass
@@ -39,22 +39,22 @@ func NewStunServer() *StunServer {
 	s.packet = make([]byte, maxStunMessageSize)
 	s.handlers = make(map[HandlerKey]StunHandler)
 
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr net.Addr, dstIp net.IP, m *stun.Message) error {
-		return s.handleBindingRequest(srcAddr, dstIp, m)
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+		return s.handleBindingRequest(srcAddr, dstIP, dstPort, m)
 	}
 
 	return &s
 }
 
-func (s *StunServer) handleBindingRequest(srcAddr net.Addr, dstIp net.IP, m *stun.Message) error {
+func (s *StunServer) handleBindingRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	ip, port, err := netAddrIPPort(srcAddr)
 	if err != nil {
 		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
 	}
 
-	return buildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
 		&stun.XorMappedAddress{
-			stun.XorAddress{
+			XorAddress: stun.XorAddress{
 				IP:   ip,
 				Port: port,
 			},
@@ -63,7 +63,7 @@ func (s *StunServer) handleBindingRequest(srcAddr net.Addr, dstIp net.IP, m *stu
 	)
 }
 
-func (s *StunServer) handleUDPPacket() error {
+func (s *StunServer) handleUDPPacket(dstPort int) error {
 	size, cm, addr, err := s.connection.ReadFrom(s.packet)
 	if err != nil {
 		return errors.Wrap(err, "failed to read packet from udp socket")
@@ -75,7 +75,7 @@ func (s *StunServer) handleUDPPacket() error {
 	}
 
 	if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
-		if err := v(addr, cm.Dst, m); err != nil {
+		if err := v(addr, cm.Dst, dstPort, m); err != nil {
 			log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
 		}
 	}
@@ -94,7 +94,7 @@ func (s *StunServer) Listen(address string, port int) error {
 	}
 
 	for {
-		if err := s.handleUDPPacket(); err != nil {
+		if err := s.handleUDPPacket(port); err != nil {
 			return err
 		}
 	}

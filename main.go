@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"gitlab.com/pions/pion/pkg/go/log"
-	"gitlab.com/pions/pion/turn/server"
+	"gitlab.com/pions/pion/turn/internal/stun"
 )
 
 func main() {
@@ -13,11 +13,11 @@ func main() {
 		log.Fatal().Msg("FQDN is a required environment variable")
 	}
 
-	s := server.NewTurnServer()
+	s := stunServer.NewTurnServer()
 	errors := make(chan error)
 
 	go func() {
-		err := s.Listen("", server.DefaultPort)
+		err := s.Listen("", stunServer.DefaultPort)
 		errors <- err
 	}()
 
