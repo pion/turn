@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 		return curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err401Unauthorized,
 			&stun.Nonce{buildNonce()},
-			&stun.Realm{"pion.sh"}, //TODO use env variable, check for FQDN on startup
+			&stun.Realm{os.Getenv("FQDN")},
 		)
 	} else {
 		var err error

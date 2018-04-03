@@ -69,10 +69,6 @@ func (s *StunServer) handleUDPPacket() error {
 		return errors.Wrap(err, "failed to read packet from udp socket")
 	}
 
-	if _, err := s.connection.WriteTo([]byte{'A', 'B', 'C'}, nil, addr); err != nil {
-		log.Fatal(err)
-	}
-
 	m, err := stun.NewMessage(s.packet[:size])
 	if err != nil {
 		log.Printf("failed to create stun message from packet: %v", err)
