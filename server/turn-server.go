@@ -45,6 +45,8 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return buildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
 	}
+	usernameAttr := &stun.Username{}
+	realmAttr := &stun.Realm{}
 
 	// 1.  The server MUST require that the request be authenticated.  This
 	// authentication MUST be done using the long-term credential
@@ -59,8 +61,6 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 		)
 	} else {
 		var err error
-		usernameAttr := &stun.Username{}
-		realmAttr := &stun.Realm{}
 		nonceAttr := &stun.Nonce{}
 
 		if usernameRawAttr, usernameFound := m.GetAttribute(stun.AttrUsername); true {
@@ -96,6 +96,9 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 			return err
 		}
 	}
+	messageIntegrity := &stun.MessageIntegrity{
+		Key: md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + "password")),
+	}
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
@@ -108,6 +111,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 		err := errors.Errorf("Relay already allocated for 5-TUPLE")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err437AllocationMismatch,
+			messageIntegrity,
 		); sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
@@ -125,6 +129,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 			err := errors.Errorf("Allocation request missing REQUESTED-TRANSPORT")
 			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 				&stun.Err400BadRequest,
+				messageIntegrity,
 			); sendErr != nil {
 				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 			}
@@ -135,6 +140,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 		if err := requestedTransportAttr.Unpack(m, requestedTransportRawAttr); err != nil {
 			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 				&stun.Err400BadRequest,
+				messageIntegrity,
 			); sendErr != nil {
 				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 			}
@@ -152,6 +158,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err420UnknownAttributes,
 			&stun.UnknownAttributes{[]stun.AttrType{stun.AttrDontFragment}},
+			messageIntegrity,
 		); sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
@@ -171,6 +178,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 			err := errors.Errorf("no support for DONT-FRAGMENT")
 			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 				&stun.Err400BadRequest,
+				messageIntegrity,
 			); sendErr != nil {
 				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 			}
@@ -190,6 +198,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 		err := errors.Errorf("no support for EVEN-PORT")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err508InsufficentCapacity,
+			messageIntegrity,
 		); sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
@@ -246,7 +255,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 			Duration: lifetimeDuration,
 		},
 		&stun.ReservationToken{
-			ReservationToken: "ABCDEF",
+			ReservationToken: "AAAAAAAA",
 		},
 		&stun.XorMappedAddress{
 			stun.XorAddress{
@@ -254,6 +263,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIp net.IP, m *st
 				Port: srcPort,
 			},
 		},
+		messageIntegrity,
 	)
 }
 
