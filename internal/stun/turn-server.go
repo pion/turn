@@ -24,7 +24,7 @@ type TurnServer struct {
 type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
 func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method) (*stun.MessageIntegrity, string, error) {
-	if _, integrityFound := m.GetAttribute(stun.AttrMessageIntegrity); integrityFound == false {
+	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); integrityFound == false {
 		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err401Unauthorized,
 			&stun.Nonce{buildNonce()},
@@ -36,7 +36,7 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 	usernameAttr := &stun.Username{}
 	realmAttr := &stun.Realm{}
 
-	if usernameRawAttr, usernameFound := m.GetAttribute(stun.AttrUsername); true {
+	if usernameRawAttr, usernameFound := m.GetOneAttribute(stun.AttrUsername); true {
 		if usernameFound {
 			err = usernameAttr.Unpack(m, usernameRawAttr)
 		} else {
@@ -44,7 +44,7 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 		}
 	}
 
-	if realmRawAttr, realmFound := m.GetAttribute(stun.AttrRealm); true {
+	if realmRawAttr, realmFound := m.GetOneAttribute(stun.AttrRealm); true {
 		if realmFound {
 			err = realmAttr.Unpack(m, realmRawAttr)
 		} else {
@@ -52,7 +52,7 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 		}
 	}
 
-	if nonceRawAttr, nonceFound := m.GetAttribute(stun.AttrNonce); true {
+	if nonceRawAttr, nonceFound := m.GetOneAttribute(stun.AttrNonce); true {
 		if nonceFound {
 			err = nonceAttr.Unpack(m, nonceRawAttr)
 		} else {
@@ -74,7 +74,7 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 }
 
 func assertDontFragment(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method, messageIntegrity *stun.MessageIntegrity) error {
-	if _, ok := m.GetAttribute(stun.AttrDontFragment); ok {
+	if _, ok := m.GetOneAttribute(stun.AttrDontFragment); ok {
 		err := errors.Errorf("no support for DONT-FRAGMENT")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err420UnknownAttributes,
@@ -139,7 +139,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPo
 	//    Request) error.  Otherwise, if the attribute is included but
 	//    specifies a protocol other that UDP, the server rejects the
 	//    request with a 442 (Unsupported Transport Protocol) error.
-	if requestedTransportRawAttr, ok := m.GetAttribute(stun.AttrRequestedTransport); true {
+	if requestedTransportRawAttr, ok := m.GetOneAttribute(stun.AttrRequestedTransport); true {
 		if ok == false {
 			err := errors.Errorf("Allocation request missing REQUESTED-TRANSPORT")
 			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
@@ -180,8 +180,8 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPo
 	//     corresponding relayed transport address is still available).  If
 	//     the token is not valid for some reason, the server rejects the
 	//     request with a 508 (Insufficient Capacity) error.
-	if _, ok := m.GetAttribute(stun.AttrReservationToken); ok {
-		if _, ok := m.GetAttribute(stun.AttrEvenPort); ok {
+	if _, ok := m.GetOneAttribute(stun.AttrReservationToken); ok {
+		if _, ok := m.GetOneAttribute(stun.AttrEvenPort); ok {
 			err := errors.Errorf("no support for DONT-FRAGMENT")
 			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 				&stun.Err400BadRequest,
@@ -201,7 +201,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPo
 	//    below).  If the server cannot satisfy the request, then the
 	//    server rejects the request with a 508 (Insufficient Capacity)
 	//    error.
-	if _, ok := m.GetAttribute(stun.AttrEvenPort); ok {
+	if _, ok := m.GetOneAttribute(stun.AttrEvenPort); ok {
 		err := errors.Errorf("no support for EVEN-PORT")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err508InsufficentCapacity,
@@ -229,7 +229,7 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPo
 	// if bad, redirect { stun.AttrErrorCode, 300 }
 
 	lifetimeDuration := defaultLifetime
-	if lifetimeRawAttr, ok := m.GetAttribute(stun.AttrLifetime); ok {
+	if lifetimeRawAttr, ok := m.GetOneAttribute(stun.AttrLifetime); ok {
 		lifetimeAttr := stun.Lifetime{}
 		if err := lifetimeAttr.Unpack(m, lifetimeRawAttr); err == nil {
 			lifetimeDuration = min(lifetimeAttr.Duration, maximumLifetime)
@@ -316,15 +316,15 @@ func (s *TurnServer) handleCreatePermissionRequest(srcAddr net.Addr, dstIP net.I
 	}
 
 	addCount := 0
-	for _, v := range m.Attributes {
-		if v.Type == stun.AttrXORPeerAddress {
+	if xpas, ok := m.GetAllAttributes(stun.AttrXORPeerAddress); ok {
+		for _, a := range xpas {
 			peerAddress := stun.XorPeerAddress{}
-			if err := peerAddress.Unpack(m, v); err == nil {
+			if err := peerAddress.Unpack(m, a); err == nil {
 				if err := relayServer.AddPermission(fiveTuple, &relayServer.Permission{
 					IP:           peerAddress.XorAddress.IP,
 					TimeToExpiry: 300,
 				}); err == nil {
-					addCount = addCount + 1
+					addCount++
 				}
 			}
 		}
@@ -335,26 +335,22 @@ func (s *TurnServer) handleCreatePermissionRequest(srcAddr net.Addr, dstIP net.I
 	}
 
 	return curriedSend(respClass, stun.MethodCreatePermission, m.TransactionID,
-		messageIntegrity,
-	)
+		messageIntegrity)
 }
 
 func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
-	}
+	// curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
+	// 	return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
+	// }
 
 	dataAttr := stun.Data{}
 	xorPeerAddress := stun.XorPeerAddress{}
-	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission)
-	if err != nil {
-		return err
-	}
-	if err := assertDontFragment(curriedSend, m, stun.MethodAllocate, messageIntegrity); err != nil {
-		return err
-	}
 
-	dataRawAttr, ok := m.GetAttribute(stun.AttrData)
+	// if err := assertDontFragment(curriedSend, m, stun.MethodAllocate, messageIntegrity); err != nil {
+	// 	return err
+	// }
+
+	dataRawAttr, ok := m.GetOneAttribute(stun.AttrData)
 	if ok == false {
 		return nil
 	}
@@ -362,7 +358,7 @@ func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPor
 		return err
 	}
 
-	xorPeerAddressRawAttr, ok := m.GetAttribute(stun.AttrXORPeerAddress)
+	xorPeerAddressRawAttr, ok := m.GetOneAttribute(stun.AttrXORPeerAddress)
 	if ok == false {
 		return nil
 	}
