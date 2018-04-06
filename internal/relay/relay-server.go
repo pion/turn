@@ -14,6 +14,7 @@ import (
 // Public
 type Permission struct {
 	IP           net.IP
+	Port         int
 	TimeToExpiry uint32
 }
 
@@ -78,9 +79,8 @@ func getServer(fiveTuple *FiveTuple) (server *server) {
 }
 
 func Fulfilled(fiveTuple *FiveTuple) bool {
-	server := getServer(fiveTuple)
-	serversLock.RUnlock()
-	return server != nil
+	defer serversLock.RUnlock()
+	return getServer(fiveTuple) != nil
 }
 
 func AddPermission(fiveTuple *FiveTuple, permission *Permission) error {
@@ -90,9 +90,41 @@ func AddPermission(fiveTuple *FiveTuple, permission *Permission) error {
 		return errors.Errorf("Unable to add permission, server not found")
 	}
 	s.permissionsLock.Lock()
+	defer s.permissionsLock.Unlock()
+	for _, p := range s.permissions {
+		if p.Port == permission.Port && p.IP.Equal(permission.IP) {
+			return nil
+		}
+	}
+
 	s.permissions = append(s.permissions, permission)
-	s.permissionsLock.Unlock()
 	return nil
+}
+
+func GetSrcForRelay(ip net.IP, port int) (net.IP, int, error) {
+	serversLock.RLock()
+	defer serversLock.RUnlock()
+
+	for _, s := range servers {
+		if port == s.listeningPort {
+			return s.FiveTuple.SrcIP, s.FiveTuple.SrcPort, nil
+		}
+	}
+
+	return nil, 0, errors.Errorf("No Relay is listening on port %d", port)
+}
+
+func GetRelayForSrc(ip net.IP, port int) (int, error) {
+	serversLock.RLock()
+	defer serversLock.RUnlock()
+
+	for _, s := range servers {
+		if s.FiveTuple.SrcIP.Equal(ip) && s.FiveTuple.SrcPort == port {
+			return s.listeningPort, nil
+		}
+	}
+
+	return 0, errors.Errorf("No Relay is allocated to this src %d", port)
 }
 
 // Private

@@ -21,6 +21,15 @@ type TurnServer struct {
 	stunServer *StunServer
 }
 
+func buildTransactionId() []byte {
+	transactionID := []byte(randSeq(16))
+	transactionID[0] = 33
+	transactionID[1] = 18
+	transactionID[2] = 164
+	transactionID[3] = 66
+	return transactionID
+}
+
 type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
 func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method) (*stun.MessageIntegrity, string, error) {
@@ -339,16 +348,8 @@ func (s *TurnServer) handleCreatePermissionRequest(srcAddr net.Addr, dstIP net.I
 }
 
 func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-	// curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
-	// 	return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
-	// }
-
 	dataAttr := stun.Data{}
 	xorPeerAddress := stun.XorPeerAddress{}
-
-	// if err := assertDontFragment(curriedSend, m, stun.MethodAllocate, messageIntegrity); err != nil {
-	// 	return err
-	// }
 
 	dataRawAttr, ok := m.GetOneAttribute(stun.AttrData)
 	if ok == false {
@@ -366,13 +367,27 @@ func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPor
 		return err
 	}
 
-	_, _ = s.stunServer.connection.WriteTo(dataAttr.Data, nil, &net.UDPAddr{IP: xorPeerAddress.XorAddress.IP, Port: xorPeerAddress.XorAddress.Port})
-	return nil
+	dstIp, dstPort, err := relayServer.GetSrcForRelay(xorPeerAddress.XorAddress.IP, xorPeerAddress.XorAddress.Port)
+	if err != nil {
+		return err
+	}
+
+	srcIp, srcPort, err := netAddrIPPort(srcAddr)
+	if err != nil {
+		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
+	}
+
+	peerRelayPort, err := relayServer.GetRelayForSrc(srcIp, srcPort)
+	if err != nil {
+		return err
+	}
+
+	peerRelay := stun.XorPeerAddress{stun.XorAddress{IP: dstIp, Port: peerRelayPort}}
+	return stun.BuildAndSend(s.stunServer.connection, &net.UDPAddr{IP: dstIp, Port: dstPort}, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
 }
 
-func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-	panic("handleChannelBindRequest")
-	return nil
+func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIp net.IP, dstPort int, m *stun.Message) error {
+	return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID)
 }
 
 func (s *TurnServer) Listen(address string, port int) error {
