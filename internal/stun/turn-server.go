@@ -392,16 +392,11 @@ func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, ds
 		return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...)
 	}
 
-	srcIP, srcPort, err := netAddrIPPort(srcAddr)
+	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
+		return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
+	}, m, stun.MethodChannelBind)
 	if err != nil {
-		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
-	}
-	fiveTuple := &relayServer.FiveTuple{
-		SrcIP:    srcIP,
-		SrcPort:  srcPort,
-		DstIP:    dstIP,
-		DstPort:  dstPort,
-		Protocol: relayServer.UDP,
+		return err
 	}
 
 	channel := stun.ChannelNumber{}
@@ -421,7 +416,7 @@ func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, ds
 		return errorSend(&stun.Err400BadRequest)
 	}
 
-	return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID)
+	return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID, messageIntegrity)
 }
 
 func (s *TurnServer) Listen(address string, port int) error {

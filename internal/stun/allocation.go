@@ -23,7 +23,7 @@ type Allocation struct {
 }
 
 func (a *Allocation) AddPermission(p *Permission, lifetime time.Duration) {
-	a.permissions[string(p.IP)].timer = time.AfterFunc(lifetime, func() {
-		delete
-	})
+	// a.permissions[string(p.IP)].timer = time.AfterFunc(lifetime, func() {
+	// 	delete
+	// })
 }

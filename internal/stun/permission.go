@@ -12,10 +12,10 @@ type Permission struct {
 	timer *time.Timer
 }
 
-func NewPermission(ip net.IP, port int) *Permission {
-	p := &Permission{}
+func NewPermission(ip net.IP, port int) (p *Permission) {
 	p.IP = ip
 	p.Port = port
+	return
 }
 
 func (p *Permission) Refresh(lifetime time.Duration) {
