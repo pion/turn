@@ -40,6 +40,13 @@ func (a *FiveTuple) match(b *FiveTuple) bool {
 		a.Protocol == b.Protocol
 }
 
+type ChannelBind struct {
+	ip         net.IP
+	port       int
+	channel    int
+	expiration uint32
+}
+
 func Start(fiveTuple *FiveTuple, reservationToken string, lifetime uint32, username string) (listeningPort int, err error) {
 	s := &server{
 		FiveTuple:        fiveTuple,
@@ -135,6 +142,7 @@ type server struct {
 	lifetime                   uint32
 	permissionsLock            sync.RWMutex
 	permissions                []*Permission
+	channelBindings            map[int]ChannelBind
 }
 
 var serversLock sync.RWMutex

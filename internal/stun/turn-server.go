@@ -298,6 +298,7 @@ func (s *TurnServer) handleRefreshRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 	if err != nil {
 		return err
 	}
+
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodRefresh, m.TransactionID,
 		messageIntegrity,
 	)
@@ -372,12 +373,12 @@ func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPor
 		return err
 	}
 
-	srcIp, srcPort, err := netAddrIPPort(srcAddr)
+	srcIP, srcPort, err := netAddrIPPort(srcAddr)
 	if err != nil {
 		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
 	}
 
-	peerRelayPort, err := relayServer.GetRelayForSrc(srcIp, srcPort)
+	peerRelayPort, err := relayServer.GetRelayForSrc(srcIP, srcPort)
 	if err != nil {
 		return err
 	}
@@ -386,7 +387,40 @@ func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPor
 	return stun.BuildAndSend(s.stunServer.connection, &net.UDPAddr{IP: dstIp, Port: dstPort}, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
 }
 
-func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIp net.IP, dstPort int, m *stun.Message) error {
+func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+	errorSend := func(attrs ...stun.Attribute) error {
+		return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...)
+	}
+
+	srcIP, srcPort, err := netAddrIPPort(srcAddr)
+	if err != nil {
+		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
+	}
+	fiveTuple := &relayServer.FiveTuple{
+		SrcIP:    srcIP,
+		SrcPort:  srcPort,
+		DstIP:    dstIP,
+		DstPort:  dstPort,
+		Protocol: relayServer.UDP,
+	}
+
+	channel := stun.ChannelNumber{}
+	peerAddr := stun.XorPeerAddress{}
+	if cn, ok := m.GetOneAttribute(stun.AttrChannelNumber); ok {
+		if err := channel.Unpack(m, cn); err != nil {
+			return errorSend(&stun.Err400BadRequest)
+		}
+	} else {
+		return errorSend(&stun.Err400BadRequest)
+	}
+	if xpa, ok := m.GetOneAttribute(stun.AttrXORPeerAddress); ok {
+		if err := peerAddr.Unpack(m, xpa); err != nil {
+			return errorSend(&stun.Err400BadRequest)
+		}
+	} else {
+		return errorSend(&stun.Err400BadRequest)
+	}
+
 	return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID)
 }
 
