@@ -69,15 +69,29 @@ func (s *StunServer) handleUDPPacket(dstPort int) error {
 		return errors.Wrap(err, "failed to read packet from udp socket")
 	}
 
-	m, err := stun.NewMessage(s.packet[:size])
+	packetType, err := stun.GetPacketType(s.packet[:size])
 	if err != nil {
-		return errors.Wrap(err, "Failed to create stun message from packet")
+		return err
 	}
 
-	if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
-		if err := v(addr, cm.Dst, dstPort, m); err != nil {
-			log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
+	if packetType == stun.PacketTypeSTUN {
+		m, err := stun.NewMessage(s.packet[:size])
+		if err != nil {
+			return errors.Wrap(err, "Failed to create stun message from packet")
 		}
+
+		if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
+			if err := v(addr, cm.Dst, dstPort, m); err != nil {
+				log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
+			}
+		}
+	} else if packetType == stun.PacketTypeChannelData {
+		c, err := stun.NewChannelData(s.packet[:size])
+		if err != nil {
+			return errors.Wrap(err, "Failed to create channel data from packet")
+		}
+
+		fmt.Println("TODO handle ChannelData", c)
 	}
 
 	return nil
