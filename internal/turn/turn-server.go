@@ -1,4 +1,4 @@
-package stunServer
+package turnServer
 
 import (
 	"crypto/md5"
@@ -16,10 +16,6 @@ const (
 	maximumLifetime = uint32(3600) // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 recommendation
 	defaultLifetime = uint32(600)  // https://tools.ietf.org/html/rfc5766#section-2.2 defines 600 recommendation
 )
-
-type TurnServer struct {
-	stunServer *StunServer
-}
 
 func buildTransactionId() []byte {
 	transactionID := []byte(randSeq(16))
@@ -98,9 +94,9 @@ func assertDontFragment(curriedSend CurriedSend, m *stun.Message, callingMethod 
 }
 
 // https://tools.ietf.org/html/rfc5766#section-6.2
-func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+func (s *Server) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
+		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 
 	// 1. The server MUST require that the request be authenticated.  This
@@ -290,9 +286,9 @@ func (s *TurnServer) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPo
 	)
 }
 
-func (s *TurnServer) handleRefreshRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+func (s *Server) handleRefreshRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
+		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission)
 	if err != nil {
@@ -304,9 +300,9 @@ func (s *TurnServer) handleRefreshRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 	)
 }
 
-func (s *TurnServer) handleCreatePermissionRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+func (s *Server) handleCreatePermissionRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
+		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 	srcIP, srcPort, err := netAddrIPPort(srcAddr)
 	if err != nil {
@@ -348,7 +344,7 @@ func (s *TurnServer) handleCreatePermissionRequest(srcAddr net.Addr, dstIP net.I
 		messageIntegrity)
 }
 
-func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+func (s *Server) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	dataAttr := stun.Data{}
 	xorPeerAddress := stun.XorPeerAddress{}
 
@@ -384,16 +380,16 @@ func (s *TurnServer) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPor
 	}
 
 	peerRelay := stun.XorPeerAddress{stun.XorAddress{IP: dstIp, Port: peerRelayPort}}
-	return stun.BuildAndSend(s.stunServer.connection, &net.UDPAddr{IP: dstIp, Port: dstPort}, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
+	return stun.BuildAndSend(s.connection, &net.UDPAddr{IP: dstIp, Port: dstPort}, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
 }
 
-func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+func (s *Server) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	errorSend := func(attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...)
+		return stun.BuildAndSend(s.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...)
 	}
 
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.stunServer.connection, srcAddr, class, method, transactionID, attrs...)
+		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}, m, stun.MethodChannelBind)
 	if err != nil {
 		return err
@@ -416,32 +412,23 @@ func (s *TurnServer) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, ds
 		return errorSend(&stun.Err400BadRequest)
 	}
 
-	return stun.BuildAndSend(s.stunServer.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID, messageIntegrity)
+	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID, messageIntegrity)
 }
 
-func (s *TurnServer) Listen(address string, port int) error {
-	return s.stunServer.Listen(address, port)
-}
-
-func NewTurnServer() *TurnServer {
-	t := TurnServer{}
-	t.stunServer = NewStunServer()
-
-	t.stunServer.handlers[HandlerKey{stun.ClassRequest, stun.MethodAllocate}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-		return t.handleAllocateRequest(srcAddr, dstIP, dstPort, m)
+func addTurnHandlers(s *Server) {
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodAllocate}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+		return s.handleAllocateRequest(srcAddr, dstIP, dstPort, m)
 	}
-	t.stunServer.handlers[HandlerKey{stun.ClassRequest, stun.MethodRefresh}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-		return t.handleRefreshRequest(srcAddr, dstIP, dstPort, m)
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodRefresh}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+		return s.handleRefreshRequest(srcAddr, dstIP, dstPort, m)
 	}
-	t.stunServer.handlers[HandlerKey{stun.ClassRequest, stun.MethodCreatePermission}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-		return t.handleCreatePermissionRequest(srcAddr, dstIP, dstPort, m)
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodCreatePermission}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+		return s.handleCreatePermissionRequest(srcAddr, dstIP, dstPort, m)
 	}
-	t.stunServer.handlers[HandlerKey{stun.ClassIndication, stun.MethodSend}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-		return t.handleSendIndication(srcAddr, dstIP, dstPort, m)
+	s.handlers[HandlerKey{stun.ClassIndication, stun.MethodSend}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+		return s.handleSendIndication(srcAddr, dstIP, dstPort, m)
 	}
-	t.stunServer.handlers[HandlerKey{stun.ClassRequest, stun.MethodChannelBind}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-		return t.handleChannelBindRequest(srcAddr, dstIP, dstPort, m)
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodChannelBind}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+		return s.handleChannelBindRequest(srcAddr, dstIP, dstPort, m)
 	}
-
-	return &t
 }

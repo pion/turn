@@ -1,4 +1,4 @@
-package stunServer
+package turnServer
 
 import (
 	"fmt"
@@ -24,29 +24,30 @@ type HandlerKey struct {
 	Method stun.Method
 }
 
-type StunServer struct {
+type Server struct {
 	connection *ipv4.PacketConn
 	packet     []byte
 	handlers   map[HandlerKey]StunHandler
 }
 
-func NewStunServer() *StunServer {
+func NewServer() *Server {
 	const (
 		maxStunMessageSize = 1500
 	)
 
-	s := StunServer{}
+	s := &Server{}
 	s.packet = make([]byte, maxStunMessageSize)
 	s.handlers = make(map[HandlerKey]StunHandler)
 
 	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 		return s.handleBindingRequest(srcAddr, dstIP, dstPort, m)
 	}
+	addTurnHandlers(s)
 
-	return &s
+	return s
 }
 
-func (s *StunServer) handleBindingRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
+func (s *Server) handleBindingRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
 	ip, port, err := netAddrIPPort(srcAddr)
 	if err != nil {
 		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
@@ -63,7 +64,7 @@ func (s *StunServer) handleBindingRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 	)
 }
 
-func (s *StunServer) handleUDPPacket(dstPort int) error {
+func (s *Server) handleUDPPacket(dstPort int) error {
 	size, cm, addr, err := s.connection.ReadFrom(s.packet)
 	if err != nil {
 		return errors.Wrap(err, "failed to read packet from udp socket")
@@ -97,7 +98,7 @@ func (s *StunServer) handleUDPPacket(dstPort int) error {
 	return nil
 }
 
-func (s *StunServer) Listen(address string, port int) error {
+func (s *Server) Listen(address string, port int) error {
 	c, err := net.ListenPacket("udp4", fmt.Sprintf("%s:%d", address, port))
 	if err != nil {
 		return err

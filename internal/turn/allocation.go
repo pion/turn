@@ -1,4 +1,4 @@
-package stunServer
+package turnServer
 
 import (
 	"sync"
