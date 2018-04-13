@@ -388,6 +388,11 @@ func (s *Server) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 		return stun.BuildAndSend(s.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...)
 	}
 
+	srcIP, srcPort, err := netAddrIPPort(srcAddr)
+	if err != nil {
+		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
+	}
+
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}, m, stun.MethodChannelBind)
@@ -412,7 +417,29 @@ func (s *Server) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 		return errorSend(&stun.Err400BadRequest)
 	}
 
+	if err := relayServer.AddChannelBind(peerAddr.XorAddress.Port, channel.ChannelNumber, srcIP, srcPort); err != nil {
+		return errorSend(&stun.Err400BadRequest)
+	}
+
 	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID, messageIntegrity)
+}
+
+func (s *Server) handleChannelData(srcAddr net.Addr, dstIP net.IP, dstPort int, c *stun.ChannelData) error {
+	dstIP, dstPort, ok := relayServer.GetChannelBind(c.ChannelNumber)
+	if !ok {
+		return errors.Errorf("No channel bind found for %x", c.ChannelNumber)
+	}
+
+	l, err := s.connection.WriteTo(c.Data, nil, &net.UDPAddr{IP: dstIP, Port: dstPort})
+	if err != nil {
+		return errors.Wrap(err, "failed writing to socket")
+	}
+
+	if l != len(c.Data) {
+		return errors.Errorf("packet write smaller than packet %d != %d (expected)", l, len(c.Data))
+	}
+
+	return nil
 }
 
 func addTurnHandlers(s *Server) {

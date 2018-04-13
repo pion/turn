@@ -43,7 +43,7 @@ func (a *FiveTuple) match(b *FiveTuple) bool {
 type ChannelBind struct {
 	ip         net.IP
 	port       int
-	channel    int
+	channel    uint16
 	expiration uint32
 }
 
@@ -52,6 +52,7 @@ func Start(fiveTuple *FiveTuple, reservationToken string, lifetime uint32, usern
 		FiveTuple:        fiveTuple,
 		reservationToken: reservationToken,
 		lifetime:         lifetime,
+		channelBindings:  map[uint16]ChannelBind{},
 	}
 
 	listener, err := net.ListenPacket("udp", ":0")
@@ -134,6 +135,33 @@ func GetRelayForSrc(ip net.IP, port int) (int, error) {
 	return 0, errors.Errorf("No Relay is allocated to this src %d", port)
 }
 
+func AddChannelBind(relayPort int, channel uint16, dstIP net.IP, dstPort int) error {
+	if _, _, ok := GetChannelBind(channel); ok {
+		return errors.Errorf("ChannelBind %d already exists", channel)
+	}
+
+	serversLock.RLock()
+	defer serversLock.RUnlock()
+	for _, s := range servers {
+		if s.listeningPort == relayPort {
+			s.channelBindings[channel] = ChannelBind{ip: dstIP, port: dstPort}
+		}
+	}
+	return nil
+}
+
+func GetChannelBind(channel uint16) (net.IP, int, bool) {
+	serversLock.RLock()
+	defer serversLock.RUnlock()
+	for _, s := range servers {
+		if _, ok := s.channelBindings[channel]; ok {
+			return s.FiveTuple.SrcIP, s.FiveTuple.SrcPort, true
+		}
+	}
+
+	return nil, 0, false
+}
+
 // Private
 type server struct {
 	*FiveTuple
@@ -142,7 +170,7 @@ type server struct {
 	lifetime                   uint32
 	permissionsLock            sync.RWMutex
 	permissions                []*Permission
-	channelBindings            map[int]ChannelBind
+	channelBindings            map[uint16]ChannelBind
 }
 
 var serversLock sync.RWMutex

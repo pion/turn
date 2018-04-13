@@ -91,8 +91,9 @@ func (s *Server) handleUDPPacket(dstPort int) error {
 		if err != nil {
 			return errors.Wrap(err, "Failed to create channel data from packet")
 		}
-
-		fmt.Println("TODO handle ChannelData", c)
+		if err := s.handleChannelData(addr, cm.Dst, dstPort, c); err != nil {
+			log.Printf("unable to handle ChannelData from %v: %v", addr, err)
+		}
 	}
 
 	return nil
