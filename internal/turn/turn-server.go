@@ -384,8 +384,11 @@ func (s *Server) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort in
 }
 
 func (s *Server) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-	errorSend := func(attrs ...stun.Attribute) error {
-		return stun.BuildAndSend(s.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...)
+	errorSend := func(err error, attrs ...stun.Attribute) error {
+		if sendErr := stun.BuildAndSend(s.connection, srcAddr, stun.ClassErrorResponse, stun.MethodChannelBind, m.TransactionID, attrs...); sendErr != nil {
+			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+		}
+		return err
 	}
 
 	srcIP, srcPort, err := netAddrIPPort(srcAddr)
@@ -404,21 +407,21 @@ func (s *Server) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 	peerAddr := stun.XorPeerAddress{}
 	if cn, ok := m.GetOneAttribute(stun.AttrChannelNumber); ok {
 		if err := channel.Unpack(m, cn); err != nil {
-			return errorSend(&stun.Err400BadRequest)
+			return errorSend(err, &stun.Err400BadRequest)
 		}
 	} else {
-		return errorSend(&stun.Err400BadRequest)
+		return errorSend(errors.Errorf("ChannelBind missing channel attribute"), &stun.Err400BadRequest)
 	}
 	if xpa, ok := m.GetOneAttribute(stun.AttrXORPeerAddress); ok {
 		if err := peerAddr.Unpack(m, xpa); err != nil {
-			return errorSend(&stun.Err400BadRequest)
+			return errorSend(err, &stun.Err400BadRequest)
 		}
 	} else {
-		return errorSend(&stun.Err400BadRequest)
+		return errorSend(errors.Errorf("ChannelBind missing XORPeerAddress attribute"), &stun.Err400BadRequest)
 	}
 
 	if err := relayServer.AddChannelBind(peerAddr.XorAddress.Port, channel.ChannelNumber, srcIP, srcPort); err != nil {
-		return errorSend(&stun.Err400BadRequest)
+		return errorSend(err, &stun.Err400BadRequest)
 	}
 
 	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodChannelBind, m.TransactionID, messageIntegrity)
