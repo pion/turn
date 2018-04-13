@@ -41,10 +41,9 @@ func (a *FiveTuple) match(b *FiveTuple) bool {
 }
 
 type ChannelBind struct {
-	ip         net.IP
-	port       int
-	channel    uint16
-	expiration uint32
+	ip   net.IP
+	port int
+	// expiration uint32
 }
 
 func Start(fiveTuple *FiveTuple, reservationToken string, lifetime uint32, username string) (listeningPort int, err error) {
@@ -136,10 +135,6 @@ func GetRelayForSrc(ip net.IP, port int) (int, error) {
 }
 
 func AddChannelBind(relayPort int, channel uint16, dstIP net.IP, dstPort int) error {
-	if _, _, ok := GetChannelBind(channel); ok {
-		return errors.Errorf("ChannelBind %d already exists", channel)
-	}
-
 	serversLock.RLock()
 	defer serversLock.RUnlock()
 	for _, s := range servers {
@@ -150,11 +145,11 @@ func AddChannelBind(relayPort int, channel uint16, dstIP net.IP, dstPort int) er
 	return nil
 }
 
-func GetChannelBind(channel uint16) (net.IP, int, bool) {
+func GetChannelBind(srcPort int, channel uint16) (net.IP, int, bool) {
 	serversLock.RLock()
 	defer serversLock.RUnlock()
 	for _, s := range servers {
-		if _, ok := s.channelBindings[channel]; ok {
+		if cb, ok := s.channelBindings[channel]; ok && cb.port == srcPort {
 			return s.FiveTuple.SrcIP, s.FiveTuple.SrcPort, true
 		}
 	}
@@ -197,8 +192,8 @@ func relayHandler(s *server, l net.PacketConn) {
 		xorPeerAddressAttr.XorAddress.Port = srcAddr.(*net.UDPAddr).Port
 		dataAttr.Data = buffer
 
-		rand.Read(transactionId)
-		stun.BuildAndSend(conn, destAddr, stun.ClassIndication, stun.MethodData, transactionId, &xorPeerAddressAttr, &dataAttr)
+		_, _ = rand.Read(transactionId)
+		_ = stun.BuildAndSend(conn, destAddr, stun.ClassIndication, stun.MethodData, transactionId, &xorPeerAddressAttr, &dataAttr)
 		fmt.Printf("Relaying %s %s %d \n", srcAddr.String(), destAddr.String(), n)
 	}
 }

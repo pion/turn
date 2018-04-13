@@ -29,7 +29,7 @@ func buildTransactionId() []byte {
 type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
 func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method) (*stun.MessageIntegrity, string, error) {
-	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); integrityFound == false {
+	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); !integrityFound {
 		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err401Unauthorized,
 			&stun.Nonce{buildNonce()},
@@ -145,7 +145,7 @@ func (s *Server) handleAllocateRequest(srcAddr net.Addr, dstIP net.IP, dstPort i
 	//    specifies a protocol other that UDP, the server rejects the
 	//    request with a 442 (Unsupported Transport Protocol) error.
 	if requestedTransportRawAttr, ok := m.GetOneAttribute(stun.AttrRequestedTransport); true {
-		if ok == false {
+		if !ok {
 			err := errors.Errorf("Allocation request missing REQUESTED-TRANSPORT")
 			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 				&stun.Err400BadRequest,
@@ -349,7 +349,7 @@ func (s *Server) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort in
 	xorPeerAddress := stun.XorPeerAddress{}
 
 	dataRawAttr, ok := m.GetOneAttribute(stun.AttrData)
-	if ok == false {
+	if !ok {
 		return nil
 	}
 	if err := dataAttr.Unpack(m, dataRawAttr); err != nil {
@@ -357,7 +357,7 @@ func (s *Server) handleSendIndication(srcAddr net.Addr, dstIP net.IP, dstPort in
 	}
 
 	xorPeerAddressRawAttr, ok := m.GetOneAttribute(stun.AttrXORPeerAddress)
-	if ok == false {
+	if !ok {
 		return nil
 	}
 	if err := xorPeerAddress.Unpack(m, xorPeerAddressRawAttr); err != nil {
@@ -428,12 +428,16 @@ func (s *Server) handleChannelBindRequest(srcAddr net.Addr, dstIP net.IP, dstPor
 }
 
 func (s *Server) handleChannelData(srcAddr net.Addr, dstIP net.IP, dstPort int, c *stun.ChannelData) error {
-	dstIP, dstPort, ok := relayServer.GetChannelBind(c.ChannelNumber)
+	_, srcPort, err := netAddrIPPort(srcAddr)
+	if err != nil {
+		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
+	}
+	clientIP, clientPort, ok := relayServer.GetChannelBind(srcPort, c.ChannelNumber)
 	if !ok {
 		return errors.Errorf("No channel bind found for %x", c.ChannelNumber)
 	}
 
-	l, err := s.connection.WriteTo(c.Data, nil, &net.UDPAddr{IP: dstIP, Port: dstPort})
+	l, err := s.connection.WriteTo(c.Data, nil, &net.UDPAddr{IP: clientIP, Port: clientPort})
 	if err != nil {
 		return errors.Wrap(err, "failed writing to socket")
 	}
