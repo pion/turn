@@ -17,7 +17,7 @@ const (
 	DefaultTLSPort = 5349
 )
 
-type StunHandler func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error
+type StunHandler func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error
 
 type HandlerKey struct {
 	Class  stun.MessageClass
@@ -39,25 +39,20 @@ func NewServer() *Server {
 	s.packet = make([]byte, maxStunMessageSize)
 	s.handlers = make(map[HandlerKey]StunHandler)
 
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-		return s.handleBindingRequest(srcAddr, dstIP, dstPort, m)
+	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
+		return s.handleBindingRequest(srcAddr, dstAddr, m)
 	}
 	addTurnHandlers(s)
 
 	return s
 }
 
-func (s *Server) handleBindingRequest(srcAddr net.Addr, dstIP net.IP, dstPort int, m *stun.Message) error {
-	ip, port, err := netAddrIPPort(srcAddr)
-	if err != nil {
-		return errors.Wrap(err, "Failed to take net.Addr to Host/Port")
-	}
-
+func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
 	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
 		&stun.XorMappedAddress{
 			XorAddress: stun.XorAddress{
-				IP:   ip,
-				Port: port,
+				IP:   srcAddr.IP,
+				Port: srcAddr.Port,
 			},
 		},
 		&stun.Fingerprint{},
@@ -70,6 +65,11 @@ func (s *Server) handleUDPPacket(dstPort int) error {
 		return errors.Wrap(err, "failed to read packet from udp socket")
 	}
 
+	dstAddr := &stun.TransportAddr{IP: cm.Dst, Port: dstPort}
+	srcAddr, err := stun.NewTransportAddr(addr)
+	if err != nil {
+		return errors.Wrap(err, "failed reading udp addr")
+	}
 	packetType, err := stun.GetPacketType(s.packet[:size])
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (s *Server) handleUDPPacket(dstPort int) error {
 		}
 
 		if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
-			if err := v(addr, cm.Dst, dstPort, m); err != nil {
+			if err := v(srcAddr, dstAddr, m); err != nil {
 				log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
 			}
 		}
@@ -91,7 +91,7 @@ func (s *Server) handleUDPPacket(dstPort int) error {
 		if err != nil {
 			return errors.Wrap(err, "Failed to create channel data from packet")
 		}
-		if err := s.handleChannelData(addr, cm.Dst, dstPort, c); err != nil {
+		if err := s.handleChannelData(srcAddr, dstAddr, c); err != nil {
 			log.Printf("unable to handle ChannelData from %v: %v", addr, err)
 		}
 	}

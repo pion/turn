@@ -27,22 +27,19 @@ const (
 )
 
 type FiveTuple struct {
-	SrcIP, DstIP     net.IP
-	SrcPort, DstPort int
-	Protocol         Protocol
+	SrcAddr  *stun.TransportAddr
+	DstAddr  *stun.TransportAddr
+	Protocol Protocol
 }
 
 func (a *FiveTuple) match(b *FiveTuple) bool {
-	return a.SrcIP.Equal(b.SrcIP) &&
-		a.DstIP.Equal(b.DstIP) &&
-		a.SrcPort == b.SrcPort &&
-		a.DstPort == b.DstPort &&
+	return a.SrcAddr.Equal(b.SrcAddr) &&
+		a.DstAddr.Equal(b.SrcAddr) &&
 		a.Protocol == b.Protocol
 }
 
 type ChannelBind struct {
-	ip   net.IP
-	port int
+	addr *stun.TransportAddr
 	// expiration uint32
 }
 
@@ -58,10 +55,12 @@ func Start(fiveTuple *FiveTuple, reservationToken string, lifetime uint32, usern
 	if err != nil {
 		return
 	}
-	_, listeningPort, err = netAddrIPPort(listener.LocalAddr())
+	listeningAddr, err := stun.NewTransportAddr(listener.LocalAddr())
 	if err != nil {
 		return
 	}
+
+	listeningPort = listeningAddr.Port
 	s.listeningPort = listeningPort
 	s.username = username
 
@@ -108,53 +107,53 @@ func AddPermission(fiveTuple *FiveTuple, permission *Permission) error {
 	return nil
 }
 
-func GetSrcForRelay(ip net.IP, port int) (net.IP, int, error) {
+func GetSrcForRelay(addr *stun.TransportAddr) (*stun.TransportAddr, error) {
 	serversLock.RLock()
 	defer serversLock.RUnlock()
 
 	for _, s := range servers {
-		if port == s.listeningPort {
-			return s.FiveTuple.SrcIP, s.FiveTuple.SrcPort, nil
+		if addr.Port == s.listeningPort {
+			return s.FiveTuple.SrcAddr, nil
 		}
 	}
 
-	return nil, 0, errors.Errorf("No Relay is listening on port %d", port)
+	return nil, errors.Errorf("No Relay is listening on port %d", addr.Port)
 }
 
-func GetRelayForSrc(ip net.IP, port int) (int, error) {
+func GetRelayForSrc(addr *stun.TransportAddr) (int, error) {
 	serversLock.RLock()
 	defer serversLock.RUnlock()
 
 	for _, s := range servers {
-		if s.FiveTuple.SrcIP.Equal(ip) && s.FiveTuple.SrcPort == port {
+		if s.FiveTuple.SrcAddr.Equal(addr) {
 			return s.listeningPort, nil
 		}
 	}
 
-	return 0, errors.Errorf("No Relay is allocated to this src %d", port)
+	return 0, errors.Errorf("No Relay is allocated to this src %d", addr.Port)
 }
 
-func AddChannelBind(relayPort int, channel uint16, dstIP net.IP, dstPort int) error {
+func AddChannelBind(relayPort int, channel uint16, dstAddr *stun.TransportAddr) error {
 	serversLock.RLock()
 	defer serversLock.RUnlock()
 	for _, s := range servers {
 		if s.listeningPort == relayPort {
-			s.channelBindings[channel] = ChannelBind{ip: dstIP, port: dstPort}
+			s.channelBindings[channel] = ChannelBind{addr: dstAddr}
 		}
 	}
 	return nil
 }
 
-func GetChannelBind(srcPort int, channel uint16) (net.IP, int, bool) {
+func GetChannelBind(srcPort int, channel uint16) (*stun.TransportAddr, bool) {
 	serversLock.RLock()
 	defer serversLock.RUnlock()
 	for _, s := range servers {
-		if cb, ok := s.channelBindings[channel]; ok && cb.port == srcPort {
-			return s.FiveTuple.SrcIP, s.FiveTuple.SrcPort, true
+		if cb, ok := s.channelBindings[channel]; ok && cb.addr.Port == srcPort {
+			return s.FiveTuple.SrcAddr, true
 		}
 	}
 
-	return nil, 0, false
+	return nil, false
 }
 
 // Private
@@ -177,7 +176,6 @@ func relayHandler(s *server, l net.PacketConn) {
 	buffer := make([]byte, RtpMTU)
 	conn := ipv4.NewPacketConn(l)
 	transactionId := make([]byte, 12)
-	destAddr := &net.UDPAddr{IP: s.FiveTuple.SrcIP, Port: s.FiveTuple.SrcPort}
 
 	dataAttr := stun.Data{}
 	xorPeerAddressAttr := stun.XorPeerAddress{}
@@ -193,7 +191,7 @@ func relayHandler(s *server, l net.PacketConn) {
 		dataAttr.Data = buffer
 
 		_, _ = rand.Read(transactionId)
-		_ = stun.BuildAndSend(conn, destAddr, stun.ClassIndication, stun.MethodData, transactionId, &xorPeerAddressAttr, &dataAttr)
-		fmt.Printf("Relaying %s %s %d \n", srcAddr.String(), destAddr.String(), n)
+		_ = stun.BuildAndSend(conn, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, transactionId, &xorPeerAddressAttr, &dataAttr)
+		fmt.Printf("Relaying %s %s %d \n", srcAddr.String(), s.FiveTuple.SrcAddr, n)
 	}
 }
