@@ -6,8 +6,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/pions/pkg/stun"
 	"github.com/pkg/errors"
-	"gitlab.com/pions/pion/pkg/go/stun"
 	"golang.org/x/net/ipv4"
 )
 

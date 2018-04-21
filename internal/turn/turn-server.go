@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pions/pkg/stun"
 	"github.com/pkg/errors"
-	"gitlab.com/pions/pion/pkg/go/stun"
 
 	"gitlab.com/pions/pion/turn/internal/relay"
 )
