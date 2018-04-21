@@ -21,9 +21,8 @@ type Permission struct {
 type Protocol int
 
 const (
-	UDP        Protocol = iota
-	TCP        Protocol = iota
-	TLSOverTCP Protocol = iota
+	UDP Protocol = iota
+	TCP Protocol = iota
 )
 
 type FiveTuple struct {
