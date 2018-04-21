@@ -34,7 +34,7 @@ type FiveTuple struct {
 
 func (a *FiveTuple) match(b *FiveTuple) bool {
 	return a.SrcAddr.Equal(b.SrcAddr) &&
-		a.DstAddr.Equal(b.SrcAddr) &&
+		a.DstAddr.Equal(b.DstAddr) &&
 		a.Protocol == b.Protocol
 }
 

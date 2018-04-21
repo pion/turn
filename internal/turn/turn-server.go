@@ -362,7 +362,7 @@ func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun
 	}
 
 	peerRelay := stun.XorPeerAddress{stun.XorAddress{IP: peerRelayAddr.IP, Port: peerRelayPort}}
-	return stun.BuildAndSend(s.connection, dstAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
+	return stun.BuildAndSend(s.connection, peerRelayAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
 }
 
 func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
