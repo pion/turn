@@ -8,7 +8,7 @@ import (
 	"github.com/pions/pkg/stun"
 	"github.com/pkg/errors"
 
-	"gitlab.com/pions/pion/turn/internal/relay"
+	"github.com/pions/turn/internal/relay"
 )
 
 const (

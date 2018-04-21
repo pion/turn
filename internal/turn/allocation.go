@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/pions/pion/turn/internal/relay"
+	"github.com/pions/turn/internal/relay"
 )
 
 const (

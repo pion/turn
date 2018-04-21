@@ -1,23 +1,26 @@
-package main
+package turn
 
 import (
 	"fmt"
 	"os"
 
-	"gitlab.com/pions/pion/pkg/go/log"
-	"gitlab.com/pions/pion/turn/internal/turn"
+	"github.com/pions/turn/internal/turn"
+	"github.com/rs/zerolog/log"
 )
 
-func main() {
+type Server interface {
+}
+
+func Start(s Server) {
 	if os.Getenv("FQDN") == "" {
 		log.Fatal().Msg("FQDN is a required environment variable")
 	}
 
-	s := turnServer.NewServer()
+	tServer := turnServer.NewServer()
 	errors := make(chan error)
 
 	go func() {
-		err := s.Listen("", turnServer.DefaultPort)
+		err := tServer.Listen("", turnServer.DefaultPort)
 		errors <- err
 	}()
 
