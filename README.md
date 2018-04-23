@@ -19,12 +19,13 @@ Pion TURN is 100% Go, there are no other dependencies beyond a working Golang en
 
 ### Developing
 For developing a Dockerfile is available with features like hot-reloads, and is meant to be volume mounted.
+Make sure you also have github.com/pions/pkg in your path, or you can exclude the second volume mount.
 
 This is only meant for development, see [demo-conference](https://github.com/pions/demo-conference)
 to see TURN usage as a user.
 ```
 docker build -t turn .
-docker run -v $(pwd):/usr/local/src/github.com/pions/turn turn
+docker run -v $(pwd):/usr/local/src/github.com/pions/turn -v $(pwd)/../pkg:/usr/local/src/github.com/pions/pkg turn
 ```
 
 Currently only Linux is supported until Docker supports full (host <-> container) networking on Windows/OSX
