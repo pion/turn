@@ -26,44 +26,8 @@ func buildTransactionId() []byte {
 
 type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
-func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method, realm string) (*stun.MessageIntegrity, string, error) {
-	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); !integrityFound {
-		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
-			&stun.Err401Unauthorized,
-			&stun.Nonce{buildNonce()},
-			&stun.Realm{realm},
-		)
-	}
-	var err error
-	nonceAttr := &stun.Nonce{}
-	usernameAttr := &stun.Username{}
-	realmAttr := &stun.Realm{}
-
-	if usernameRawAttr, usernameFound := m.GetOneAttribute(stun.AttrUsername); true {
-		if usernameFound {
-			err = usernameAttr.Unpack(m, usernameRawAttr)
-		} else {
-			err = errors.Errorf("Integrity found, but missing username")
-		}
-	}
-
-	if realmRawAttr, realmFound := m.GetOneAttribute(stun.AttrRealm); true {
-		if realmFound {
-			err = realmAttr.Unpack(m, realmRawAttr)
-		} else {
-			err = errors.Errorf("Integrity found, but missing realm")
-		}
-	}
-
-	if nonceRawAttr, nonceFound := m.GetOneAttribute(stun.AttrNonce); true {
-		if nonceFound {
-			err = nonceAttr.Unpack(m, nonceRawAttr)
-		} else {
-			err = errors.Errorf("Integrity found, but missing nonce")
-		}
-	}
-
-	if err != nil {
+func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method, realm string, authHandler AuthHandler, srcAddr *stun.TransportAddr) (*stun.MessageIntegrity, string, error) {
+	handleErr := func(err error) (*stun.MessageIntegrity, string, error) {
 		if sendErr := curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err400BadRequest,
 		); sendErr != nil {
@@ -71,8 +35,53 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 		}
 		return nil, "", err
 	}
+
+	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); !integrityFound {
+		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
+			&stun.Err401Unauthorized,
+			&stun.Nonce{buildNonce()},
+			&stun.Realm{realm},
+		)
+	}
+	var ok bool
+	nonceAttr := &stun.Nonce{}
+	usernameAttr := &stun.Username{}
+	realmAttr := &stun.Realm{}
+	password := ""
+
+	usernameRawAttr, usernameFound := m.GetOneAttribute(stun.AttrUsername)
+	if usernameFound {
+		if err := usernameAttr.Unpack(m, usernameRawAttr); err != nil {
+			return handleErr(err)
+		}
+		password, ok = authHandler(usernameAttr.Username, srcAddr)
+		if !ok {
+			return handleErr(errors.Errorf("No user exists for %s", usernameAttr.Username))
+		}
+	} else {
+		return handleErr(errors.Errorf("Integrity found, but missing username"))
+	}
+
+	realmRawAttr, realmFound := m.GetOneAttribute(stun.AttrRealm)
+	if realmFound {
+		if err := realmAttr.Unpack(m, realmRawAttr); err != nil {
+			return handleErr(err)
+		}
+	} else {
+		return handleErr(errors.Errorf("Integrity found, but missing realm"))
+	}
+
+	nonceRawAttr, nonceFound := m.GetOneAttribute(stun.AttrNonce)
+	if nonceFound {
+		if err := nonceAttr.Unpack(m, nonceRawAttr); err != nil {
+			return handleErr(err)
+		}
+	} else {
+		return handleErr(errors.Errorf("Integrity found, but missing nonce"))
+	}
+
 	return &stun.MessageIntegrity{
-		Key: md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + "password")),
+		Key: md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + password)),
 	}, usernameAttr.Username, nil
 }
 
@@ -102,7 +111,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, username, err := authenticateRequest(curriedSend, m, stun.MethodAllocate, s.realm)
+	messageIntegrity, username, err := authenticateRequest(curriedSend, m, stun.MethodAllocate, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
 	} else if messageIntegrity == nil {
@@ -281,7 +290,7 @@ func (s *Server) handleRefreshRequest(srcAddr *stun.TransportAddr, dstAddr *stun
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
-	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm)
+	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
 	}
@@ -296,7 +305,7 @@ func (s *Server) handleCreatePermissionRequest(srcAddr *stun.TransportAddr, dstA
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 
-	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm)
+	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
 	}
@@ -374,7 +383,7 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
-	}, m, stun.MethodChannelBind, s.realm)
+	}, m, stun.MethodChannelBind, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
 	}

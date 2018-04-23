@@ -18,6 +18,7 @@ const (
 )
 
 type StunHandler func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error
+type AuthHandler func(username string, srcAddr *stun.TransportAddr) (password string, ok bool)
 
 type HandlerKey struct {
 	Class  stun.MessageClass
@@ -25,13 +26,14 @@ type HandlerKey struct {
 }
 
 type Server struct {
-	connection *ipv4.PacketConn
-	packet     []byte
-	handlers   map[HandlerKey]StunHandler
-	realm      string
+	connection  *ipv4.PacketConn
+	packet      []byte
+	handlers    map[HandlerKey]StunHandler
+	realm       string
+	authHandler AuthHandler
 }
 
-func NewServer(realm string) *Server {
+func NewServer(realm string, a AuthHandler) *Server {
 	const (
 		maxStunMessageSize = 1500
 	)
@@ -40,6 +42,7 @@ func NewServer(realm string) *Server {
 	s.packet = make([]byte, maxStunMessageSize)
 	s.handlers = make(map[HandlerKey]StunHandler)
 	s.realm = realm
+	s.authHandler = a
 
 	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
 		return s.handleBindingRequest(srcAddr, dstAddr, m)

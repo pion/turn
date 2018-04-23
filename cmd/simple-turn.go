@@ -4,10 +4,15 @@ import (
 	"log"
 	"os"
 
+	"github.com/pions/pkg/stun"
 	"github.com/pions/turn"
 )
 
 type MyTurnServer struct {
+}
+
+func (m *MyTurnServer) AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool) {
+	return "password", true
 }
 
 func main() {
@@ -15,5 +20,5 @@ func main() {
 		log.Panic("REALM is a required environment variable")
 	}
 
-	turn.Start(&MyTurnServer{}, os.Getenv("realm"))
+	turn.Start(&MyTurnServer{}, os.Getenv("REALM"))
 }
