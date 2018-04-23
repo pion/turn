@@ -28,9 +28,10 @@ type Server struct {
 	connection *ipv4.PacketConn
 	packet     []byte
 	handlers   map[HandlerKey]StunHandler
+	realm      string
 }
 
-func NewServer() *Server {
+func NewServer(realm string) *Server {
 	const (
 		maxStunMessageSize = 1500
 	)
@@ -38,6 +39,7 @@ func NewServer() *Server {
 	s := &Server{}
 	s.packet = make([]byte, maxStunMessageSize)
 	s.handlers = make(map[HandlerKey]StunHandler)
+	s.realm = realm
 
 	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
 		return s.handleBindingRequest(srcAddr, dstAddr, m)

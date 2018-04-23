@@ -2,26 +2,18 @@ package turn
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/pions/turn/internal/turn"
-	"github.com/rs/zerolog/log"
 )
 
 type Server interface {
 }
 
-func Start(s Server) {
-	if os.Getenv("FQDN") == "" {
-		log.Fatal().Msg("FQDN is a required environment variable")
-	}
-
-	tServer := turnServer.NewServer()
+func Start(s Server, realm string) {
 	errors := make(chan error)
 
 	go func() {
-		err := tServer.Listen("", turnServer.DefaultPort)
-		errors <- err
+		errors <- turnServer.NewServer(realm).Listen("", turnServer.DefaultPort)
 	}()
 
 	select {

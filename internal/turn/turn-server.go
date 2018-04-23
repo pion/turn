@@ -2,7 +2,6 @@ package turnServer
 
 import (
 	"crypto/md5"
-	"os"
 	"strings"
 
 	"github.com/pions/pkg/stun"
@@ -27,12 +26,12 @@ func buildTransactionId() []byte {
 
 type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
-func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method) (*stun.MessageIntegrity, string, error) {
+func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method, realm string) (*stun.MessageIntegrity, string, error) {
 	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); !integrityFound {
 		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err401Unauthorized,
 			&stun.Nonce{buildNonce()},
-			&stun.Realm{os.Getenv("FQDN")},
+			&stun.Realm{realm},
 		)
 	}
 	var err error
@@ -103,7 +102,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, username, err := authenticateRequest(curriedSend, m, stun.MethodAllocate)
+	messageIntegrity, username, err := authenticateRequest(curriedSend, m, stun.MethodAllocate, s.realm)
 	if err != nil {
 		return err
 	} else if messageIntegrity == nil {
@@ -282,7 +281,7 @@ func (s *Server) handleRefreshRequest(srcAddr *stun.TransportAddr, dstAddr *stun
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
-	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission)
+	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm)
 	if err != nil {
 		return err
 	}
@@ -297,7 +296,7 @@ func (s *Server) handleCreatePermissionRequest(srcAddr *stun.TransportAddr, dstA
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 
-	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission)
+	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm)
 	if err != nil {
 		return err
 	}
@@ -375,7 +374,7 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
-	}, m, stun.MethodChannelBind)
+	}, m, stun.MethodChannelBind, s.realm)
 	if err != nil {
 		return err
 	}
