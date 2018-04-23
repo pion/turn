@@ -23,7 +23,7 @@ For developing a Dockerfile is available with features like hot-reloads, and is 
 This is only meant for development, see [demo-conference](https://github.com/pions/demo-conference)
 to see TURN usage as a user.
 ```
-docker build -t turn https://github.com/pions/turn.git
+docker build -t turn .
 docker run -v $(pwd):/usr/local/src/github.com/pions/turn turn
 ```
 
