@@ -171,6 +171,25 @@ var servers []*server
 
 const RtpMTU = 1500
 
+//  https://tools.ietf.org/html/rfc5766#section-10.3
+//  When the server receives a UDP datagram at a currently allocated
+//  relayed transport address, the server looks up the allocation
+//  associated with the relayed transport address.  The server then
+//  checks to see whether the set of permissions for the allocation allow
+//  the relaying of the UDP datagram as described in Section 8.
+//
+//  If relaying is permitted, then the server checks if there is a
+//  channel bound to the peer that sent the UDP datagram (see
+//  Section 11).  If a channel is bound, then processing proceeds as
+//  described in Section 11.7.
+//
+//  If relaying is permitted but no channel is bound to the peer, then
+//  the server forms and sends a Data indication.  The Data indication
+//  MUST contain both an XOR-PEER-ADDRESS and a DATA attribute.  The DATA
+//  attribute is set to the value of the 'data octets' field from the
+//  datagram, and the XOR-PEER-ADDRESS attribute is set to the source
+//  transport address of the received UDP datagram.  The Data indication
+//  is then sent on the 5-tuple associated with the allocation.
 func relayHandler(s *server, l net.PacketConn) {
 	buffer := make([]byte, RtpMTU)
 	conn := ipv4.NewPacketConn(l)
