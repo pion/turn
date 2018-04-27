@@ -1,7 +1,6 @@
 package relayServer
 
 import (
-	"crypto/rand"
 	"fmt"
 	"net"
 	"sync"
@@ -193,7 +192,6 @@ const RtpMTU = 1500
 func relayHandler(s *server, l net.PacketConn) {
 	buffer := make([]byte, RtpMTU)
 	conn := ipv4.NewPacketConn(l)
-	transactionId := make([]byte, 12)
 
 	dataAttr := stun.Data{}
 	xorPeerAddressAttr := stun.XorPeerAddress{}
@@ -206,10 +204,9 @@ func relayHandler(s *server, l net.PacketConn) {
 
 		xorPeerAddressAttr.XorAddress.IP = srcAddr.(*net.UDPAddr).IP
 		xorPeerAddressAttr.XorAddress.Port = srcAddr.(*net.UDPAddr).Port
-		dataAttr.Data = buffer
+		dataAttr.Data = buffer[:n]
 
-		_, _ = rand.Read(transactionId)
-		_ = stun.BuildAndSend(conn, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, transactionId, &xorPeerAddressAttr, &dataAttr)
-		fmt.Printf("Relaying %s %s %d \n", srcAddr.String(), s.FiveTuple.SrcAddr, n)
+		_ = stun.BuildAndSend(conn, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &xorPeerAddressAttr, &dataAttr)
+		// fmt.Printf("Relaying %d %s %s %d \n", s.listeningPort, srcAddr.String(), s.FiveTuple.SrcAddr, n)
 	}
 }
