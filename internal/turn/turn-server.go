@@ -36,31 +36,23 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 		return nil, "", err
 	}
 
-	if _, integrityFound := m.GetOneAttribute(stun.AttrMessageIntegrity); !integrityFound {
+	messageIntegrityAttr := &stun.MessageIntegrity{}
+	messageIntegrityRawAttr, messageIntegrityAttrFound := m.GetOneAttribute(stun.AttrMessageIntegrity)
+
+	if !messageIntegrityAttrFound {
 		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err401Unauthorized,
 			&stun.Nonce{buildNonce()},
 			&stun.Realm{realm},
 		)
+	} else if err := messageIntegrityAttr.Unpack(m, messageIntegrityRawAttr); err != nil {
+		return handleErr(err)
 	}
-	var ok bool
+
+	var ourKey [16]byte
 	nonceAttr := &stun.Nonce{}
 	usernameAttr := &stun.Username{}
 	realmAttr := &stun.Realm{}
-	password := ""
-
-	usernameRawAttr, usernameFound := m.GetOneAttribute(stun.AttrUsername)
-	if usernameFound {
-		if err := usernameAttr.Unpack(m, usernameRawAttr); err != nil {
-			return handleErr(err)
-		}
-		password, ok = authHandler(usernameAttr.Username, srcAddr)
-		if !ok {
-			return handleErr(errors.Errorf("No user exists for %s", usernameAttr.Username))
-		}
-	} else {
-		return handleErr(errors.Errorf("Integrity found, but missing username"))
-	}
 
 	realmRawAttr, realmFound := m.GetOneAttribute(stun.AttrRealm)
 	if realmFound {
@@ -80,8 +72,26 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 		return handleErr(errors.Errorf("Integrity found, but missing nonce"))
 	}
 
+	usernameRawAttr, usernameFound := m.GetOneAttribute(stun.AttrUsername)
+	if usernameFound {
+		if err := usernameAttr.Unpack(m, usernameRawAttr); err != nil {
+			return handleErr(err)
+		}
+		password, ok := authHandler(usernameAttr.Username, srcAddr)
+		if !ok {
+			return handleErr(errors.Errorf("No user exists for %s", usernameAttr.Username))
+		}
+
+		ourKey = md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + password))
+		if err := assertMessageIntegrity(m, messageIntegrityRawAttr, ourKey); err != nil {
+			return handleErr(err)
+		}
+	} else {
+		return handleErr(errors.Errorf("Integrity found, but missing username"))
+	}
+
 	return &stun.MessageIntegrity{
-		Key: md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + password)),
+		Key: ourKey,
 	}, usernameAttr.Username, nil
 }
 
