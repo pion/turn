@@ -1,4 +1,4 @@
-# Pion TURN
+# Pion TURN ![Build Status](https://travis-ci.org/pions/turn.svg?branch=master)
 
 A TURN server written in Go that is designed to be scalable, extendable and embeddable out of the box.
 Instead of complicated config files or dependencies you get a single static binary that can be
