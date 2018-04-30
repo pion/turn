@@ -1,0 +1,21 @@
+language: go
+
+go:
+  - 1.9    # (CURRENT - 1)
+  - master
+
+notifications:
+  email: false
+
+before_script:
+  - go get github.com/golang/lint/golint
+  - go get honnef.co/go/tools/cmd/megacheck
+  - go get github.com/fzipp/gocyclo
+
+script:
+  - test -z "$(gofmt -s -l ./..)"            # assert valid gofmt
+  - go test -v -race ./...                   # `go test` with -race
+  - go vet ./...
+  - megacheck ./...
+  - gocyclo -over 19 ./..                   # cyclomatic complexity
+  - golint -set_exit_status $(go list ./...)
