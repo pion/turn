@@ -252,7 +252,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	}
 
 	reservationToken := randSeq(8)
-	relayPort, err := relayServer.Start(fiveTuple, reservationToken, lifetimeDuration, username)
+	relayPort, err := relayServer.Start(s.connection, fiveTuple, reservationToken, lifetimeDuration, username)
 	if err != nil {
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err508InsufficentCapacity,
@@ -369,18 +369,17 @@ func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun
 		return err
 	}
 
-	peerRelayAddr, err := relayServer.GetSrcForRelay(&stun.TransportAddr{IP: xorPeerAddress.XorAddress.IP, Port: xorPeerAddress.XorAddress.Port})
+	relaySocket, err := relayServer.GetRelayForSrc(srcAddr)
 	if err != nil {
 		return err
 	}
 
-	peerRelayPort, err := relayServer.GetRelayForSrc(srcAddr)
-	if err != nil {
-		return err
+	msgDst := &stun.TransportAddr{IP: xorPeerAddress.XorAddress.IP, Port: xorPeerAddress.XorAddress.Port}
+	l, err := relaySocket.WriteTo(dataAttr.Data, nil, msgDst.Addr())
+	if l != len(dataAttr.Data) {
+		return errors.Errorf("packet write smaller than packet %d != %d (expected) err: %v", l, len(dataAttr.Data), err)
 	}
-
-	peerRelay := stun.XorPeerAddress{stun.XorAddress{IP: peerRelayAddr.IP, Port: peerRelayPort}}
-	return stun.BuildAndSend(s.connection, peerRelayAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &peerRelay, &dataAttr)
+	return err
 }
 
 func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
@@ -415,7 +414,12 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 		return errorSend(errors.Errorf("ChannelBind missing XORPeerAddress attribute"), &stun.Err400BadRequest)
 	}
 
-	if err := relayServer.AddChannelBind(peerAddr.XorAddress.Port, channel.ChannelNumber, srcAddr); err != nil {
+	err = relayServer.AddChannelBind(&stun.TransportAddr{IP: peerAddr.XorAddress.IP, Port: peerAddr.XorAddress.Port}, channel.ChannelNumber, &relayServer.FiveTuple{
+		SrcAddr:  srcAddr,
+		DstAddr:  dstAddr,
+		Protocol: relayServer.UDP,
+	})
+	if err != nil {
 		return errorSend(err, &stun.Err400BadRequest)
 	}
 
@@ -423,12 +427,16 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 }
 
 func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, c *stun.ChannelData) error {
-	clientAddr, ok := relayServer.GetChannelBind(srcAddr.Port, c.ChannelNumber)
-	if !ok {
-		return errors.Errorf("No channel bind found for %x", c.ChannelNumber)
+	channel := relayServer.GetChannelById(c.ChannelNumber, &relayServer.FiveTuple{
+		SrcAddr:  srcAddr,
+		DstAddr:  dstAddr,
+		Protocol: relayServer.UDP,
+	})
+	if channel == nil {
+		return errors.Errorf("No channel bind found for %x \n", c.ChannelNumber)
 	}
 
-	l, err := s.connection.WriteTo(c.Data, nil, clientAddr.Addr())
+	l, err := s.connection.WriteTo(c.Data, nil, channel.Peer.Addr())
 	if err != nil {
 		return errors.Wrap(err, "failed writing to socket")
 	}
