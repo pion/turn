@@ -1,6 +1,7 @@
 package relayServer
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"sync"
@@ -130,6 +131,10 @@ func GetChannelById(id uint16, fiveTuple *FiveTuple) *ChannelBind {
 	s := getServer(fiveTuple)
 	serversLock.RUnlock()
 
+	if s == nil {
+		return nil
+	}
+
 	s.channelBindingsLock.RLock()
 	defer s.channelBindingsLock.RUnlock()
 
@@ -141,8 +146,9 @@ func GetChannelByPeer(peer *stun.TransportAddr, fiveTuple *FiveTuple) *ChannelBi
 	s := getServer(fiveTuple)
 	serversLock.RUnlock()
 
-	s.channelBindingsLock.RLock()
-	defer s.channelBindingsLock.RUnlock()
+	if s == nil {
+		return nil
+	}
 
 	s.channelBindingsLock.RLock()
 	defer s.channelBindingsLock.RUnlock()
@@ -225,19 +231,22 @@ const RtpMTU = 1500
 func relayHandler(s *server) {
 	buffer := make([]byte, RtpMTU)
 
-	dataAttr := stun.Data{}
-	xorPeerAddressAttr := stun.XorPeerAddress{}
-
 	for {
-		n, _, srcAddr, err := s.relaySocket.ReadFrom(buffer)
+		n, _, _ /*srcAddr*/, err := s.relaySocket.ReadFrom(buffer)
 		if err != nil {
 			fmt.Println("Failing to relay")
 		}
 
-		xorPeerAddressAttr.XorAddress.IP = srcAddr.(*net.UDPAddr).IP
-		xorPeerAddressAttr.XorAddress.Port = srcAddr.(*net.UDPAddr).Port
-		dataAttr.Data = buffer[:n]
+		channelData := make([]byte, 4)
+		binary.BigEndian.PutUint16(channelData[0:], uint16(0x4000))
+		binary.BigEndian.PutUint16(channelData[2:], uint16(n))
+		channelData = append(channelData, buffer[:n]...)
 
-		_ = stun.BuildAndSend(s.turnSocket, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &xorPeerAddressAttr, &dataAttr)
+		s.turnSocket.WriteTo(channelData, nil, s.FiveTuple.SrcAddr.Addr())
+
+		// dataAttr := stun.Data{Data: buffer[:n]}
+		// xorPeerAddressAttr := stun.XorPeerAddress{stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
+
+		// _ = stun.BuildAndSend(s.turnSocket, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &xorPeerAddressAttr, &dataAttr)
 	}
 }
