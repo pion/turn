@@ -207,8 +207,6 @@ type server struct {
 var serversLock sync.RWMutex
 var servers []*server
 
-const RtpMTU = 1500
-
 //  https://tools.ietf.org/html/rfc5766#section-10.3
 //  When the server receives a UDP datagram at a currently allocated
 //  relayed transport address, the server looks up the allocation
@@ -228,25 +226,46 @@ const RtpMTU = 1500
 //  datagram, and the XOR-PEER-ADDRESS attribute is set to the source
 //  transport address of the received UDP datagram.  The Data indication
 //  is then sent on the 5-tuple associated with the allocation.
+func getChannelIdFromPeer(peer *stun.TransportAddr) (uint16, bool) {
+	serversLock.RLock()
+	defer serversLock.RUnlock()
+
+	for _, s := range servers {
+		s.channelBindingsLock.RLock()
+		defer s.channelBindingsLock.RUnlock()
+		for id, cb := range s.channelBindings {
+			if cb.Peer.Equal(peer) {
+				return id, true
+			}
+		}
+
+	}
+	return 0, false
+}
+
+const RtpMTU = 1500
+
 func relayHandler(s *server) {
 	buffer := make([]byte, RtpMTU)
 
 	for {
-		n, _, _ /*srcAddr*/, err := s.relaySocket.ReadFrom(buffer)
+		n, cm, srcAddr, err := s.relaySocket.ReadFrom(buffer)
 		if err != nil {
 			fmt.Println("Failing to relay")
 		}
 
-		channelData := make([]byte, 4)
-		binary.BigEndian.PutUint16(channelData[0:], uint16(0x4000))
-		binary.BigEndian.PutUint16(channelData[2:], uint16(n))
-		channelData = append(channelData, buffer[:n]...)
+		channelNumber, ok := getChannelIdFromPeer(&stun.TransportAddr{IP: cm.Dst, Port: s.listeningPort})
+		if ok {
+			channelData := make([]byte, 4)
+			binary.BigEndian.PutUint16(channelData[0:], uint16(channelNumber))
+			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
+			channelData = append(channelData, buffer[:n]...)
 
-		s.turnSocket.WriteTo(channelData, nil, s.FiveTuple.SrcAddr.Addr())
-
-		// dataAttr := stun.Data{Data: buffer[:n]}
-		// xorPeerAddressAttr := stun.XorPeerAddress{stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
-
-		// _ = stun.BuildAndSend(s.turnSocket, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &xorPeerAddressAttr, &dataAttr)
+			s.turnSocket.WriteTo(channelData, nil, s.FiveTuple.SrcAddr.Addr())
+		} else {
+			dataAttr := stun.Data{Data: buffer[:n]}
+			xorPeerAddressAttr := stun.XorPeerAddress{stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
+			_ = stun.BuildAndSend(s.turnSocket, s.FiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, buildTransactionId(), &xorPeerAddressAttr, &dataAttr)
+		}
 	}
 }
