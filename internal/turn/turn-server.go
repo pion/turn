@@ -447,21 +447,3 @@ func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.Tr
 
 	return nil
 }
-
-func addTurnHandlers(s *Server) {
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodAllocate}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-		return s.handleAllocateRequest(srcAddr, dstAddr, m)
-	}
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodRefresh}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-		return s.handleRefreshRequest(srcAddr, dstAddr, m)
-	}
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodCreatePermission}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-		return s.handleCreatePermissionRequest(srcAddr, dstAddr, m)
-	}
-	s.handlers[HandlerKey{stun.ClassIndication, stun.MethodSend}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-		return s.handleSendIndication(srcAddr, dstAddr, m)
-	}
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodChannelBind}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-		return s.handleChannelBindRequest(srcAddr, dstAddr, m)
-	}
-}

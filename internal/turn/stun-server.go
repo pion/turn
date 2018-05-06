@@ -17,39 +17,21 @@ const (
 	DefaultTLSPort = 5349
 )
 
-type StunHandler func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error
 type AuthHandler func(username string, srcAddr *stun.TransportAddr) (password string, ok bool)
-
-type HandlerKey struct {
-	Class  stun.MessageClass
-	Method stun.Method
-}
-
 type Server struct {
 	connection  *ipv4.PacketConn
 	packet      []byte
-	handlers    map[HandlerKey]StunHandler
 	realm       string
 	authHandler AuthHandler
 }
 
 func NewServer(realm string, a AuthHandler) *Server {
-	const (
-		maxStunMessageSize = 1500
-	)
-
-	s := &Server{}
-	s.packet = make([]byte, maxStunMessageSize)
-	s.handlers = make(map[HandlerKey]StunHandler)
-	s.realm = realm
-	s.authHandler = a
-
-	s.handlers[HandlerKey{stun.ClassRequest, stun.MethodBinding}] = func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-		return s.handleBindingRequest(srcAddr, dstAddr, m)
+	const maxStunMessageSize = 1500
+	return &Server{
+		packet:      make([]byte, maxStunMessageSize),
+		realm:       realm,
+		authHandler: a,
 	}
-	addTurnHandlers(s)
-
-	return s
 }
 
 func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
@@ -64,44 +46,51 @@ func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun
 	)
 }
 
-func (s *Server) handleUDPPacket(dstPort int) error {
-	size, cm, addr, err := s.connection.ReadFrom(s.packet)
-	if err != nil {
-		return errors.Wrap(err, "failed to read packet from udp socket")
-	}
-
-	dstAddr := &stun.TransportAddr{IP: cm.Dst, Port: dstPort}
-	srcAddr, err := stun.NewTransportAddr(addr)
-	if err != nil {
-		return errors.Wrap(err, "failed reading udp addr")
-	}
+func (s *Server) handleUDPPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, packet []byte, size int) error {
 	packetType, err := stun.GetPacketType(s.packet[:size])
 	if err != nil {
 		return err
-	}
-
-	if packetType == stun.PacketTypeSTUN {
-		m, err := stun.NewMessage(s.packet[:size])
-		if err != nil {
-			return errors.Wrap(err, "Failed to create stun message from packet")
-		}
-
-		if v, ok := s.handlers[HandlerKey{m.Class, m.Method}]; ok {
-			if err := v(srcAddr, dstAddr, m); err != nil {
-				log.Printf("unable to handle %v-%v from %v: %v", m.Method, m.Class, addr, err)
-			}
-		}
 	} else if packetType == stun.PacketTypeChannelData {
 		c, err := stun.NewChannelData(s.packet[:size])
 		if err != nil {
 			return errors.Wrap(err, "Failed to create channel data from packet")
 		}
 		if err := s.handleChannelData(srcAddr, dstAddr, c); err != nil {
-			log.Printf("unable to handle ChannelData from %v: %v", addr, err)
+			return errors.Errorf("unable to handle ChannelData from %v: %v", srcAddr, err)
 		}
+		return nil
 	}
 
-	return nil
+	m, err := stun.NewMessage(s.packet[:size])
+	if err != nil {
+		return errors.Wrap(err, "Failed to create stun message from packet")
+	}
+
+	if m.Class == stun.ClassIndication && m.Method == stun.MethodSend {
+		if err := s.handleSendIndication(srcAddr, dstAddr, m); err != nil {
+			return errors.Errorf("unable to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+		}
+		return nil
+	} else if m.Class == stun.ClassRequest {
+		switch m.Method {
+		case stun.MethodAllocate:
+			err = s.handleAllocateRequest(srcAddr, dstAddr, m)
+		case stun.MethodRefresh:
+			err = s.handleRefreshRequest(srcAddr, dstAddr, m)
+		case stun.MethodCreatePermission:
+			err = s.handleCreatePermissionRequest(srcAddr, dstAddr, m)
+		case stun.MethodChannelBind:
+			err = s.handleChannelBindRequest(srcAddr, dstAddr, m)
+		case stun.MethodBinding:
+			err = s.handleBindingRequest(srcAddr, dstAddr, m)
+		}
+		if err != nil {
+			return errors.Errorf("unable to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+		}
+		return nil
+	}
+
+	return errors.Errorf("Unhandled packet from %v", srcAddr)
 }
 
 func (s *Server) Listen(address string, port int) error {
@@ -115,8 +104,18 @@ func (s *Server) Listen(address string, port int) error {
 	}
 
 	for {
-		if err := s.handleUDPPacket(port); err != nil {
-			fmt.Println(err)
+		size, cm, addr, err := s.connection.ReadFrom(s.packet)
+		if err != nil {
+			return errors.Wrap(err, "failed to read packet from udp socket")
+		}
+
+		dstAddr := &stun.TransportAddr{IP: cm.Dst, Port: port}
+		srcAddr, err := stun.NewTransportAddr(addr)
+		if err != nil {
+			return errors.Wrap(err, "failed reading udp addr")
+		}
+		if err := s.handleUDPPacket(srcAddr, dstAddr, s.packet, size); err != nil {
+			log.Println(err)
 		}
 	}
 }
