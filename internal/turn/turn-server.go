@@ -449,7 +449,7 @@ func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.Tr
 		return errors.Errorf("No channel bind found for %x \n", c.ChannelNumber)
 	}
 
-	l, err := s.connection.WriteTo(c.Data, nil, channel.Peer.Addr())
+	l, err := a.RelaySocket.WriteTo(c.Data, nil, channel.Peer.Addr())
 	if err != nil {
 		return errors.Wrap(err, "failed writing to socket")
 	}
