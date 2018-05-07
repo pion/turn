@@ -34,16 +34,30 @@ func NewServer(realm string, a AuthHandler) *Server {
 	}
 }
 
-func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
-		&stun.XorMappedAddress{
-			XorAddress: stun.XorAddress{
-				IP:   srcAddr.IP,
-				Port: srcAddr.Port,
-			},
-		},
-		&stun.Fingerprint{},
-	)
+func (s *Server) Listen(address string, port int) error {
+	c, err := net.ListenPacket("udp4", fmt.Sprintf("%s:%d", address, port))
+	if err != nil {
+		return err
+	}
+	s.connection = ipv4.NewPacketConn(c)
+	if err := s.connection.SetControlMessage(ipv4.FlagDst, true); err != nil {
+		return err
+	}
+
+	for {
+		size, cm, addr, err := s.connection.ReadFrom(s.packet)
+		if err != nil {
+			return errors.Wrap(err, "failed to read packet from udp socket")
+		}
+
+		srcAddr, err := stun.NewTransportAddr(addr)
+		if err != nil {
+			return errors.Wrap(err, "failed reading udp addr")
+		}
+		if err := s.handleUDPPacket(srcAddr, &stun.TransportAddr{IP: cm.Dst, Port: port}, s.packet, size); err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 func (s *Server) handleUDPPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, packet []byte, size int) error {
@@ -85,37 +99,22 @@ func (s *Server) handleUDPPacket(srcAddr *stun.TransportAddr, dstAddr *stun.Tran
 			err = s.handleBindingRequest(srcAddr, dstAddr, m)
 		}
 		if err != nil {
-			return errors.Errorf("unable to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+			return errors.Errorf("Failed to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
 		}
 		return nil
 	}
 
-	return errors.Errorf("Unhandled packet from %v", srcAddr)
+	return errors.Errorf("Unhandled STUN packet %v-%v from %v", m.Method, m.Class, srcAddr)
 }
 
-func (s *Server) Listen(address string, port int) error {
-	c, err := net.ListenPacket("udp4", fmt.Sprintf("%s:%d", address, port))
-	if err != nil {
-		return err
-	}
-	s.connection = ipv4.NewPacketConn(c)
-	if err := s.connection.SetControlMessage(ipv4.FlagDst, true); err != nil {
-		return err
-	}
-
-	for {
-		size, cm, addr, err := s.connection.ReadFrom(s.packet)
-		if err != nil {
-			return errors.Wrap(err, "failed to read packet from udp socket")
-		}
-
-		dstAddr := &stun.TransportAddr{IP: cm.Dst, Port: port}
-		srcAddr, err := stun.NewTransportAddr(addr)
-		if err != nil {
-			return errors.Wrap(err, "failed reading udp addr")
-		}
-		if err := s.handleUDPPacket(srcAddr, dstAddr, s.packet, size); err != nil {
-			log.Println(err)
-		}
-	}
+func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
+	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
+		&stun.XorMappedAddress{
+			XorAddress: stun.XorAddress{
+				IP:   srcAddr.IP,
+				Port: srcAddr.Port,
+			},
+		},
+		&stun.Fingerprint{},
+	)
 }

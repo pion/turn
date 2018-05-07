@@ -7,22 +7,13 @@ import (
 	"github.com/pions/pkg/stun"
 	"github.com/pkg/errors"
 
-	"github.com/pions/turn/internal/relay"
+	"github.com/pions/turn/internal/allocation"
 )
 
 const (
 	maximumLifetime = uint32(3600) // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 recommendation
 	defaultLifetime = uint32(600)  // https://tools.ietf.org/html/rfc5766#section-2.2 defines 600 recommendation
 )
-
-func buildTransactionId() []byte {
-	transactionID := []byte(randSeq(16))
-	transactionID[0] = 33
-	transactionID[1] = 18
-	transactionID[2] = 164
-	transactionID[3] = 66
-	return transactionID
-}
 
 type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
@@ -121,23 +112,23 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, username, err := authenticateRequest(curriedSend, m, stun.MethodAllocate, s.realm, s.authHandler, srcAddr)
+	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodAllocate, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
 	} else if messageIntegrity == nil {
 		return nil
 	}
 
-	fiveTuple := &relayServer.FiveTuple{
+	fiveTuple := &allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
-		Protocol: relayServer.UDP,
+		Protocol: allocation.UDP,
 	}
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
-	if relayServer.Fulfilled(fiveTuple) {
+	if allocation := allocation.GetAllocation(fiveTuple); allocation != nil {
 		err := errors.Errorf("Relay already allocated for 5-TUPLE")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err437AllocationMismatch,
@@ -233,8 +224,6 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    server is free to define this allocation quota any way it wishes,
 	//    but SHOULD define it based on the username used to authenticate
 	//    the request, and not on the client's transport address.
-	// Check redis for username allocs of transports
-	// if err return { stun.AttrErrorCode, 486 }
 
 	// 8. Also at any point, the server MAY choose to reject the request
 	//    with a 300 (Try Alternate) error if it wishes to redirect the
@@ -251,8 +240,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		}
 	}
 
-	reservationToken := randSeq(8)
-	relayPort, err := relayServer.Start(s.connection, fiveTuple, reservationToken, lifetimeDuration, username)
+	allocation, err := allocation.CreateAllocation(fiveTuple, s.connection)
 	if err != nil {
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err508InsufficentCapacity,
@@ -277,14 +265,14 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		&stun.XorRelayedAddress{
 			XorAddress: stun.XorAddress{
 				IP:   dstAddr.IP,
-				Port: relayPort,
+				Port: allocation.RelayAddr.Port,
 			},
 		},
 		&stun.Lifetime{
 			Duration: lifetimeDuration,
 		},
 		&stun.ReservationToken{
-			ReservationToken: reservationToken,
+			ReservationToken: randSeq(8),
 		},
 		&stun.XorMappedAddress{
 			XorAddress: stun.XorAddress{
@@ -305,6 +293,16 @@ func (s *Server) handleRefreshRequest(srcAddr *stun.TransportAddr, dstAddr *stun
 		return err
 	}
 
+	a := allocation.GetAllocation(&allocation.FiveTuple{
+		SrcAddr:  srcAddr,
+		DstAddr:  dstAddr,
+		Protocol: allocation.UDP,
+	})
+	if a == nil {
+		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
+	}
+	a.Refresh()
+
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodRefresh, m.TransactionID,
 		messageIntegrity,
 	)
@@ -315,28 +313,30 @@ func (s *Server) handleCreatePermissionRequest(srcAddr *stun.TransportAddr, dstA
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 
+	a := allocation.GetAllocation(&allocation.FiveTuple{
+		SrcAddr:  srcAddr,
+		DstAddr:  dstAddr,
+		Protocol: allocation.UDP,
+	})
+	if a == nil {
+		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
+	}
+
 	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
 	}
-
-	fiveTuple := &relayServer.FiveTuple{
-		SrcAddr:  srcAddr,
-		DstAddr:  dstAddr,
-		Protocol: relayServer.UDP,
-	}
-
 	addCount := 0
 	if xpas, ok := m.GetAllAttributes(stun.AttrXORPeerAddress); ok {
-		for _, a := range xpas {
+		for _, addr := range xpas {
 			peerAddress := stun.XorPeerAddress{}
-			if err := peerAddress.Unpack(m, a); err == nil {
-				if err := relayServer.AddPermission(fiveTuple, &relayServer.Permission{
-					IP:           peerAddress.XorAddress.IP,
-					TimeToExpiry: 300,
-				}); err == nil {
-					addCount++
-				}
+			if err := peerAddress.Unpack(m, addr); err == nil {
+				a.AddPermission(&allocation.Permission{
+					Addr: &stun.TransportAddr{
+						IP:   peerAddress.XorAddress.IP,
+						Port: peerAddress.XorAddress.Port,
+					}})
+				addCount++
 			}
 		}
 	}
@@ -350,9 +350,16 @@ func (s *Server) handleCreatePermissionRequest(srcAddr *stun.TransportAddr, dstA
 }
 
 func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-	dataAttr := stun.Data{}
-	xorPeerAddress := stun.XorPeerAddress{}
+	a := allocation.GetAllocation(&allocation.FiveTuple{
+		SrcAddr:  srcAddr,
+		DstAddr:  dstAddr,
+		Protocol: allocation.UDP,
+	})
+	if a == nil {
+		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
+	}
 
+	dataAttr := stun.Data{}
 	dataRawAttr, ok := m.GetOneAttribute(stun.AttrData)
 	if !ok {
 		return nil
@@ -361,6 +368,7 @@ func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun
 		return err
 	}
 
+	xorPeerAddress := stun.XorPeerAddress{}
 	xorPeerAddressRawAttr, ok := m.GetOneAttribute(stun.AttrXORPeerAddress)
 	if !ok {
 		return nil
@@ -369,13 +377,8 @@ func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun
 		return err
 	}
 
-	relaySocket, err := relayServer.GetRelayForSrc(srcAddr)
-	if err != nil {
-		return err
-	}
-
 	msgDst := &stun.TransportAddr{IP: xorPeerAddress.XorAddress.IP, Port: xorPeerAddress.XorAddress.Port}
-	l, err := relaySocket.WriteTo(dataAttr.Data, nil, msgDst.Addr())
+	l, err := a.RelaySocket.WriteTo(dataAttr.Data, nil, msgDst.Addr())
 	if l != len(dataAttr.Data) {
 		return errors.Errorf("packet write smaller than packet %d != %d (expected) err: %v", l, len(dataAttr.Data), err)
 	}
@@ -388,6 +391,15 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
 		return err
+	}
+
+	a := allocation.GetAllocation(&allocation.FiveTuple{
+		SrcAddr:  srcAddr,
+		DstAddr:  dstAddr,
+		Protocol: allocation.UDP,
+	})
+	if a == nil {
+		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
 
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
@@ -414,11 +426,7 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 		return errorSend(errors.Errorf("ChannelBind missing XORPeerAddress attribute"), &stun.Err400BadRequest)
 	}
 
-	err = relayServer.AddChannelBind(&stun.TransportAddr{IP: peerAddr.XorAddress.IP, Port: peerAddr.XorAddress.Port}, channel.ChannelNumber, &relayServer.FiveTuple{
-		SrcAddr:  srcAddr,
-		DstAddr:  dstAddr,
-		Protocol: relayServer.UDP,
-	})
+	err = a.AddChannelBind(&allocation.ChannelBind{Id: channel.ChannelNumber, Peer: &stun.TransportAddr{IP: peerAddr.XorAddress.IP, Port: peerAddr.XorAddress.Port}})
 	if err != nil {
 		return errorSend(err, &stun.Err400BadRequest)
 	}
@@ -427,11 +435,16 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 }
 
 func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, c *stun.ChannelData) error {
-	channel := relayServer.GetChannelById(c.ChannelNumber, &relayServer.FiveTuple{
+	a := allocation.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
-		Protocol: relayServer.UDP,
+		Protocol: allocation.UDP,
 	})
+	if a == nil {
+		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
+	}
+
+	channel := a.GetChannelById(c.ChannelNumber)
 	if channel == nil {
 		return errors.Errorf("No channel bind found for %x \n", c.ChannelNumber)
 	}
