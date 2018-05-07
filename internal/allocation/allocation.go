@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/pions/pkg/stun"
 	"github.com/pkg/errors"
@@ -30,6 +31,8 @@ type Allocation struct {
 
 	channelBindingsLock sync.RWMutex
 	channelBindings     []*ChannelBind
+
+	lifetimeTimer *time.Timer
 }
 
 func (a *Allocation) AddPermission(p *Permission) {
@@ -95,8 +98,16 @@ func (a *Allocation) GetChannelByAddr(addr *stun.TransportAddr) *ChannelBind {
 	return nil
 }
 
-func (a *Allocation) Refresh() {
-	fmt.Println("Refresh Allocation!")
+func (a *Allocation) Refresh(lifetime uint32) {
+	if lifetime == 0 {
+		if !a.lifetimeTimer.Stop() {
+			fmt.Printf("Failed to stop allocation timer for %v", a.fiveTuple)
+		}
+		return
+	}
+	if !a.lifetimeTimer.Reset(time.Duration(lifetime) * time.Second) {
+		fmt.Printf("Failed to reset allocation timer for %v", a.fiveTuple)
+	}
 }
 
 //  https://tools.ietf.org/html/rfc5766#section-10.3
@@ -125,7 +136,10 @@ func (a *Allocation) PacketHandler() {
 	for {
 		n, cm, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
 		if err != nil {
-			fmt.Println("Failing to relay")
+			if !deleteAllocation(a.fiveTuple) {
+				fmt.Println("Failed to remove allocation after relay listener had closed")
+			}
+			return
 		}
 
 		channel := a.GetChannelByAddr(&stun.TransportAddr{IP: cm.Dst, Port: a.RelayAddr.Port})

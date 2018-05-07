@@ -240,7 +240,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		}
 	}
 
-	allocation, err := allocation.CreateAllocation(fiveTuple, s.connection)
+	a, err := allocation.CreateAllocation(fiveTuple, s.connection, lifetimeDuration)
 	if err != nil {
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err508InsufficentCapacity,
@@ -265,7 +265,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		&stun.XorRelayedAddress{
 			XorAddress: stun.XorAddress{
 				IP:   dstAddr.IP,
-				Port: allocation.RelayAddr.Port,
+				Port: a.RelayAddr.Port,
 			},
 		},
 		&stun.Lifetime{
@@ -301,9 +301,20 @@ func (s *Server) handleRefreshRequest(srcAddr *stun.TransportAddr, dstAddr *stun
 	if a == nil {
 		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
-	a.Refresh()
+
+	lifetimeDuration := defaultLifetime
+	if lifetimeRawAttr, ok := m.GetOneAttribute(stun.AttrLifetime); ok {
+		lifetimeAttr := stun.Lifetime{}
+		if err := lifetimeAttr.Unpack(m, lifetimeRawAttr); err == nil {
+			lifetimeDuration = min(lifetimeAttr.Duration, maximumLifetime)
+		}
+	}
+	a.Refresh(lifetimeDuration)
 
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodRefresh, m.TransactionID,
+		&stun.Lifetime{
+			Duration: lifetimeDuration,
+		},
 		messageIntegrity,
 	)
 }

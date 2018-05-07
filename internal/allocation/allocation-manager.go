@@ -1,8 +1,10 @@
 package allocation
 
 import (
+	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/pions/pkg/stun"
 	"golang.org/x/net/ipv4"
@@ -22,7 +24,7 @@ func GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	return nil
 }
 
-func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn) (*Allocation, error) {
+func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetime uint32) (*Allocation, error) {
 	a := &Allocation{
 		fiveTuple:  fiveTuple,
 		TurnSocket: turnSocket,
@@ -44,10 +46,30 @@ func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn) (*Alloc
 		return nil, err
 	}
 
+	a.lifetimeTimer = time.AfterFunc(time.Duration(lifetime)*time.Second, func() {
+		if err := listener.Close(); err != nil {
+			fmt.Printf("Failed to close listener for %v", a.fiveTuple)
+		}
+	})
+
 	allocationsLock.Lock()
 	allocations = append(allocations, a)
 	allocationsLock.Unlock()
 
 	go a.PacketHandler()
 	return a, nil
+}
+
+func deleteAllocation(fiveTuple *FiveTuple) bool {
+	allocationsLock.Lock()
+	defer allocationsLock.Unlock()
+
+	for i := len(allocations) - 1; i >= 0; i-- {
+		if allocations[i].fiveTuple.Equal(fiveTuple) {
+			allocations = append(allocations[:i], allocations[i+1:]...)
+			return true
+		}
+	}
+
+	return false
 }
