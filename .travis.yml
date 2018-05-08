@@ -17,5 +17,5 @@ script:
   - go test -v -race ./...                   # `go test` with -race
   - go vet ./...
   - megacheck ./...
-  - gocyclo -over 19 ./..                    # cyclomatic complexity
+  - gocyclo -over 20 ./..                    # cyclomatic complexity
   - golint -set_exit_status $(go list ./...)

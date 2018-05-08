@@ -14,8 +14,9 @@ type myTurnServer struct {
 }
 
 var usersMap = make(map[string]string)
+
 func (m *myTurnServer) AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool) {
-	if password, ok := usersMap[username]; ok == true {
+	if password, ok := usersMap[username]; ok {
 		return password, true
 	}
 	return "", false
@@ -26,7 +27,7 @@ func main() {
 	if users == "" {
 		log.Panic("USERS is a required environment variable")
 	}
-	for _, kv := range regexp.MustCompile("(\\w+)=(\\w+)").FindAllStringSubmatch(users, -1) {
+	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(users, -1) {
 		usersMap[kv[1]] = kv[2]
 	}
 
@@ -45,8 +46,8 @@ func main() {
 	}
 
 	turn.Start(turn.StartArguments{
-		Server:&myTurnServer{},
-		Realm: realm,
-		UdpPort: udpPort,
+		Server:  &myTurnServer{},
+		Realm:   realm,
+		UDPPort: udpPort,
 	})
 }

@@ -12,11 +12,8 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-const (
-	maxPermissions  = 10
-	maxChannelBinds = 10
-)
-
+// Allocation is tied to a FiveTuple and relays traffic
+// use CreateAllocation and GetAllocation to operate
 type Allocation struct {
 	RelayAddr *stun.TransportAddr
 	Protocol  Protocol
@@ -35,6 +32,7 @@ type Allocation struct {
 	lifetimeTimer *time.Timer
 }
 
+// AddPermission adds a new permission to the allocation
 func (a *Allocation) AddPermission(p *Permission) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
@@ -50,6 +48,7 @@ func (a *Allocation) AddPermission(p *Permission) {
 	p.start()
 }
 
+// RemovePermission removes the TransportAddr from the allocation's permissions
 func (a *Allocation) RemovePermission(addr *stun.TransportAddr) bool {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
@@ -64,6 +63,7 @@ func (a *Allocation) RemovePermission(addr *stun.TransportAddr) bool {
 	return false
 }
 
+// GetPermission gets the Permission from the allocation
 func (a *Allocation) GetPermission(addr *stun.TransportAddr) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
@@ -75,17 +75,19 @@ func (a *Allocation) GetPermission(addr *stun.TransportAddr) *Permission {
 	return nil
 }
 
+// AddChannelBind adds a new ChannelBind to the allocation, it also updates the
+// permissions needed for this ChannelBind
 func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel id.
-	channelById := a.GetChannelById(c.Id)
+	channelByID := a.GetChannelByID(c.ID)
 	channelByPeer := a.GetChannelByAddr(c.Peer)
-	if channelById != channelByPeer {
+	if channelByID != channelByPeer {
 		return errors.Errorf("You cannot use the same channel number with different peer")
 	}
 
 	// Add or refresh this channel.
-	if channelById == nil {
+	if channelByID == nil {
 		a.channelBindingsLock.Lock()
 		defer a.channelBindingsLock.Unlock()
 
@@ -96,21 +98,22 @@ func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 		// Channel binds also refresh permissions.
 		a.AddPermission(&Permission{Addr: c.Peer})
 	} else {
-		channelById.refresh()
+		channelByID.refresh()
 
 		// Channel binds also refresh permissions.
-		a.AddPermission(&Permission{Addr: channelById.Peer})
+		a.AddPermission(&Permission{Addr: channelByID.Peer})
 	}
 
 	return nil
 }
 
+// RemoveChannelBind removes the ChannelBind from this allocation by id
 func (a *Allocation) RemoveChannelBind(id uint16) bool {
 	a.channelBindingsLock.Lock()
 	defer a.channelBindingsLock.Unlock()
 
 	for i := len(a.channelBindings) - 1; i >= 0; i-- {
-		if a.channelBindings[i].Id == id {
+		if a.channelBindings[i].ID == id {
 			a.channelBindings = append(a.channelBindings[:i], a.channelBindings[i+1:]...)
 			return true
 		}
@@ -119,17 +122,19 @@ func (a *Allocation) RemoveChannelBind(id uint16) bool {
 	return false
 }
 
-func (a *Allocation) GetChannelById(id uint16) *ChannelBind {
+// GetChannelByID gets the ChannelBind from this allocation by id
+func (a *Allocation) GetChannelByID(id uint16) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
 	for _, cb := range a.channelBindings {
-		if cb.Id == id {
+		if cb.ID == id {
 			return cb
 		}
 	}
 	return nil
 }
 
+// GetChannelByAddr gets the ChannelBind from this allocation by stun.TransportAddr
 func (a *Allocation) GetChannelByAddr(addr *stun.TransportAddr) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
@@ -141,15 +146,16 @@ func (a *Allocation) GetChannelByAddr(addr *stun.TransportAddr) *ChannelBind {
 	return nil
 }
 
+// Refresh updates the allocations lifetime
 func (a *Allocation) Refresh(lifetime uint32) {
 	if lifetime == 0 {
 		if !a.lifetimeTimer.Stop() {
-			fmt.Printf("Failed to stop allocation timer for %v", a.fiveTuple)
+			fmt.Printf("Failed to stop allocation timer for %v \n", a.fiveTuple)
 		}
 		return
 	}
 	if !a.lifetimeTimer.Reset(time.Duration(lifetime) * time.Second) {
-		fmt.Printf("Failed to reset allocation timer for %v", a.fiveTuple)
+		fmt.Printf("Failed to reset allocation timer for %v \n", a.fiveTuple)
 	}
 }
 
@@ -172,7 +178,7 @@ func (a *Allocation) Refresh(lifetime uint32) {
 //  datagram, and the XOR-PEER-ADDRESS attribute is set to the source
 //  transport address of the received UDP datagram.  The Data indication
 //  is then sent on the 5-tuple associated with the allocation.
-func (a *Allocation) PacketHandler() {
+func (a *Allocation) packetHandler() {
 	const RtpMTU = 1500
 	buffer := make([]byte, RtpMTU)
 
@@ -187,17 +193,17 @@ func (a *Allocation) PacketHandler() {
 
 		if channel := a.GetChannelByAddr(&stun.TransportAddr{IP: cm.Dst, Port: a.RelayAddr.Port}); channel != nil {
 			channelData := make([]byte, 4)
-			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.Id))
+			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
 			a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr())
 		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
 			dataAttr := stun.Data{Data: buffer[:n]}
-			xorPeerAddressAttr := stun.XorPeerAddress{stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
+			xorPeerAddressAttr := stun.XorPeerAddress{XorAddress: stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
 			_ = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionId(), &xorPeerAddressAttr, &dataAttr)
 		} else {
-			fmt.Printf("Packet unhandled in relay src %v", srcAddr)
+			fmt.Printf("Packet unhandled in relay src %v \n", srcAddr)
 		}
 	}
 

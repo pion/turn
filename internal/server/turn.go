@@ -1,4 +1,4 @@
-package turnServer
+package server
 
 import (
 	"crypto/md5"
@@ -15,9 +15,9 @@ const (
 	defaultLifetime = uint32(600)  // https://tools.ietf.org/html/rfc5766#section-2.2 defines 600 recommendation
 )
 
-type CurriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
+type curriedSend func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error
 
-func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method, realm string, authHandler AuthHandler, srcAddr *stun.TransportAddr) (*stun.MessageIntegrity, string, error) {
+func authenticateRequest(curriedSend curriedSend, m *stun.Message, callingMethod stun.Method, realm string, authHandler AuthHandler, srcAddr *stun.TransportAddr) (*stun.MessageIntegrity, string, error) {
 	handleErr := func(err error) (*stun.MessageIntegrity, string, error) {
 		if sendErr := curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err400BadRequest,
@@ -33,8 +33,8 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 	if !messageIntegrityAttrFound {
 		return nil, "", curriedSend(stun.ClassErrorResponse, callingMethod, m.TransactionID,
 			&stun.Err401Unauthorized,
-			&stun.Nonce{buildNonce()},
-			&stun.Realm{realm},
+			&stun.Nonce{Nonce: buildNonce()},
+			&stun.Realm{Realm: realm},
 		)
 	} else if err := messageIntegrityAttr.Unpack(m, messageIntegrityRawAttr); err != nil {
 		return handleErr(err)
@@ -86,12 +86,12 @@ func authenticateRequest(curriedSend CurriedSend, m *stun.Message, callingMethod
 	}, usernameAttr.Username, nil
 }
 
-func assertDontFragment(curriedSend CurriedSend, m *stun.Message, callingMethod stun.Method, messageIntegrity *stun.MessageIntegrity) error {
+func assertDontFragment(curriedSend curriedSend, m *stun.Message, callingMethod stun.Method, messageIntegrity *stun.MessageIntegrity) error {
 	if _, ok := m.GetOneAttribute(stun.AttrDontFragment); ok {
 		err := errors.Errorf("no support for DONT-FRAGMENT")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err420UnknownAttributes,
-			&stun.UnknownAttributes{[]stun.AttrType{stun.AttrDontFragment}},
+			&stun.UnknownAttributes{Attributes: []stun.AttrType{stun.AttrDontFragment}},
 			messageIntegrity,
 		); sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
@@ -441,7 +441,7 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 		return errorSend(errors.Errorf("ChannelBind missing XORPeerAddress attribute"), &stun.Err400BadRequest)
 	}
 
-	err = a.AddChannelBind(&allocation.ChannelBind{Id: channel.ChannelNumber, Peer: &stun.TransportAddr{IP: peerAddr.XorAddress.IP, Port: peerAddr.XorAddress.Port}})
+	err = a.AddChannelBind(&allocation.ChannelBind{ID: channel.ChannelNumber, Peer: &stun.TransportAddr{IP: peerAddr.XorAddress.IP, Port: peerAddr.XorAddress.Port}})
 	if err != nil {
 		return errorSend(err, &stun.Err400BadRequest)
 	}
@@ -459,7 +459,7 @@ func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.Tr
 		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
 
-	channel := a.GetChannelById(c.ChannelNumber)
+	channel := a.GetChannelByID(c.ChannelNumber)
 	if channel == nil {
 		return errors.Errorf("No channel bind found for %x \n", c.ChannelNumber)
 	}

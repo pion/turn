@@ -13,6 +13,7 @@ import (
 var allocationsLock sync.RWMutex
 var allocations []*Allocation
 
+// GetAllocation fetches the allocation matching the passed FiveTuple
 func GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	allocationsLock.Lock()
 	defer allocationsLock.Unlock()
@@ -24,6 +25,7 @@ func GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	return nil
 }
 
+// CreateAllocation creates a new allocation and starts relaying
 func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetime uint32) (*Allocation, error) {
 	a := &Allocation{
 		fiveTuple:  fiveTuple,
@@ -48,7 +50,7 @@ func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetim
 
 	a.lifetimeTimer = time.AfterFunc(time.Duration(lifetime)*time.Second, func() {
 		if err := listener.Close(); err != nil {
-			fmt.Printf("Failed to close listener for %v", a.fiveTuple)
+			fmt.Printf("Failed to close listener for %v \n", a.fiveTuple)
 		}
 	})
 
@@ -56,7 +58,7 @@ func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetim
 	allocations = append(allocations, a)
 	allocationsLock.Unlock()
 
-	go a.PacketHandler()
+	go a.packetHandler()
 	return a, nil
 }
 
