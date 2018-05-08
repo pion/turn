@@ -64,6 +64,17 @@ func (a *Allocation) RemovePermission(addr *stun.TransportAddr) bool {
 	return false
 }
 
+func (a *Allocation) GetPermission(addr *stun.TransportAddr) *Permission {
+	a.permissionsLock.RLock()
+	defer a.permissionsLock.RUnlock()
+	for _, p := range a.permissions {
+		if p.Addr.Equal(addr) {
+			return p
+		}
+	}
+	return nil
+}
+
 func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel id.
@@ -174,18 +185,19 @@ func (a *Allocation) PacketHandler() {
 			return
 		}
 
-		channel := a.GetChannelByAddr(&stun.TransportAddr{IP: cm.Dst, Port: a.RelayAddr.Port})
-		if channel != nil {
+		if channel := a.GetChannelByAddr(&stun.TransportAddr{IP: cm.Dst, Port: a.RelayAddr.Port}); channel != nil {
 			channelData := make([]byte, 4)
 			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.Id))
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
 			a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr())
-		} else {
+		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
 			dataAttr := stun.Data{Data: buffer[:n]}
 			xorPeerAddressAttr := stun.XorPeerAddress{stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
 			_ = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionId(), &xorPeerAddressAttr, &dataAttr)
+		} else {
+			fmt.Printf("Packet unhandled in relay src %v", srcAddr)
 		}
 	}
 

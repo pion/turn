@@ -389,6 +389,10 @@ func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun
 	}
 
 	msgDst := &stun.TransportAddr{IP: xorPeerAddress.XorAddress.IP, Port: xorPeerAddress.XorAddress.Port}
+	if perm := a.GetPermission(msgDst); perm == nil {
+		return errors.Errorf("Unable to handle send-indication, no permission added: %v", msgDst)
+	}
+
 	l, err := a.RelaySocket.WriteTo(dataAttr.Data, nil, msgDst.Addr())
 	if l != len(dataAttr.Data) {
 		return errors.Errorf("packet write smaller than packet %d != %d (expected) err: %v", l, len(dataAttr.Data), err)
