@@ -3,22 +3,50 @@ package main
 import (
 	"log"
 	"os"
+	"regexp"
+	"strconv"
 
 	"github.com/pions/pkg/stun"
 	"github.com/pions/turn"
 )
 
-type MyTurnServer struct {
+type myTurnServer struct {
 }
 
-func (m *MyTurnServer) AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool) {
-	return "password", true
+var usersMap = make(map[string]string)
+func (m *myTurnServer) AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool) {
+	if password, ok := usersMap[username]; ok == true {
+		return password, true
+	}
+	return "", false
 }
 
 func main() {
-	if os.Getenv("REALM") == "" {
+	users := os.Getenv("USERS")
+	if users == "" {
+		log.Panic("USERS is a required environment variable")
+	}
+	for _, kv := range regexp.MustCompile("(\\w+)=(\\w+)").FindAllStringSubmatch(users, -1) {
+		usersMap[kv[1]] = kv[2]
+	}
+
+	realm := os.Getenv("REALM")
+	if realm == "" {
 		log.Panic("REALM is a required environment variable")
 	}
 
-	turn.Start(&MyTurnServer{}, os.Getenv("REALM"))
+	udpPortStr := os.Getenv("UDP_PORT")
+	if udpPortStr == "" {
+		log.Panic("UDP_PORT is a required environment variable")
+	}
+	udpPort, err := strconv.Atoi(udpPortStr)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	turn.Start(turn.StartArguments{
+		Server:&myTurnServer{},
+		Realm: realm,
+		UdpPort: udpPort,
+	})
 }

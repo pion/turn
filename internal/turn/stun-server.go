@@ -11,12 +11,6 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-// IANA assigned ports for "stun" protocol.
-const (
-	DefaultPort    = 3478
-	DefaultTLSPort = 5349
-)
-
 type AuthHandler func(username string, srcAddr *stun.TransportAddr) (password string, ok bool)
 type Server struct {
 	connection  *ipv4.PacketConn

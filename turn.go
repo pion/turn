@@ -11,11 +11,17 @@ type Server interface {
 	AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool)
 }
 
-func Start(s Server, realm string) {
+type StartArguments struct {
+	Server Server
+	Realm string
+	UdpPort int
+}
+
+func Start(args StartArguments) {
 	errors := make(chan error)
 
 	go func() {
-		errors <- turnServer.NewServer(realm, s.AuthenticateRequest).Listen("", turnServer.DefaultPort)
+		errors <- turnServer.NewServer(args.Realm, args.Server.AuthenticateRequest).Listen("", args.UdpPort)
 	}()
 
 	select {
