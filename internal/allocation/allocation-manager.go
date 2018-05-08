@@ -66,6 +66,19 @@ func deleteAllocation(fiveTuple *FiveTuple) bool {
 
 	for i := len(allocations) - 1; i >= 0; i-- {
 		if allocations[i].fiveTuple.Equal(fiveTuple) {
+
+			allocations[i].permissionsLock.RLock()
+			for _, p := range allocations[i].permissions {
+				p.lifetimeTimer.Stop()
+			}
+			allocations[i].permissionsLock.RUnlock()
+
+			allocations[i].channelBindingsLock.RLock()
+			for _, c := range allocations[i].channelBindings {
+				c.lifetimeTimer.Stop()
+			}
+			allocations[i].channelBindingsLock.RUnlock()
+
 			allocations = append(allocations[:i], allocations[i+1:]...)
 			return true
 		}

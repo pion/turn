@@ -45,7 +45,23 @@ func (a *Allocation) AddPermission(p *Permission) {
 		}
 	}
 
+	p.allocation = a
 	a.permissions = append(a.permissions, p)
+	p.start()
+}
+
+func (a *Allocation) RemovePermission(addr *stun.TransportAddr) bool {
+	a.permissionsLock.Lock()
+	defer a.permissionsLock.Unlock()
+
+	for i := len(a.permissions) - 1; i >= 0; i-- {
+		if a.permissions[i].Addr.Equal(addr) {
+			a.permissions = append(a.permissions[:i], a.permissions[i+1:]...)
+			return true
+		}
+	}
+
+	return false
 }
 
 func (a *Allocation) AddChannelBind(c *ChannelBind) error {
@@ -62,7 +78,9 @@ func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 		a.channelBindingsLock.Lock()
 		defer a.channelBindingsLock.Unlock()
 
+		c.allocation = a
 		a.channelBindings = append(a.channelBindings, c)
+		c.start()
 
 		// Channel binds also refresh permissions.
 		a.AddPermission(&Permission{Addr: c.Peer})
@@ -74,6 +92,20 @@ func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 	}
 
 	return nil
+}
+
+func (a *Allocation) RemoveChannelBind(id uint16) bool {
+	a.channelBindingsLock.Lock()
+	defer a.channelBindingsLock.Unlock()
+
+	for i := len(a.channelBindings) - 1; i >= 0; i-- {
+		if a.channelBindings[i].Id == id {
+			a.channelBindings = append(a.channelBindings[:i], a.channelBindings[i+1:]...)
+			return true
+		}
+	}
+
+	return false
 }
 
 func (a *Allocation) GetChannelById(id uint16) *ChannelBind {
