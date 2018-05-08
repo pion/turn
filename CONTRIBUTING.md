@@ -1,7 +1,7 @@
 # Contributing
 
 ## Issues
-Use the Pion Slack for discussions and support, the issue tracker is only meant for actionable issues.
+Sign up for the [Golang Slack](https://invite.slack.golangbridge.org/) and join the #pion channel for discussions and support, the issue tracker is only meant for actionable issues.
 
 Feel free to create feature requests, submit bugs and anything else to the tracker. Even if it gets closed, it may
 help someone in the future

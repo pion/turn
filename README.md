@@ -64,6 +64,9 @@ docker run -v $(pwd):/usr/local/src/github.com/pions/turn -v $(pwd)/../pkg:/usr/
 
 Currently only Linux is supported until Docker supports full (host <-> container) networking on Windows/OSX
 
+## Questions/Support
+Sign up for the [Golang Slack](https://invite.slack.golangbridge.org/) and join the #pion channel for discussions and support
+
 ## Contributing
 See [CONTRIBUTING.md](CONTRIBUTING.md)
 
