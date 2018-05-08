@@ -28,12 +28,12 @@ $ export UDP_PORT=3478
 $ ./simple-turn-linux-amd64
 ````
 
-To explain what everything does
-* Step 1: Download simple-turn
-* Step 2: Make it executable
-* Step 3: Set your users, this is in the form of 'USERNAME=PASSWORD USERNAME=PASSWORD' you can have as many as you want
-* Step 4: Set your realm, this should be the public name of your server
-* Step 5: Set the port you listen on, 3478 is the default
+To explain what every step does
+* Download simple-turn
+* Make it executable
+* Set your users, this is in the form of 'USERNAME=PASSWORD USERNAME=PASSWORD' you can have as many as you want
+* Set your realm, this should be the public name of your server
+* Set the port you listen on, 3478 is the default
 
 That is it! Then to use your new TURN server your WebRTC config would look like
 ```
