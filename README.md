@@ -4,15 +4,6 @@ A TURN server written in Go that is designed to be scalable, extendable and embe
 Instead of complicated config files or dependencies you get a single static binary that can be
 configured via environment variables (or any format of your choice).
 
-### Extendable
-You can import it and add any authentication you want.  Instead of forcing you to use arbitrary
-schemas and painful integrations it fits right into your existing system.
-
-### Embeddable
-Most architectures are designed with a TURN server being a dedicated service, this means you have more points of failure and more
-cognitive load designing your systems. With Pion TURN you can just launch it from your existing Go code base, allowing you to ship
-quicker and having less painful deploys.
-
 ## Getting Started
 ### Quick Start
 If you want just a simple TURN server with a few static usernames `simple-turn` will perfectly suit your purposes. If you have
