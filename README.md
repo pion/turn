@@ -1,8 +1,13 @@
-# Pion TURN ![Build Status](https://travis-ci.org/pions/turn.svg?branch=master)
+# Pion TURN
+[![Build Status](https://travis-ci.org/pions/turn.svg?branch=master)](https://travis-ci.org/pions/turn)
+[![GoDoc](https://godoc.org/github.com/pions/turn?status.svg)](https://godoc.org/github.com/pions/turn)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pions/turn)](https://goreportcard.com/report/github.com/pions/turn)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
 A TURN server written in Go that is designed to be scalable, extendable and embeddable out of the box.
-Instead of complicated config files or dependencies you get a single static binary that can be
-configured via environment variables (or any format of your choice).
+For simple use cases it only requires downloading 1 static binary, and setting 3 options.
+
+See [DESIGN.md](DESIGN.md) for the the features it offers, and future goals.
 
 ## Getting Started
 ### Quick Start
@@ -20,11 +25,11 @@ $ ./simple-turn-linux-amd64
 ````
 
 To explain what every step does
-* Download simple-turn
+* Download simple-turn for Linux x64, see [release](https://github.com/pions/turn/releases) for other platforms
 * Make it executable
-* Set your users, this is in the form of 'USERNAME=PASSWORD USERNAME=PASSWORD' you can have as many as you want
-* Set your realm, this should be the public name of your server
-* Set the port you listen on, 3478 is the default
+* Configure auth, in the form of `USERNAME=PASSWORD USERNAME=PASSWORD` with no limits
+* Set your realm, this is the public URL or name of your server
+* Set the port you listen on, 3478 is the default port for TURN
 
 That is it! Then to use your new TURN server your WebRTC config would look like
 ```
