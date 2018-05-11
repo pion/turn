@@ -135,8 +135,12 @@ func randSeq(n int) string {
 func buildNonce() string {
 	h := md5.New()
 	now := time.Now().Unix()
-	_, _ = io.WriteString(h, strconv.FormatInt(now, 10))
-	_, _ = io.WriteString(h, strconv.FormatInt(rand.Int63(), 10))
+	if _, err := io.WriteString(h, strconv.FormatInt(now, 10)); err != nil {
+		fmt.Printf("Failed generating nonce %v \n", err)
+	}
+	if _, err := io.WriteString(h, strconv.FormatInt(rand.Int63(), 10)); err != nil {
+		fmt.Printf("Failed generating nonce %v \n", err)
+	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

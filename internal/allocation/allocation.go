@@ -197,11 +197,15 @@ func (a *Allocation) packetHandler() {
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
-			a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr())
+			if _, err := a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr()); err != nil {
+				fmt.Printf("Failed to send ChannelData from allocation %v %v \n", srcAddr, err)
+			}
 		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
 			dataAttr := stun.Data{Data: buffer[:n]}
 			xorPeerAddressAttr := stun.XorPeerAddress{XorAddress: stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
-			_ = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionId(), &xorPeerAddressAttr, &dataAttr)
+			if err = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionId(), &xorPeerAddressAttr, &dataAttr); err != nil {
+				fmt.Printf("Failed to send DataIndication from allocation %v %v \n", srcAddr, err)
+			}
 		} else {
 			fmt.Printf("Packet unhandled in relay src %v \n", srcAddr)
 		}
