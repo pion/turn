@@ -60,6 +60,15 @@ docker run -v $(pwd):/usr/local/src/github.com/pions/turn -v $(pwd)/../pkg:/usr/
 
 Currently only Linux is supported until Docker supports full (host <-> container) networking on Windows/OSX
 
+## RFCs
+### Implemented
+* [RFC 5389: Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5389)
+* [RFC 5788: Traversal Using Relays around NAT (TURN)](https://tools.ietf.org/html/rfc5766)
+
+### Planned
+* [RFC 6062: Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations](https://tools.ietf.org/html/rfc6062)
+* [RFC 6156: Traversal Using Relays around NAT (TURN) Extension for IPv6](https://tools.ietf.org/html/rfc6156)
+
 ## Questions/Support
 Sign up for the [Golang Slack](https://invite.slack.golangbridge.org/) and join the #pion channel for discussions and support
 
