@@ -11,6 +11,7 @@ before_script:
   - go get github.com/golang/lint/golint
   - go get honnef.co/go/tools/cmd/megacheck
   - go get github.com/fzipp/gocyclo
+  - go get -u github.com/kisielk/errcheck
 
 script:
   - test -z "$(gofmt -s -l ./..)"            # assert valid gofmt
@@ -19,3 +20,4 @@ script:
   - megacheck ./...
   - gocyclo -over 20 ./..                    # cyclomatic complexity
   - golint -set_exit_status $(go list ./...)
+  - errcheck ./...
