@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pions/pkg/stun"
+	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
 )
 
@@ -27,6 +28,20 @@ func GetAllocation(fiveTuple *FiveTuple) *Allocation {
 
 // CreateAllocation creates a new allocation and starts relaying
 func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetime uint32) (*Allocation, error) {
+	if fiveTuple == nil {
+		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
+	} else if fiveTuple.SrcAddr == nil {
+		return nil, errors.Errorf("Allocations must not be created with nil FiveTuple.SrcAddr")
+	} else if fiveTuple.DstAddr == nil {
+		return nil, errors.Errorf("Allocations must not be created with nil FiveTuple.DstAddr")
+	} else if a := GetAllocation(fiveTuple); a != nil {
+		return nil, errors.Errorf("Allocation attempt created with duplicate FiveTuple %v", fiveTuple)
+	} else if turnSocket == nil {
+		return nil, errors.Errorf("Allocations must not be created with nil turnSocket")
+	} else if lifetime == 0 {
+		return nil, errors.Errorf("Allocations must not be created with a lifetime of 0")
+	}
+
 	a := &Allocation{
 		fiveTuple:  fiveTuple,
 		TurnSocket: turnSocket,
