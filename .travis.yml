@@ -12,15 +12,13 @@ before_script:
   - go get honnef.co/go/tools/cmd/megacheck
   - go get github.com/fzipp/gocyclo
   - go get -u github.com/kisielk/errcheck
+  - go get github.com/mattn/goveralls
 
 script:
   - test -z "$(gofmt -s -l ./..)"
-  - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+  - goveralls -v -race -covermode=atomic -service=travis-ci
   - go vet ./...
   - megacheck ./...
   - gocyclo -over 20 ./..
   - golint -set_exit_status $(go list ./...)
   - errcheck -asserts -blank ./...
-
-after_success:
-  - bash <(curl -s https://codecov.io/bash)
