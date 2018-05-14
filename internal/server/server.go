@@ -42,13 +42,15 @@ func NewServer(realm string, a AuthHandler) *Server {
 
 // Listen starts listening and handling TURN traffic
 func (s *Server) Listen(address string, port int) error {
-	c, err := net.ListenPacket("udp4", fmt.Sprintf("%s:%d", address, port))
+
+	listeningAddress := fmt.Sprintf("%s:%d", address, port)
+	c, err := net.ListenPacket("udp4", listeningAddress)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("Failed to listen on %s", listeningAddress))
 	}
 	s.connection = ipv4.NewPacketConn(c)
 	if err := s.connection.SetControlMessage(ipv4.FlagDst, true); err != nil {
-		return err
+		return errors.Wrap(err, "Failed to SetControlMessage ipv4.FlagDst")
 	}
 
 	for {

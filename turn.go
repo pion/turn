@@ -21,13 +21,5 @@ type StartArguments struct {
 
 // Start the Pion TURN server
 func Start(args StartArguments) {
-	errors := make(chan error)
-
-	go func() {
-		errors <- server.NewServer(args.Realm, args.Server.AuthenticateRequest).Listen("", args.UDPPort)
-	}()
-
-	for {
-		fmt.Println(<-errors)
-	}
+	fmt.Println(server.NewServer(args.Realm, args.Server.AuthenticateRequest).Listen("", args.UDPPort))
 }
