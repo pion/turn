@@ -2,6 +2,7 @@
 [![Build Status](https://travis-ci.org/pions/turn.svg?branch=master)](https://travis-ci.org/pions/turn)
 [![GoDoc](https://godoc.org/github.com/pions/turn?status.svg)](https://godoc.org/github.com/pions/turn)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pions/turn)](https://goreportcard.com/report/github.com/pions/turn)
+[![Coverage Status](https://coveralls.io/repos/github/pions/turn/badge.svg)](https://coveralls.io/github/pions/turn)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
 A TURN server written in Go that is designed to be scalable, extendable and embeddable out of the box.
