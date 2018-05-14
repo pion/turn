@@ -14,7 +14,7 @@ See [DESIGN.md](DESIGN.md) for the the features it offers, and future goals.
 If you want just a simple TURN server with a few static usernames `simple-turn` will perfectly suit your purposes. If you have
 custom requirements such as a database proceed to extending.
 
-`simple-turn` is a single static binary, and all config is driven by enviroment variables. On a fresh AWS instance these are all the steps you would need.
+`simple-turn` is a single static binary, and all config is driven by enviroment variables. On a fresh Linux AWS instance these are all the steps you would need.
 ```
 $ wget -q https://github.com/pions/turn/releases/download/1.0.0/simple-turn-linux-amd64
 $ chmod +x simple-turn-linux-amd64
@@ -38,6 +38,14 @@ That is it! Then to use your new TURN server your WebRTC config would look like
   username: "user",
   credential: "password"
 }]
+```
+---
+
+If you are using Windows you would set these values in Powershell by doing. Also make sure your firewall is configured properly.
+```
+> $env:USERS = "user=password foo=bar"
+> $env:REALM = "my-server.com"
+> $env:UDP_PORT = 3478
 ```
 ### Extending
 See [simple-turn](https://github.com/pions/turn/blob/master/cmd/simple-turn.go)
