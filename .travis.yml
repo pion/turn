@@ -14,10 +14,13 @@ before_script:
   - go get -u github.com/kisielk/errcheck
 
 script:
-  - test -z "$(gofmt -s -l ./..)"            # assert valid gofmt
-  - go test -v -race ./...                   # `go test` with -race
+  - test -z "$(gofmt -s -l ./..)"
+  - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
   - go vet ./...
   - megacheck ./...
-  - gocyclo -over 20 ./..                    # cyclomatic complexity
+  - gocyclo -over 20 ./..
   - golint -set_exit_status $(go list ./...)
   - errcheck -asserts -blank ./...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
