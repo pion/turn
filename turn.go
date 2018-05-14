@@ -21,5 +21,5 @@ type StartArguments struct {
 
 // Start the Pion TURN server
 func Start(args StartArguments) {
-	fmt.Println(server.NewServer(args.Realm, args.Server.AuthenticateRequest).Listen("", args.UDPPort))
+	fmt.Println(server.NewServer(args.Realm, args.Server.AuthenticateRequest).Listen("0.0.0.0", args.UDPPort))
 }

@@ -32,7 +32,7 @@ func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetim
 		TurnSocket: turnSocket,
 	}
 
-	listener, err := net.ListenPacket("udp", ":0")
+	listener, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {
 		return nil, err
 	}
