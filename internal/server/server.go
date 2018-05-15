@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -15,8 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
 )
-
-const messageIntegrityLength = 24
 
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN
 // with custom behavior
@@ -147,7 +146,19 @@ func buildNonce() string {
 }
 
 func assertMessageIntegrity(m *stun.Message, theirMi *stun.RawAttribute, ourKey [16]byte) error {
-	ourMi, err := stun.MessageIntegrityCalculateHMAC(ourKey[:], m.Raw[:len(m.Raw)-messageIntegrityLength])
+	// Length to remove when comparing MessageIntegrity (so we can re-compute)
+	tailLength := 24
+	rawCopy := make([]byte, len(m.Raw))
+	copy(rawCopy, m.Raw)
+
+	if _, messageIntegrityAttrFound := m.GetOneAttribute(stun.AttrFingerprint); messageIntegrityAttrFound {
+		currLength := binary.BigEndian.Uint16(rawCopy[2:4])
+
+		binary.BigEndian.PutUint16(rawCopy[2:], currLength-8)
+		tailLength += 8
+	}
+
+	ourMi, err := stun.MessageIntegrityCalculateHMAC(ourKey[:], rawCopy[:len(rawCopy)-tailLength])
 	if err != nil {
 		return err
 	}
