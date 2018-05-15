@@ -3,11 +3,12 @@
 [![GoDoc](https://godoc.org/github.com/pions/turn?status.svg)](https://godoc.org/github.com/pions/turn)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pions/turn)](https://goreportcard.com/report/github.com/pions/turn)
 [![Coverage Status](https://coveralls.io/repos/github/pions/turn/badge.svg)](https://coveralls.io/github/pions/turn)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/d53ec6c70576476cb16c140c2964afde)](https://www.codacy.com/app/Sean-Der/turn?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=pions/turn&amp;utm_campaign=Badge_Grade)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
 <div align="center">
     <a href="#">
-        <img src="./.github/pion-gopher.png" height="300px">
+        <img src="./.github/gopher-pion.png" height="300px">
     </a>
 </div>
 
