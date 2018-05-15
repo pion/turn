@@ -49,7 +49,7 @@ If you are using Windows you would set these values in Powershell by doing. Also
 > $env:UDP_PORT = 3478
 ```
 ### Extending
-See [simple-turn](https://github.com/pions/turn/blob/master/cmd/simple-turn.go)
+See [simple-turn](https://github.com/pions/turn/blob/master/cmd/simple-turn/main.go)
 
 pion-turn can be configured by implementing [these callbacks](https://github.com/pions/turn/blob/master/turn.go#L11) and by passing [these arguments](https://github.com/pions/turn/blob/master/turn.go#L11)
 

@@ -8,4 +8,4 @@ RUN go get github.com/cespare/reflex github.com/pions/turn
 
 WORKDIR /usr/local/src/github.com/pions/turn
 ENTRYPOINT ["/usr/local/bin/reflex"]
-CMD ["-r", ".", "-s", "go", "run", "cmd/simple-turn.go"]
+CMD ["-r", ".", "-s", "go", "run", "cmd/simple-turn/main.go"]
