@@ -5,6 +5,12 @@
 [![Coverage Status](https://coveralls.io/repos/github/pions/turn/badge.svg)](https://coveralls.io/github/pions/turn)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
+<div align="center">
+    <a href="#">
+        <img src="./.github/pion-gopher.png" height="300px">
+    </a>
+</div>
+
 A TURN server written in Go that is designed to be scalable, extendable and embeddable out of the box.
 For simple use cases it only requires downloading 1 static binary, and setting 3 options.
 
