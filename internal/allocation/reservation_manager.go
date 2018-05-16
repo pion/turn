@@ -16,6 +16,7 @@ type reservation struct {
 var reservationsLock sync.RWMutex
 var reservations []*reservation
 
+// CreateReservation stores the reservation for the token+port
 func CreateReservation(reservationToken string, port int) {
 	time.AfterFunc(30*time.Second, func() {
 		reservationsLock.Lock()
@@ -36,6 +37,7 @@ func CreateReservation(reservationToken string, port int) {
 	reservationsLock.Unlock()
 }
 
+// GetReservation returns the port for a given reservation if it exists
 func GetReservation(reservationToken string) (int, bool) {
 	reservationsLock.RLock()
 	defer reservationsLock.RUnlock()
@@ -48,6 +50,7 @@ func GetReservation(reservationToken string) (int, bool) {
 	return 0, false
 }
 
+// GetRandomEvenPort returns a random unallocated udp4 port
 func GetRandomEvenPort() (int, error) {
 	listener, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {
