@@ -106,6 +106,15 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID []byte, attrs ...stun.Attribute) error {
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
+	respondWithError := func(err error, messageIntegrity *stun.MessageIntegrity, errorCode *stun.ErrorCode) error {
+		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
+			errorCode,
+			messageIntegrity,
+		); sendErr != nil {
+			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+		}
+		return err
+	}
 
 	// 1. The server MUST require that the request be authenticated.  This
 	//    authentication MUST be done using the long-term credential
@@ -124,19 +133,13 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		DstAddr:  dstAddr,
 		Protocol: allocation.UDP,
 	}
+	requestedPort := 0
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
 	if allocation := allocation.GetAllocation(fiveTuple); allocation != nil {
-		err := errors.Errorf("Relay already allocated for 5-TUPLE")
-		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-			&stun.Err437AllocationMismatch,
-			messageIntegrity,
-		); sendErr != nil {
-			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
-		}
-		return err
+		return respondWithError(errors.Errorf("Relay already allocated for 5-TUPLE"), messageIntegrity, &stun.Err437AllocationMismatch)
 	}
 
 	// 3. The server checks if the request contains a REQUESTED-TRANSPORT
@@ -147,25 +150,12 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    request with a 442 (Unsupported Transport Protocol) error.
 	if requestedTransportRawAttr, ok := m.GetOneAttribute(stun.AttrRequestedTransport); true {
 		if !ok {
-			err := errors.Errorf("Allocation request missing REQUESTED-TRANSPORT")
-			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-				&stun.Err400BadRequest,
-				messageIntegrity,
-			); sendErr != nil {
-				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
-			}
-			return err
+			return respondWithError(errors.Errorf("Allocation request missing REQUESTED-TRANSPORT"), messageIntegrity, &stun.Err400BadRequest)
 		}
 
 		requestedTransportAttr := &stun.RequestedTransport{}
 		if err := requestedTransportAttr.Unpack(m, requestedTransportRawAttr); err != nil {
-			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-				&stun.Err400BadRequest,
-				messageIntegrity,
-			); sendErr != nil {
-				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
-			}
-			return err
+			return respondWithError(err, messageIntegrity, &stun.Err400BadRequest)
 		}
 	}
 
@@ -186,19 +176,21 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//     corresponding relayed transport address is still available).  If
 	//     the token is not valid for some reason, the server rejects the
 	//     request with a 508 (Insufficient Capacity) error.
-	if _, ok := m.GetOneAttribute(stun.AttrReservationToken); ok {
-		if _, ok := m.GetOneAttribute(stun.AttrEvenPort); ok {
-			err := errors.Errorf("no support for DONT-FRAGMENT")
-			if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-				&stun.Err400BadRequest,
-				messageIntegrity,
-			); sendErr != nil {
-				err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
-			}
-			return err
+	if requestedTransportRawAttr, ok := m.GetOneAttribute(stun.AttrReservationToken); ok {
+		if _, containsEvenPort := m.GetOneAttribute(stun.AttrEvenPort); containsEvenPort {
+			return respondWithError(errors.Errorf("Request must not contain RESERVATION-TOKEN and EVEN-PORT"), messageIntegrity, &stun.Err400BadRequest)
 		}
 
-		panic("TODO check reservation validity")
+		reservationTokenAttr := &stun.ReservationToken{}
+		if err := reservationTokenAttr.Unpack(m, requestedTransportRawAttr); err != nil {
+			return respondWithError(err, messageIntegrity, &stun.Err400BadRequest)
+		}
+
+		allocationPort, reservationFound := allocation.GetReservation(reservationTokenAttr.ReservationToken)
+		if !reservationFound {
+			return respondWithError(errors.Errorf("No reservation found with token %s", reservationTokenAttr.ReservationToken), messageIntegrity, &stun.Err400BadRequest)
+		}
+		requestedPort = allocationPort + 1
 	}
 
 	// 6. The server checks if the request contains an EVEN-PORT attribute.
@@ -207,15 +199,17 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    below).  If the server cannot satisfy the request, then the
 	//    server rejects the request with a 508 (Insufficient Capacity)
 	//    error.
-	if _, ok := m.GetOneAttribute(stun.AttrEvenPort); ok {
-		err := errors.Errorf("no support for EVEN-PORT")
-		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-			&stun.Err508InsufficentCapacity,
-			messageIntegrity,
-		); sendErr != nil {
-			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
+	if evenPortRawAttr, ok := m.GetOneAttribute(stun.AttrEvenPort); ok {
+		evenPortAttr := stun.EvenPort{}
+		if err := evenPortAttr.Unpack(m, evenPortRawAttr); err != nil {
+			return respondWithError(err, messageIntegrity, &stun.Err400BadRequest)
 		}
-		return err
+
+		randomPort, err := allocation.GetRandomEvenPort()
+		if err != nil {
+			return respondWithError(err, messageIntegrity, &stun.Err508InsufficentCapacity)
+		}
+		requestedPort = randomPort
 	}
 
 	// 7. At any point, the server MAY choose to reject the request with a
@@ -240,16 +234,13 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		}
 	}
 
-	a, err := allocation.CreateAllocation(fiveTuple, s.connection, lifetimeDuration)
+	a, err := allocation.CreateAllocation(fiveTuple, s.connection, requestedPort, lifetimeDuration)
 	if err != nil {
-		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
-			&stun.Err508InsufficentCapacity,
-			messageIntegrity,
-		); sendErr != nil {
-			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
-		}
-		return err
+		return respondWithError(err, messageIntegrity, &stun.Err508InsufficentCapacity)
 	}
+
+	reservationToken := randSeq(8)
+	allocation.CreateReservation(reservationToken, a.RelayAddr.Port)
 
 	// Once the allocation is created, the server replies with a success
 	// response.  The success response contains:
@@ -272,7 +263,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 			Duration: lifetimeDuration,
 		},
 		&stun.ReservationToken{
-			ReservationToken: randSeq(8),
+			ReservationToken: reservationToken,
 		},
 		&stun.XorMappedAddress{
 			XorAddress: stun.XorAddress{

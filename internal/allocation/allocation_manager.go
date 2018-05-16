@@ -27,7 +27,7 @@ func GetAllocation(fiveTuple *FiveTuple) *Allocation {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetime uint32) (*Allocation, error) {
+func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
 	} else if fiveTuple.SrcAddr == nil {
@@ -47,7 +47,7 @@ func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, lifetim
 		TurnSocket: turnSocket,
 	}
 
-	listener, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	listener, err := net.ListenPacket("udp4", fmt.Sprintf("0.0.0.0:%d", requestedPort))
 	if err != nil {
 		return nil, err
 	}

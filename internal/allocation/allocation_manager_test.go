@@ -29,13 +29,13 @@ func randomFiveTuple() *FiveTuple {
 
 // test invalid Allocation creations
 func TestCreateInvalidAllocation(t *testing.T) {
-	if a, err := CreateAllocation(nil, turnSocket, 5000); a != nil || err == nil {
+	if a, err := CreateAllocation(nil, turnSocket, 0, 5000); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
 	}
-	if a, err := CreateAllocation(randomFiveTuple(), nil, 5000); a != nil || err == nil {
+	if a, err := CreateAllocation(randomFiveTuple(), nil, 0, 5000); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil turnSocket")
 	}
-	if a, err := CreateAllocation(randomFiveTuple(), turnSocket, 0); a != nil || err == nil {
+	if a, err := CreateAllocation(randomFiveTuple(), turnSocket, 0, 0); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with 0 lifetime")
 	}
 }
@@ -43,7 +43,7 @@ func TestCreateInvalidAllocation(t *testing.T) {
 // test valid Allocation creations
 func TestCreateAllocation(t *testing.T) {
 	fiveTuple := randomFiveTuple()
-	if a, err := CreateAllocation(fiveTuple, turnSocket, 5000); a == nil || err != nil {
+	if a, err := CreateAllocation(fiveTuple, turnSocket, 0, 5000); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
@@ -55,11 +55,11 @@ func TestCreateAllocation(t *testing.T) {
 // test that two allocations can't be created with the same FiveTuple
 func TestCreateAllocationDuplicateFiveTuple(t *testing.T) {
 	fiveTuple := randomFiveTuple()
-	if a, err := CreateAllocation(fiveTuple, turnSocket, 5000); a == nil || err != nil {
+	if a, err := CreateAllocation(fiveTuple, turnSocket, 0, 5000); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
-	if a, err := CreateAllocation(fiveTuple, turnSocket, 5000); a != nil || err == nil {
+	if a, err := CreateAllocation(fiveTuple, turnSocket, 0, 5000); a != nil || err == nil {
 		t.Errorf("Was able to create allocation with same FiveTuple twice")
 	}
 }
