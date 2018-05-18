@@ -24,7 +24,7 @@ custom requirements such as a database proceed to extending.
 
 `simple-turn` is a single static binary, and all config is driven by environment variables. On a fresh Linux AWS instance these are all the steps you would need.
 ```
-$ wget -q https://github.com/pions/turn/releases/download/1.0.0/simple-turn-linux-amd64
+$ wget -q https://github.com/pions/turn/releases/download/1.0.3/simple-turn-linux-amd64
 $ chmod +x simple-turn-linux-amd64
 $ export USERS='user=password foo=bar'
 $ export REALM=my-server.com
