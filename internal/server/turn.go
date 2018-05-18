@@ -134,6 +134,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		Protocol: allocation.UDP,
 	}
 	requestedPort := 0
+	reservationToken := ""
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
@@ -210,6 +211,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 			return respondWithError(err, messageIntegrity, &stun.Err508InsufficentCapacity)
 		}
 		requestedPort = randomPort
+		reservationToken = randSeq(8)
 	}
 
 	// 7. At any point, the server MAY choose to reject the request with a
@@ -239,9 +241,6 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		return respondWithError(err, messageIntegrity, &stun.Err508InsufficentCapacity)
 	}
 
-	reservationToken := randSeq(8)
-	allocation.CreateReservation(reservationToken, a.RelayAddr.Port)
-
 	// Once the allocation is created, the server replies with a success
 	// response.  The success response contains:
 	//   * An XOR-RELAYED-ADDRESS attribute containing the relayed transport
@@ -252,7 +251,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//     address was reserved).
 	//   * An XOR-MAPPED-ADDRESS attribute containing the client's IP address
 	//     and port (from the 5-tuple).
-	return curriedSend(stun.ClassSuccessResponse, stun.MethodAllocate, m.TransactionID,
+	responseAttrs := []stun.Attribute{
 		&stun.XorRelayedAddress{
 			XorAddress: stun.XorAddress{
 				IP:   dstAddr.IP,
@@ -262,17 +261,22 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		&stun.Lifetime{
 			Duration: lifetimeDuration,
 		},
-		&stun.ReservationToken{
-			ReservationToken: reservationToken,
-		},
 		&stun.XorMappedAddress{
 			XorAddress: stun.XorAddress{
 				IP:   srcAddr.IP,
 				Port: srcAddr.Port,
 			},
 		},
-		messageIntegrity,
-	)
+	}
+
+	if reservationToken != "" {
+		allocation.CreateReservation(reservationToken, a.RelayAddr.Port)
+		responseAttrs = append(responseAttrs, &stun.ReservationToken{
+			ReservationToken: reservationToken,
+		})
+	}
+
+	return curriedSend(stun.ClassSuccessResponse, stun.MethodAllocate, m.TransactionID, append(responseAttrs, messageIntegrity)...)
 }
 
 func (s *Server) handleRefreshRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
