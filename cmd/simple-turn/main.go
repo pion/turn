@@ -11,24 +11,25 @@ import (
 )
 
 type myTurnServer struct {
+	usersMap map[string]string
 }
 
-var usersMap = make(map[string]string)
-
 func (m *myTurnServer) AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool) {
-	if password, ok := usersMap[username]; ok {
+	if password, ok := m.usersMap[username]; ok {
 		return password, true
 	}
 	return "", false
 }
 
 func main() {
+	m := &myTurnServer{usersMap: make(map[string]string)}
+
 	users := os.Getenv("USERS")
 	if users == "" {
 		log.Panic("USERS is a required environment variable")
 	}
 	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(users, -1) {
-		usersMap[kv[1]] = kv[2]
+		m.usersMap[kv[1]] = kv[2]
 	}
 
 	realm := os.Getenv("REALM")
@@ -46,7 +47,7 @@ func main() {
 	}
 
 	turn.Start(turn.StartArguments{
-		Server:  &myTurnServer{},
+		Server:  m,
 		Realm:   realm,
 		UDPPort: udpPort,
 	})
