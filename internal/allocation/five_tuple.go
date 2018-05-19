@@ -18,9 +18,9 @@ const (
 // stream.  The 5-tuple also uniquely identifies the Allocation on
 // the server.
 type FiveTuple struct {
-	SrcAddr  *stun.TransportAddr
-	DstAddr  *stun.TransportAddr
-	Protocol Protocol
+	Protocol
+	SrcAddr *stun.TransportAddr
+	DstAddr *stun.TransportAddr
 }
 
 // Equal asserts if two FiveTuples are equal
