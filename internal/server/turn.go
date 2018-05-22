@@ -7,7 +7,7 @@ import (
 	"github.com/pions/pkg/stun"
 	"github.com/pkg/errors"
 
-	"github.com/iwittkau/turn/internal/allocation"
+	"github.com/pions/turn/internal/allocation"
 )
 
 const (
