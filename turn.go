@@ -5,9 +5,9 @@ import (
 
 	"net"
 
-	"github.com/iwittkau/turn/internal/client"
-	"github.com/iwittkau/turn/internal/server"
 	"github.com/pions/pkg/stun"
+	"github.com/pions/turn/internal/client"
+	"github.com/pions/turn/internal/server"
 )
 
 // Server is the interface for Pion TURN server callbacks

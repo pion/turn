@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/iwittkau/turn"
+	"github.com/pions/turn"
 )
 
 func main() {
