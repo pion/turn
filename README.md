@@ -79,7 +79,7 @@ Currently only Linux is supported until Docker supports full (host <-> container
 ## RFCs
 ### Implemented
 * [RFC 5389: Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5389)
-* [RFC 5788: Traversal Using Relays around NAT (TURN)](https://tools.ietf.org/html/rfc5766)
+* [RFC 5766: Traversal Using Relays around NAT (TURN)](https://tools.ietf.org/html/rfc5766)
 
 ### Planned
 * [RFC 6062: Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations](https://tools.ietf.org/html/rfc6062)
