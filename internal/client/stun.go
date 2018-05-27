@@ -14,7 +14,9 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (interface{}, 
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	packet := make([]byte, 1500)
-	sendStunRequest(c.conn, serverIP, serverPort)
+	if err := sendStunRequest(c.conn, serverIP, serverPort); err != nil {
+		return nil, err
+	}
 	size, cm, addr, err := c.conn.ReadFrom(packet)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read packet from udp socket")
@@ -27,7 +29,7 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (interface{}, 
 	return fmt.Sprintf("pkt_size=%d %s src_address=%s", size, cm.String(), srcAddr.String()), nil
 }
 
-func sendStunRequest(conn *ipv4.PacketConn, serverIP net.IP, serverPort int) {
+func sendStunRequest(conn *ipv4.PacketConn, serverIP net.IP, serverPort int) error {
 	serverAddress := stun.TransportAddr{IP: serverIP, Port: serverPort}
-	stun.BuildAndSend(conn, &serverAddress, stun.ClassRequest, stun.MethodBinding, stun.GenerateTransactionId())
+	return stun.BuildAndSend(conn, &serverAddress, stun.ClassRequest, stun.MethodBinding, stun.GenerateTransactionId())
 }
