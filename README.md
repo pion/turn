@@ -91,5 +91,11 @@ Sign up for the [Golang Slack](https://invite.slack.golangbridge.org/) and join 
 ## Contributing
 See [CONTRIBUTING.md](CONTRIBUTING.md)
 
+### Contributors
+
+* [Sean DuBois](https://github.com/Sean-Der) - *Original Author*  
+* [winds2016](https://github.com/winds2016) - *Windows platform testing*  
+* [Ingmar Wittkau](https://github.com/iwittkau) - *STUN client*
+
 ## License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
