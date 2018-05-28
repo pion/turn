@@ -93,9 +93,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ### Contributors
 
-* [Sean DuBois](https://github.com/Sean-Der) - *Original Author*  
-* [winds2016](https://github.com/winds2016) - *Windows platform testing*  
+* [Sean DuBois](https://github.com/Sean-Der) - *Original Author*
+* [winds2016](https://github.com/winds2016) - *Windows platform testing*
 * [Ingmar Wittkau](https://github.com/iwittkau) - *STUN client*
+* [Michael Melvin Santry](https://github.com/santrym) - *Mascot*
 
 ## License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
