@@ -145,7 +145,7 @@ func buildNonce() string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func assertMessageIntegrity(m *stun.Message, theirMi *stun.RawAttribute, ourKey [16]byte) error {
+func assertMessageIntegrity(m *stun.Message, theirMi *stun.RawAttribute, ourKey []byte) error {
 	// Length to remove when comparing MessageIntegrity (so we can re-compute)
 	tailLength := 24
 	rawCopy := make([]byte, len(m.Raw))

@@ -74,7 +74,7 @@ func authenticateRequest(curriedSend curriedSend, m *stun.Message, callingMethod
 		}
 
 		ourKey = md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + password))
-		if err := assertMessageIntegrity(m, messageIntegrityRawAttr, ourKey); err != nil {
+		if err := assertMessageIntegrity(m, messageIntegrityRawAttr, ourKey[:]); err != nil {
 			return handleErr(err)
 		}
 	} else {
@@ -82,7 +82,7 @@ func authenticateRequest(curriedSend curriedSend, m *stun.Message, callingMethod
 	}
 
 	return &stun.MessageIntegrity{
-		Key: ourKey,
+		Key: ourKey[:],
 	}, usernameAttr.Username, nil
 }
 
