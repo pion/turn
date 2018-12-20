@@ -1,0 +1,17 @@
+FROM golang:alpine as builder
+
+RUN apk update && apk add --no-cache git
+
+RUN go get github.com/pions/turn
+RUN go install github.com/pions/turn/cmd/client
+
+RUN adduser -D -g '' pion
+
+FROM alpine:latest
+
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /go/bin/client /client
+
+USER pion
+
+ENTRYPOINT ["/client"]
