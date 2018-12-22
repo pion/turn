@@ -1,23 +1,29 @@
-# Pion TURN
-[![Build Status](https://travis-ci.org/pions/turn.svg?branch=master)](https://travis-ci.org/pions/turn)
-[![GoDoc](https://godoc.org/github.com/pions/turn?status.svg)](https://godoc.org/github.com/pions/turn)
-[![Go Report Card](https://goreportcard.com/badge/github.com/pions/turn)](https://goreportcard.com/report/github.com/pions/turn)
-[![Coverage Status](https://coveralls.io/repos/github/pions/turn/badge.svg)](https://coveralls.io/github/pions/turn)
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/d53ec6c70576476cb16c140c2964afde)](https://www.codacy.com/app/Sean-Der/turn?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=pions/turn&amp;utm_campaign=Badge_Grade)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
-
-<div align="center">
-    <a href="#">
-        <img src="./.github/gopher-pion.png" height="300px">
-    </a>
-</div>
+<h1 align="center">
+  <a href="https://pion.ly"><img src="./.github/gopher-pion.png" alt="Pion TURN" height="250px"></a>
+  <br>
+  Pion TURN
+  <br>
+</h1>
+<h4 align="center">An extendable TURN server written in Go</h4>
+<p align="center">
+  <a href="https://pion.ly"><img src="https://img.shields.io/badge/pion-turn-gray.svg?longCache=true&colorB=brightgreen" alt="Pion TURN"></a>
+  <a href="http://gophers.slack.com/messages/pion"><img src="https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=brightgreen" alt="Slack Widget"></a>
+  <a href="https://waffle.io/pions/webrtc"><img src="https://img.shields.io/badge/pm-waffle-gray.svg?longCache=true&colorB=brightgreen" alt="Waffle board"></a>
+  <br>
+  <a href="https://travis-ci.org/pions/turn"><img src="https://travis-ci.org/pions/turn.svg?branch=master" alt="Build Status"></a>
+  <a href="https://godoc.org/github.com/pions/turn"><img src="https://godoc.org/github.com/pions/turn?status.svg" alt="GoDoc"></a>
+  <a href="https://coveralls.io/github/pions/turn"><img src="https://coveralls.io/repos/github/pions/turn/badge.svg" alt="Coverage Status"></a>
+  <a href="https://goreportcard.com/report/github.com/pions/turn"><img src="https://goreportcard.com/badge/github.com/pions/turn" alt="Go Report Card"></a>
+  <a href="https://www.codacy.com/app/Sean-Der/turn"><img src="https://api.codacy.com/project/badge/Grade/d53ec6c70576476cb16c140c2964afde" alt="Codacy Badge"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
+<br>
 
 A TURN server written in Go that is designed to be scalable, extendable and embeddable out of the box.
 For simple use cases it only requires downloading 1 static binary, and setting 3 options.
 
 See [DESIGN.md](DESIGN.md) for the the features it offers, and future goals.
 
-## Getting Started
 ### Quick Start
 If you want just a simple TURN server with a few static usernames `simple-turn` will perfectly suit your purposes. If you have
 custom requirements such as a database proceed to extending.
@@ -76,22 +82,22 @@ docker run -v $(pwd):/usr/local/src/github.com/pions/turn -v $(pwd)/../pkg:/usr/
 
 Currently only Linux is supported until Docker supports full (host <-> container) networking on Windows/OSX
 
-## RFCs
-### Implemented
+### RFCs
+#### Implemented
 * [RFC 5389: Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5389)
 * [RFC 5766: Traversal Using Relays around NAT (TURN)](https://tools.ietf.org/html/rfc5766)
 
-### Planned
+#### Planned
 * [RFC 6062: Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations](https://tools.ietf.org/html/rfc6062)
 * [RFC 6156: Traversal Using Relays around NAT (TURN) Extension for IPv6](https://tools.ietf.org/html/rfc6156)
 
-## Questions/Support
-Sign up for the [Golang Slack](https://invite.slack.golangbridge.org/) and join the #pion channel for discussions and support
+### Community
+Pion has an active community on the [Golang Slack](https://invite.slack.golangbridge.org/). Sign up and join the **#pion** channel for discussions and support. You can also use [Pion mailing list](https://groups.google.com/forum/#!forum/pion).
 
-## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+We are always looking to support **your projects**. Please reach out if you have something to build!
 
-### Contributors
+### Contributing
+Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing people making this project possible:
 
 * [Ingmar Wittkau](https://github.com/iwittkau) - *STUN client*
 * [John Bradley](https://github.com/kc5nra) - *Original Author*
@@ -99,5 +105,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 * [Sean DuBois](https://github.com/Sean-Der) - *Original Author*
 * [winds2016](https://github.com/winds2016) - *Windows platform testing*
 
-## License
+### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
