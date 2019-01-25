@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/pions/stun"
+	"github.com/pions/turn/internal/ipnet"
 	"github.com/pkg/errors"
-	"golang.org/x/net/ipv4"
 )
 
 // Manager is used to hold active allocations
@@ -30,7 +30,7 @@ func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
 	}
@@ -55,20 +55,21 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.Packet
 		TurnSocket: turnSocket,
 	}
 
-	listener, err := net.ListenPacket("udp4", fmt.Sprintf("0.0.0.0:%d", requestedPort))
+	network := "udp4"
+	listener, err := net.ListenPacket(network, fmt.Sprintf("0.0.0.0:%d", requestedPort))
 	if err != nil {
 		return nil, err
 	}
 
-	a.RelaySocket = ipv4.NewPacketConn(listener)
-	err = a.RelaySocket.SetControlMessage(ipv4.FlagDst, true)
+	conn, err := ipnet.NewPacketConn(network, listener)
 	if err != nil {
 		return nil, err
 	}
+	a.RelaySocket = conn
 
 	a.RelayAddr, err = stun.NewTransportAddr(listener.LocalAddr())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to create connection")
 	}
 
 	a.lifetimeTimer = time.AfterFunc(time.Duration(lifetime)*time.Second, func() {

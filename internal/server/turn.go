@@ -391,7 +391,7 @@ func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun
 		return errors.Errorf("Unable to handle send-indication, no permission added: %v", msgDst)
 	}
 
-	l, err := a.RelaySocket.WriteTo(dataAttr.Data, nil, msgDst.Addr())
+	l, err := a.RelaySocket.WriteTo(dataAttr.Data, msgDst.Addr())
 	if l != len(dataAttr.Data) {
 		return errors.Errorf("packet write smaller than packet %d != %d (expected) err: %v", l, len(dataAttr.Data), err)
 	}
@@ -462,7 +462,7 @@ func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.Tr
 		return errors.Errorf("No channel bind found for %x \n", c.ChannelNumber)
 	}
 
-	l, err := a.RelaySocket.WriteTo(c.Data, nil, channel.Peer.Addr())
+	l, err := a.RelaySocket.WriteTo(c.Data, channel.Peer.Addr())
 	if err != nil {
 		return errors.Wrap(err, "failed writing to socket")
 	}

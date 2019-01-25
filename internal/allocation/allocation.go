@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/pions/stun"
+	"github.com/pions/turn/internal/ipnet"
 	"github.com/pkg/errors"
-	"golang.org/x/net/ipv4"
 )
 
 // Allocation is tied to a FiveTuple and relays traffic
@@ -18,8 +18,8 @@ type Allocation struct {
 	RelayAddr *stun.TransportAddr
 	Protocol  Protocol
 
-	TurnSocket  *ipv4.PacketConn
-	RelaySocket *ipv4.PacketConn
+	TurnSocket  ipnet.PacketConn
+	RelaySocket ipnet.PacketConn
 
 	fiveTuple *FiveTuple
 
@@ -183,7 +183,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 	buffer := make([]byte, RtpMTU)
 
 	for {
-		n, cm, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
+		n, cm, srcAddr, err := a.RelaySocket.ReadFromCM(buffer)
 		if err != nil {
 			if !m.DeleteAllocation(a.fiveTuple) {
 				fmt.Println("Failed to remove allocation after relay listener had closed")
@@ -197,7 +197,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
-			if _, err = a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr()); err != nil {
+			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr.Addr()); err != nil {
 				fmt.Printf("Failed to send ChannelData from allocation %v %v \n", srcAddr, err)
 			}
 		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
