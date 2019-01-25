@@ -101,7 +101,9 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 
 * [Ingmar Wittkau](https://github.com/iwittkau) - *STUN client*
 * [John Bradley](https://github.com/kc5nra) - *Original Author*
-* [Michael Melvin Santry](https://github.com/santrym) - *Mascot*
+* [jose nazario](https://github.com/paralax) - *Documentation*
+* [Mészáros Mihály](https://github.com/misi) - *Documentation*
+* [Mike Santry](https://github.com/santrym) - *Mascot*
 * [Sean DuBois](https://github.com/Sean-Der) - *Original Author*
 * [winds2016](https://github.com/winds2016) - *Windows platform testing*
 
