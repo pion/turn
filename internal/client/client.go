@@ -6,27 +6,27 @@ import (
 
 	"sync"
 
+	"github.com/pions/turn/internal/ipnet"
 	"github.com/pkg/errors"
-	"golang.org/x/net/ipv4"
 )
 
 // Client is a STUN server client
 type Client struct {
-	conn *ipv4.PacketConn
+	conn ipnet.PacketConn
 	mux  *sync.Mutex
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
 func NewClient(listeningAddress string) (*Client, error) {
-	c, err := net.ListenPacket("udp4", listeningAddress)
+	network := "udp4"
+	c, err := net.ListenPacket(network, listeningAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("failed to listen on %s", listeningAddress))
 	}
-	conn := ipv4.NewPacketConn(c)
-	if err := conn.SetControlMessage(ipv4.FlagDst, true); err != nil {
-		return nil, errors.Wrap(err, "failed to SetControlMessage ipv4.FlagDst")
+	conn, err := ipnet.NewPacketConn(network, c)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create connection")
 	}
 
 	return &Client{conn, &sync.Mutex{}}, nil
-
 }

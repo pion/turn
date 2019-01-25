@@ -6,25 +6,29 @@ import (
 	"testing"
 
 	"github.com/pions/stun"
-	"golang.org/x/net/ipv4"
+	"github.com/pions/turn/internal/ipnet"
 )
 
 func TestAllocation(t *testing.T) {
 	tt := []struct {
 		name string
-		f    func(*testing.T, *ipv4.PacketConn)
+		f    func(*testing.T, ipnet.PacketConn)
 	}{
 		{"CreateInvalidAllocation", subTestCreateInvalidAllocation},
 		{"CreateAllocation", subTestCreateAllocation},
 		{"CreateAllocationDuplicateFiveTuple", subTestCreateAllocationDuplicateFiveTuple},
 	}
 
-	c, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	network := "udp4"
+	c, err := net.ListenPacket(network, "0.0.0.0:0")
 	if err != nil {
 		panic(err)
 	}
 
-	turnSocket := ipv4.NewPacketConn(c)
+	turnSocket, err := ipnet.NewPacketConn(network, c)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range tt {
 		f := tc.f
@@ -35,7 +39,7 @@ func TestAllocation(t *testing.T) {
 }
 
 // test invalid Allocation creations
-func subTestCreateInvalidAllocation(t *testing.T, turnSocket *ipv4.PacketConn) {
+func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 	m := &Manager{}
 	if a, err := m.CreateAllocation(nil, turnSocket, 0, 5000); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
@@ -49,7 +53,7 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket *ipv4.PacketConn) {
 }
 
 // test valid Allocation creations
-func subTestCreateAllocation(t *testing.T, turnSocket *ipv4.PacketConn) {
+func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 	m := &Manager{}
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, 5000); a == nil || err != nil {
@@ -62,7 +66,7 @@ func subTestCreateAllocation(t *testing.T, turnSocket *ipv4.PacketConn) {
 }
 
 // test that two allocations can't be created with the same FiveTuple
-func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket *ipv4.PacketConn) {
+func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket ipnet.PacketConn) {
 	m := &Manager{}
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, 5000); a == nil || err != nil {

@@ -14,8 +14,8 @@ import (
 
 	"github.com/pions/stun"
 	"github.com/pions/turn/internal/allocation"
+	"github.com/pions/turn/internal/ipnet"
 	"github.com/pkg/errors"
-	"golang.org/x/net/ipv4"
 )
 
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN
@@ -24,7 +24,7 @@ type AuthHandler func(username string, srcAddr *stun.TransportAddr) (password st
 
 // Server is an instance of the Pion TURN server
 type Server struct {
-	connection         *ipv4.PacketConn
+	connection         ipnet.PacketConn
 	packet             []byte
 	realm              string
 	authHandler        AuthHandler
@@ -47,17 +47,19 @@ func NewServer(realm string, a AuthHandler) *Server {
 // Listen starts listening and handling TURN traffic
 func (s *Server) Listen(address string, port int) error {
 	listeningAddress := fmt.Sprintf("%s:%d", address, port)
-	c, err := net.ListenPacket("udp4", listeningAddress)
+	network := "udp4"
+	c, err := net.ListenPacket(network, listeningAddress)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Failed to listen on %s", listeningAddress))
 	}
-	s.connection = ipv4.NewPacketConn(c)
-	if err := s.connection.SetControlMessage(ipv4.FlagDst, true); err != nil {
-		return errors.Wrap(err, "Failed to SetControlMessage ipv4.FlagDst")
+	conn, err := ipnet.NewPacketConn(network, c)
+	if err != nil {
+		return errors.Wrap(err, "failed to create connection")
 	}
+	s.connection = conn
 
 	for {
-		size, cm, addr, err := s.connection.ReadFrom(s.packet)
+		size, cm, addr, err := s.connection.ReadFromCM(s.packet)
 		if err != nil {
 			return errors.Wrap(err, "failed to read packet from udp socket")
 		}
