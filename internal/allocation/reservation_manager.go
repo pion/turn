@@ -13,36 +13,39 @@ type reservation struct {
 	port  int
 }
 
-var reservationsLock sync.RWMutex
-var reservations []*reservation
+// ReservationManager is used to manage reservations
+type ReservationManager struct {
+	lock         sync.RWMutex
+	reservations []*reservation
+}
 
 // CreateReservation stores the reservation for the token+port
-func CreateReservation(reservationToken string, port int) {
+func (m *ReservationManager) CreateReservation(reservationToken string, port int) {
 	time.AfterFunc(30*time.Second, func() {
-		reservationsLock.Lock()
-		defer reservationsLock.Unlock()
-		for i := len(reservations) - 1; i >= 0; i-- {
-			if reservations[i].token == reservationToken {
-				reservations = append(reservations[:i], reservations[i+1:]...)
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		for i := len(m.reservations) - 1; i >= 0; i-- {
+			if m.reservations[i].token == reservationToken {
+				m.reservations = append(m.reservations[:i], m.reservations[i+1:]...)
 				return
 			}
 		}
 	})
 
-	reservationsLock.Lock()
-	reservations = append(reservations, &reservation{
+	m.lock.Lock()
+	m.reservations = append(m.reservations, &reservation{
 		token: reservationToken,
 		port:  port,
 	})
-	reservationsLock.Unlock()
+	m.lock.Unlock()
 }
 
 // GetReservation returns the port for a given reservation if it exists
-func GetReservation(reservationToken string) (int, bool) {
-	reservationsLock.RLock()
-	defer reservationsLock.RUnlock()
+func (m *ReservationManager) GetReservation(reservationToken string) (int, bool) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
 
-	for _, r := range reservations {
+	for _, r := range m.reservations {
 		if r.token == reservationToken {
 			return r.port, true
 		}
@@ -50,7 +53,7 @@ func GetReservation(reservationToken string) (int, bool) {
 	return 0, false
 }
 
-// GetRandomEvenPort returns a random unallocated udp4 port
+// GetRandomEvenPort returns a random un-allocated udp4 port
 func GetRandomEvenPort() (int, error) {
 	listener, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {

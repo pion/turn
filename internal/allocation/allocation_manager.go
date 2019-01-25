@@ -11,14 +11,17 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-var allocationsLock sync.RWMutex
-var allocations []*Allocation
+// Manager is used to hold active allocations
+type Manager struct {
+	lock        sync.RWMutex
+	allocations []*Allocation
+}
 
 // GetAllocation fetches the allocation matching the passed FiveTuple
-func GetAllocation(fiveTuple *FiveTuple) *Allocation {
-	allocationsLock.Lock()
-	defer allocationsLock.Unlock()
-	for _, a := range allocations {
+func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, a := range m.allocations {
 		if a.fiveTuple.Equal(fiveTuple) {
 			return a
 		}
@@ -27,18 +30,23 @@ func GetAllocation(fiveTuple *FiveTuple) *Allocation {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
-	} else if fiveTuple.SrcAddr == nil {
+	}
+	if fiveTuple.SrcAddr == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FiveTuple.SrcAddr")
-	} else if fiveTuple.DstAddr == nil {
+	}
+	if fiveTuple.DstAddr == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FiveTuple.DstAddr")
-	} else if a := GetAllocation(fiveTuple); a != nil {
+	}
+	if a := m.GetAllocation(fiveTuple); a != nil {
 		return nil, errors.Errorf("Allocation attempt created with duplicate FiveTuple %v", fiveTuple)
-	} else if turnSocket == nil {
+	}
+	if turnSocket == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil turnSocket")
-	} else if lifetime == 0 {
+	}
+	if lifetime == 0 {
 		return nil, errors.Errorf("Allocations must not be created with a lifetime of 0")
 	}
 
@@ -69,34 +77,36 @@ func CreateAllocation(fiveTuple *FiveTuple, turnSocket *ipv4.PacketConn, request
 		}
 	})
 
-	allocationsLock.Lock()
-	allocations = append(allocations, a)
-	allocationsLock.Unlock()
+	m.lock.Lock()
+	m.allocations = append(m.allocations, a)
+	m.lock.Unlock()
 
-	go a.packetHandler()
+	go a.packetHandler(m)
 	return a, nil
 }
 
-func deleteAllocation(fiveTuple *FiveTuple) bool {
-	allocationsLock.Lock()
-	defer allocationsLock.Unlock()
+// DeleteAllocation removes an allocation
+func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
-	for i := len(allocations) - 1; i >= 0; i-- {
-		if allocations[i].fiveTuple.Equal(fiveTuple) {
+	for i := len(m.allocations) - 1; i >= 0; i-- {
+		allocation := m.allocations[i]
+		if allocation.fiveTuple.Equal(fiveTuple) {
 
-			allocations[i].permissionsLock.RLock()
-			for _, p := range allocations[i].permissions {
+			allocation.permissionsLock.RLock()
+			for _, p := range allocation.permissions {
 				p.lifetimeTimer.Stop()
 			}
-			allocations[i].permissionsLock.RUnlock()
+			allocation.permissionsLock.RUnlock()
 
-			allocations[i].channelBindingsLock.RLock()
-			for _, c := range allocations[i].channelBindings {
+			allocation.channelBindingsLock.RLock()
+			for _, c := range allocation.channelBindings {
 				c.lifetimeTimer.Stop()
 			}
-			allocations[i].channelBindingsLock.RUnlock()
+			allocation.channelBindingsLock.RUnlock()
 
-			allocations = append(allocations[:i], allocations[i+1:]...)
+			m.allocations = append(m.allocations[:i], m.allocations[i+1:]...)
 			return true
 		}
 	}

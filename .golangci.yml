@@ -7,12 +7,7 @@ linters-settings:
 linters:
   enable-all: true
   disable:
-#    - maligned
-#    - lll
-#    - dupl
-#    - gocritic
-#    - gochecknoinits
-#    - gochecknoglobals
+    - lll
 
 issues:
   exclude-use-default: false
