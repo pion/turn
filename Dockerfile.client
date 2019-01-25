@@ -12,7 +12,7 @@ RUN go mod download
 
 COPY ./ ./
 
-WORKDIR /src/cmd/simple-turn
+WORKDIR /src/cmd/client
 RUN CGO_ENABLED=0 go install -installsuffix 'static' 
 
 RUN adduser -D -g '' pion
@@ -20,11 +20,11 @@ RUN adduser -D -g '' pion
 FROM scratch
 
 COPY --from=builder /etc/passwd /etc/passwd
-COPY --from=builder /go/bin/simple-turn /turn
+COPY --from=builder /go/bin/client /client
 
 USER pion
 
-ENTRYPOINT ["/turn"]
+ENTRYPOINT ["/client"]
 
-# docker build -t turn -f Dockerfile.production .
-# docker run -e REALM="localhost" -e USERS="username=password" -e UDP_PORT="3478" -p 3478:3478 turn
+# docker build -t turn-client -f Dockerfile.client .
+# docker run turn-client
