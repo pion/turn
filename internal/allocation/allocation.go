@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
 )
@@ -203,7 +203,7 @@ func (a *Allocation) packetHandler() {
 		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
 			dataAttr := stun.Data{Data: buffer[:n]}
 			xorPeerAddressAttr := stun.XorPeerAddress{XorAddress: stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
-			if err = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionId(), &xorPeerAddressAttr, &dataAttr); err != nil {
+			if err = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionID(), &xorPeerAddressAttr, &dataAttr); err != nil {
 				fmt.Printf("Failed to send DataIndication from allocation %v %v \n", srcAddr, err)
 			}
 		} else {

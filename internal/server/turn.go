@@ -4,7 +4,7 @@ import (
 	"crypto/md5"
 	"strings"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 	"github.com/pkg/errors"
 
 	"github.com/pions/turn/internal/allocation"

@@ -1,6 +1,6 @@
 package allocation
 
-import "github.com/pions/pkg/stun"
+import "github.com/pions/stun"
 
 // Protocol is an enum for relay protocol
 type Protocol int

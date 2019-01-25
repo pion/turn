@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 	"golang.org/x/net/ipv4"
 )
 

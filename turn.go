@@ -5,7 +5,7 @@ import (
 
 	"net"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 	"github.com/pions/turn/internal/client"
 	"github.com/pions/turn/internal/server"
 )

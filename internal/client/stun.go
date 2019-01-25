@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
 )
@@ -31,5 +31,5 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (interface{}, 
 
 func sendStunRequest(conn *ipv4.PacketConn, serverIP net.IP, serverPort int) error {
 	serverAddress := stun.TransportAddr{IP: serverIP, Port: serverPort}
-	return stun.BuildAndSend(conn, &serverAddress, stun.ClassRequest, stun.MethodBinding, stun.GenerateTransactionId())
+	return stun.BuildAndSend(conn, &serverAddress, stun.ClassRequest, stun.MethodBinding, stun.GenerateTransactionID())
 }

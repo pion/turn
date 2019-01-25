@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 )
 
 func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
