@@ -178,14 +178,14 @@ func (a *Allocation) Refresh(lifetime uint32) {
 //  datagram, and the XOR-PEER-ADDRESS attribute is set to the source
 //  transport address of the received UDP datagram.  The Data indication
 //  is then sent on the 5-tuple associated with the allocation.
-func (a *Allocation) packetHandler() {
+func (a *Allocation) packetHandler(m *Manager) {
 	const RtpMTU = 1500
 	buffer := make([]byte, RtpMTU)
 
 	for {
 		n, cm, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
 		if err != nil {
-			if !deleteAllocation(a.fiveTuple) {
+			if !m.DeleteAllocation(a.fiveTuple) {
 				fmt.Println("Failed to remove allocation after relay listener had closed")
 			}
 			return
@@ -193,11 +193,11 @@ func (a *Allocation) packetHandler() {
 
 		if channel := a.GetChannelByAddr(&stun.TransportAddr{IP: cm.Dst, Port: a.RelayAddr.Port}); channel != nil {
 			channelData := make([]byte, 4)
-			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
+			binary.BigEndian.PutUint16(channelData[0:], channel.ID)
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
-			if _, err := a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr()); err != nil {
+			if _, err = a.TurnSocket.WriteTo(channelData, nil, a.fiveTuple.SrcAddr.Addr()); err != nil {
 				fmt.Printf("Failed to send ChannelData from allocation %v %v \n", srcAddr, err)
 			}
 		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {

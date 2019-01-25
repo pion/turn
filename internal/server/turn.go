@@ -1,7 +1,7 @@
 package server
 
 import (
-	"crypto/md5"
+	"crypto/md5" // #nosec
 	"strings"
 
 	"github.com/pions/stun"
@@ -73,6 +73,7 @@ func authenticateRequest(curriedSend curriedSend, m *stun.Message, callingMethod
 			return handleErr(errors.Errorf("No user exists for %s", usernameAttr.Username))
 		}
 
+		/* #nosec */
 		ourKey = md5.Sum([]byte(usernameAttr.Username + ":" + realmAttr.Realm + ":" + password))
 		if err := assertMessageIntegrity(m, messageIntegrityRawAttr, ourKey[:]); err != nil {
 			return handleErr(err)
@@ -86,13 +87,13 @@ func authenticateRequest(curriedSend curriedSend, m *stun.Message, callingMethod
 	}, usernameAttr.Username, nil
 }
 
-func assertDontFragment(curriedSend curriedSend, m *stun.Message, callingMethod stun.Method, messageIntegrity *stun.MessageIntegrity) error {
+func assertDontFragment(curriedSend curriedSend, m *stun.Message, attr stun.Attribute) error {
 	if _, ok := m.GetOneAttribute(stun.AttrDontFragment); ok {
 		err := errors.Errorf("no support for DONT-FRAGMENT")
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
 			&stun.Err420UnknownAttributes,
 			&stun.UnknownAttributes{Attributes: []stun.AttrType{stun.AttrDontFragment}},
-			messageIntegrity,
+			attr,
 		); sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
@@ -124,7 +125,8 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodAllocate, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return err
-	} else if messageIntegrity == nil {
+	}
+	if messageIntegrity == nil {
 		return nil
 	}
 
@@ -139,7 +141,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
-	if allocation := allocation.GetAllocation(fiveTuple); allocation != nil {
+	if allocation := s.manager.GetAllocation(fiveTuple); allocation != nil {
 		return respondWithError(errors.Errorf("Relay already allocated for 5-TUPLE"), messageIntegrity, &stun.Err437AllocationMismatch)
 	}
 
@@ -155,7 +157,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		}
 
 		requestedTransportAttr := &stun.RequestedTransport{}
-		if err := requestedTransportAttr.Unpack(m, requestedTransportRawAttr); err != nil {
+		if err = requestedTransportAttr.Unpack(m, requestedTransportRawAttr); err != nil {
 			return respondWithError(err, messageIntegrity, &stun.Err400BadRequest)
 		}
 	}
@@ -165,7 +167,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    bit set to 1 (see Section 12), then the server treats the DONT-
 	//    FRAGMENT attribute in the Allocate request as an unknown
 	//    comprehension-required attribute.
-	if err := assertDontFragment(curriedSend, m, stun.MethodAllocate, messageIntegrity); err != nil {
+	if err = assertDontFragment(curriedSend, m, messageIntegrity); err != nil {
 		return err
 	}
 
@@ -183,11 +185,11 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 		}
 
 		reservationTokenAttr := &stun.ReservationToken{}
-		if err := reservationTokenAttr.Unpack(m, requestedTransportRawAttr); err != nil {
+		if err = reservationTokenAttr.Unpack(m, requestedTransportRawAttr); err != nil {
 			return respondWithError(err, messageIntegrity, &stun.Err400BadRequest)
 		}
 
-		allocationPort, reservationFound := allocation.GetReservation(reservationTokenAttr.ReservationToken)
+		allocationPort, reservationFound := s.reservationManager.GetReservation(reservationTokenAttr.ReservationToken)
 		if !reservationFound {
 			return respondWithError(errors.Errorf("No reservation found with token %s", reservationTokenAttr.ReservationToken), messageIntegrity, &stun.Err400BadRequest)
 		}
@@ -202,11 +204,12 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	//    error.
 	if evenPortRawAttr, ok := m.GetOneAttribute(stun.AttrEvenPort); ok {
 		evenPortAttr := stun.EvenPort{}
-		if err := evenPortAttr.Unpack(m, evenPortRawAttr); err != nil {
+		if err = evenPortAttr.Unpack(m, evenPortRawAttr); err != nil {
 			return respondWithError(err, messageIntegrity, &stun.Err400BadRequest)
 		}
 
-		randomPort, err := allocation.GetRandomEvenPort()
+		randomPort := 0
+		randomPort, err = allocation.GetRandomEvenPort()
 		if err != nil {
 			return respondWithError(err, messageIntegrity, &stun.Err508InsufficentCapacity)
 		}
@@ -231,12 +234,12 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	lifetimeDuration := defaultLifetime
 	if lifetimeRawAttr, ok := m.GetOneAttribute(stun.AttrLifetime); ok {
 		lifetimeAttr := stun.Lifetime{}
-		if err := lifetimeAttr.Unpack(m, lifetimeRawAttr); err == nil {
+		if err = lifetimeAttr.Unpack(m, lifetimeRawAttr); err == nil {
 			lifetimeDuration = min(lifetimeAttr.Duration, maximumLifetime)
 		}
 	}
 
-	a, err := allocation.CreateAllocation(fiveTuple, s.connection, requestedPort, lifetimeDuration)
+	a, err := s.manager.CreateAllocation(fiveTuple, s.connection, requestedPort, lifetimeDuration)
 	if err != nil {
 		return respondWithError(err, messageIntegrity, &stun.Err508InsufficentCapacity)
 	}
@@ -270,7 +273,7 @@ func (s *Server) handleAllocateRequest(srcAddr *stun.TransportAddr, dstAddr *stu
 	}
 
 	if reservationToken != "" {
-		allocation.CreateReservation(reservationToken, a.RelayAddr.Port)
+		s.reservationManager.CreateReservation(reservationToken, a.RelayAddr.Port)
 		responseAttrs = append(responseAttrs, &stun.ReservationToken{
 			ReservationToken: reservationToken,
 		})
@@ -288,7 +291,7 @@ func (s *Server) handleRefreshRequest(srcAddr *stun.TransportAddr, dstAddr *stun
 		return err
 	}
 
-	a := allocation.GetAllocation(&allocation.FiveTuple{
+	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
 		Protocol: allocation.UDP,
@@ -319,7 +322,7 @@ func (s *Server) handleCreatePermissionRequest(srcAddr *stun.TransportAddr, dstA
 		return stun.BuildAndSend(s.connection, srcAddr, class, method, transactionID, attrs...)
 	}
 
-	a := allocation.GetAllocation(&allocation.FiveTuple{
+	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
 		Protocol: allocation.UDP,
@@ -356,7 +359,7 @@ func (s *Server) handleCreatePermissionRequest(srcAddr *stun.TransportAddr, dstA
 }
 
 func (s *Server) handleSendIndication(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-	a := allocation.GetAllocation(&allocation.FiveTuple{
+	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
 		Protocol: allocation.UDP,
@@ -403,7 +406,7 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 		return err
 	}
 
-	a := allocation.GetAllocation(&allocation.FiveTuple{
+	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
 		Protocol: allocation.UDP,
@@ -422,14 +425,14 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 	channel := stun.ChannelNumber{}
 	peerAddr := stun.XorPeerAddress{}
 	if cn, ok := m.GetOneAttribute(stun.AttrChannelNumber); ok {
-		if err := channel.Unpack(m, cn); err != nil {
+		if err = channel.Unpack(m, cn); err != nil {
 			return errorSend(err, &stun.Err400BadRequest)
 		}
 	} else {
 		return errorSend(errors.Errorf("ChannelBind missing channel attribute"), &stun.Err400BadRequest)
 	}
 	if xpa, ok := m.GetOneAttribute(stun.AttrXORPeerAddress); ok {
-		if err := peerAddr.Unpack(m, xpa); err != nil {
+		if err = peerAddr.Unpack(m, xpa); err != nil {
 			return errorSend(err, &stun.Err400BadRequest)
 		}
 	} else {
@@ -445,7 +448,7 @@ func (s *Server) handleChannelBindRequest(srcAddr *stun.TransportAddr, dstAddr *
 }
 
 func (s *Server) handleChannelData(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, c *stun.ChannelData) error {
-	a := allocation.GetAllocation(&allocation.FiveTuple{
+	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
 		Protocol: allocation.UDP,

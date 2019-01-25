@@ -2,7 +2,7 @@ package server
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/md5" // #nosec
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pions/stun"
+	"github.com/pions/turn/internal/allocation"
 	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
 )
@@ -23,25 +24,28 @@ type AuthHandler func(username string, srcAddr *stun.TransportAddr) (password st
 
 // Server is an instance of the Pion TURN server
 type Server struct {
-	connection  *ipv4.PacketConn
-	packet      []byte
-	realm       string
-	authHandler AuthHandler
+	connection         *ipv4.PacketConn
+	packet             []byte
+	realm              string
+	authHandler        AuthHandler
+	manager            *allocation.Manager
+	reservationManager *allocation.ReservationManager
 }
 
 // NewServer creates the Pion TURN server
 func NewServer(realm string, a AuthHandler) *Server {
 	const maxStunMessageSize = 1500
 	return &Server{
-		packet:      make([]byte, maxStunMessageSize),
-		realm:       realm,
-		authHandler: a,
+		packet:             make([]byte, maxStunMessageSize),
+		realm:              realm,
+		authHandler:        a,
+		manager:            &allocation.Manager{},
+		reservationManager: &allocation.ReservationManager{},
 	}
 }
 
 // Listen starts listening and handling TURN traffic
 func (s *Server) Listen(address string, port int) error {
-
 	listeningAddress := fmt.Sprintf("%s:%d", address, port)
 	c, err := net.ListenPacket("udp4", listeningAddress)
 	if err != nil {
@@ -62,57 +66,90 @@ func (s *Server) Listen(address string, port int) error {
 		if err != nil {
 			return errors.Wrap(err, "failed reading udp addr")
 		}
-		if err := s.handleUDPPacket(srcAddr, &stun.TransportAddr{IP: cm.Dst, Port: port}, s.packet, size); err != nil {
+		if err := s.handleUDPPacket(srcAddr, &stun.TransportAddr{IP: cm.Dst, Port: port}, size); err != nil {
 			log.Println(err)
 		}
 	}
 }
 
-func (s *Server) handleUDPPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, packet []byte, size int) error {
+func (s *Server) handleUDPPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, size int) error {
 	packetType, err := stun.GetPacketType(s.packet[:size])
 	if err != nil {
 		return err
-	} else if packetType == stun.PacketTypeChannelData {
-		c, err := stun.NewChannelData(s.packet[:size])
-		if err != nil {
-			return errors.Wrap(err, "Failed to create channel data from packet")
-		}
-		if err := s.handleChannelData(srcAddr, dstAddr, c); err != nil {
-			return errors.Errorf("unable to handle ChannelData from %v: %v", srcAddr, err)
-		}
-		return nil
 	}
 
+	switch packetType {
+	case stun.PacketTypeChannelData:
+		return s.handleDataPacket(srcAddr, dstAddr, size)
+	default:
+		return s.handleTURNPacket(srcAddr, dstAddr, size)
+	}
+}
+
+func (s *Server) handleDataPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, size int) error {
+	c, err := stun.NewChannelData(s.packet[:size])
+	if err != nil {
+		return errors.Wrap(err, "Failed to create channel data from packet")
+	}
+
+	err = s.handleChannelData(srcAddr, dstAddr, c)
+	if err != nil {
+		return errors.Errorf("unable to handle ChannelData from %v: %v", srcAddr, err)
+	}
+
+	return nil
+}
+
+func (s *Server) handleTURNPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, size int) error {
 	m, err := stun.NewMessage(s.packet[:size])
 	if err != nil {
-		return errors.Wrap(err, "Failed to create stun message from packet")
+		return errors.Wrap(err, "failed to create stun message from packet")
 	}
 
-	if m.Class == stun.ClassIndication && m.Method == stun.MethodSend {
-		if err := s.handleSendIndication(srcAddr, dstAddr, m); err != nil {
-			return errors.Errorf("unable to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+	h, err := s.getMessageHandler(m.Class, m.Method)
+	if err != nil {
+		return errors.Errorf("unhandled STUN packet %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+	}
+
+	err = h(srcAddr, dstAddr, m)
+	if err != nil {
+		return errors.Errorf("failed to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+	}
+
+	return nil
+}
+
+type messageHandler func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error
+
+func (s *Server) getMessageHandler(class stun.MessageClass, method stun.Method) (messageHandler, error) {
+	switch class {
+	case stun.ClassIndication:
+		switch method {
+		case stun.MethodSend:
+			return s.handleSendIndication, nil
+		default:
+			return nil, errors.Errorf("unexpected method: %s", method)
 		}
-		return nil
-	} else if m.Class == stun.ClassRequest {
-		switch m.Method {
+
+	case stun.ClassRequest:
+		switch method {
 		case stun.MethodAllocate:
-			err = s.handleAllocateRequest(srcAddr, dstAddr, m)
+			return s.handleAllocateRequest, nil
 		case stun.MethodRefresh:
-			err = s.handleRefreshRequest(srcAddr, dstAddr, m)
+			return s.handleRefreshRequest, nil
 		case stun.MethodCreatePermission:
-			err = s.handleCreatePermissionRequest(srcAddr, dstAddr, m)
+			return s.handleCreatePermissionRequest, nil
 		case stun.MethodChannelBind:
-			err = s.handleChannelBindRequest(srcAddr, dstAddr, m)
+			return s.handleChannelBindRequest, nil
 		case stun.MethodBinding:
-			err = s.handleBindingRequest(srcAddr, dstAddr, m)
+			return s.handleBindingRequest, nil
+		default:
+			return nil, errors.Errorf("unexpected method: %s", method)
 		}
-		if err != nil {
-			return errors.Errorf("Failed to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
-		}
-		return nil
-	}
 
-	return errors.Errorf("Unhandled STUN packet %v-%v from %v", m.Method, m.Class, srcAddr)
+	default:
+		return nil, errors.Errorf("unexpected class: %s", class)
+	}
 }
 
 // Is there really no stdlib for this?
@@ -134,6 +171,7 @@ func randSeq(n int) string {
 
 // TODO, include time info support stale nonces
 func buildNonce() string {
+	/* #nosec */
 	h := md5.New()
 	now := time.Now().Unix()
 	if _, err := io.WriteString(h, strconv.FormatInt(now, 10)); err != nil {
@@ -158,7 +196,7 @@ func assertMessageIntegrity(m *stun.Message, theirMi *stun.RawAttribute, ourKey 
 		tailLength += 8
 	}
 
-	ourMi, err := stun.MessageIntegrityCalculateHMAC(ourKey[:], rawCopy[:len(rawCopy)-tailLength])
+	ourMi, err := stun.MessageIntegrityCalculateHMAC(ourKey, rawCopy[:len(rawCopy)-tailLength])
 	if err != nil {
 		return err
 	}
