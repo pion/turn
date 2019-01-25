@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 )
 
 type reservation struct {

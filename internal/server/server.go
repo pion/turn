@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pions/pkg/stun"
+	"github.com/pions/stun"
 	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
 )
