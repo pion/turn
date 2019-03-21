@@ -1,14 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"flag"
+	"github.com/pions/stun"
+	"github.com/pions/turn"
+	"gopkg.in/ini.v1"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
-
-	"github.com/pions/stun"
-	"github.com/pions/turn"
 )
 
 type myTurnServer struct {
@@ -19,21 +19,56 @@ func (m *myTurnServer) AuthenticateRequest(username string, srcAddr *stun.Transp
 	if password, ok := m.usersMap[username]; ok {
 		return password, true
 	}
+
 	return "", false
 }
 
-func main() {
-	m := &myTurnServer{usersMap: make(map[string]string)}
+func getIniConf() (port int, users map[string]string, realm string) {
+	config := flag.Lookup("cfg").Value.String()
+	log.Printf("Use config %s", config)
 
-	users := os.Getenv("USERS")
-	if users == "" {
+	cfg, err := ini.Load(config)
+
+	if err != nil {
+		log.Panic("Config file not loaded")
+		os.Exit(1)
+	}
+
+	port, err = cfg.Section("server").Key("port").Int()
+
+	if err != nil {
+		log.Panic("Port is not specified")
+		os.Exit(1)
+	}
+
+	usersString := cfg.Section("users").Key("users").String()
+	realm = cfg.Section("users").Key("realm").String()
+
+	if usersString == "" {
 		log.Panic("USERS is a required environment variable")
 	}
-	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(users, -1) {
-		m.usersMap[kv[1]] = kv[2]
+
+	usersMap := make(map[string]string)
+	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(usersString, -1) {
+		usersMap[kv[1]] = kv[2]
 	}
 
-	realm := os.Getenv("REALM")
+	return port, usersMap, realm
+}
+
+func getEnvConf() (port int, users map[string]string, realm string) {
+	log.Printf("Use environment variables")
+
+	usersMap := make(map[string]string)
+	usersString := os.Getenv("USERS")
+	if usersString == "" {
+		log.Panic("USERS is a required environment variable")
+	}
+	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(usersString, -1) {
+		usersMap[kv[1]] = kv[2]
+	}
+
+	realm = os.Getenv("REALM")
 	if realm == "" {
 		log.Panic("REALM is a required environment variable")
 	}
@@ -42,16 +77,40 @@ func main() {
 	if udpPortStr == "" {
 		log.Panic("UDP_PORT is a required environment variable")
 	}
+
 	udpPort, err := strconv.Atoi(udpPortStr)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	log.Print(fmt.Sprint("Starting on port ", udpPortStr))
+	return udpPort, usersMap, realm
+}
+
+type config func() (port int, users map[string]string, realm string)
+
+func main() {
+	m := &myTurnServer{usersMap: make(map[string]string)}
+
+	var configFn config
+
+	config := flag.String("cfg", "config.ini", "Configuration file")
+	flag.Parse()
+
+	if *config == "" {
+		configFn = getEnvConf
+	} else {
+		configFn = getIniConf
+	}
+
+	port, users, realm := configFn()
+
+	m.usersMap = users
+
+	log.Printf("Starting on port %d", port)
 
 	turn.Start(turn.StartArguments{
 		Server:  m,
 		Realm:   realm,
-		UDPPort: udpPort,
+		UDPPort: port,
 	})
 }

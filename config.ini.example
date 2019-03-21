@@ -1,0 +1,7 @@
+[server]
+port=3478
+
+[users]
+users=local=local
+
+realm=my-server.com
