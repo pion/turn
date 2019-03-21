@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"regexp"
@@ -45,6 +46,8 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
+
+	log.Print(fmt.Sprint("Starting on port ", udpPortStr))
 
 	turn.Start(turn.StartArguments{
 		Server:  m,
