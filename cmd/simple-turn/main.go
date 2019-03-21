@@ -37,20 +37,24 @@ func getIniConf() (port int, users map[string]string, realm string) {
 	port, err = cfg.Section("server").Key("port").Int()
 
 	if err != nil {
-		log.Panic("Port is not specified")
+		log.Panic("Port is not specified in config file")
 		os.Exit(1)
 	}
 
 	usersString := cfg.Section("users").Key("users").String()
-	realm = cfg.Section("users").Key("realm").String()
 
 	if usersString == "" {
-		log.Panic("USERS is a required environment variable")
+		log.Panic("Users is not defined in config file")
 	}
 
 	usersMap := make(map[string]string)
 	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(usersString, -1) {
 		usersMap[kv[1]] = kv[2]
+	}
+
+	realm = cfg.Section("users").Key("realm").String()
+	if realm == "" {
+		log.Panic("Realm is not defined in config file")
 	}
 
 	return port, usersMap, realm
@@ -73,9 +77,9 @@ func getEnvConf() (port int, users map[string]string, realm string) {
 		log.Panic("REALM is a required environment variable")
 	}
 
-	udpPortStr := os.Getenv("UDP_PORT")
+	udpPortStr := os.Getenv("PORT")
 	if udpPortStr == "" {
-		log.Panic("UDP_PORT is a required environment variable")
+		log.Panic("PORT is a required environment variable")
 	}
 
 	udpPort, err := strconv.Atoi(udpPortStr)
