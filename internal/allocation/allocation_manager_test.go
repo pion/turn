@@ -5,8 +5,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pions/stun"
-	"github.com/pions/turn/internal/ipnet"
+	"github.com/pion/stun"
+	"github.com/pion/turn/internal/ipnet"
 )
 
 func TestAllocation(t *testing.T) {

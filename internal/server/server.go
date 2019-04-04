@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pions/stun"
-	"github.com/pions/turn/internal/allocation"
-	"github.com/pions/turn/internal/ipnet"
+	"github.com/pion/stun"
+	"github.com/pion/turn/internal/allocation"
+	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
 )
 

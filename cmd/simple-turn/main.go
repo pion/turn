@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/pions/stun"
-	"github.com/pions/turn"
+	"github.com/pion/stun"
+	"github.com/pion/turn"
 )
 
 type myTurnServer struct {

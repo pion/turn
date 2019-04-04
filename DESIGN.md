@@ -12,7 +12,7 @@ The goal is that anyone should be able to run a TURN server on any platform.
 
 ## Integration first
 pion-turn makes no assumptions about how you authenticate users, how you log, or even your topology! Instead of running a dedicated TURN server you
-can inherit from github.com/pions/turn and set whatever logger you want.
+can inherit from github.com/pion/turn and set whatever logger you want.
 
 ## Embeddable
 You can add this to an existing service. This means all your config files stay homogeneous instead of having the mismatch that makes it harder to manage your services.

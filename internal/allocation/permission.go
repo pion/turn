@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pions/stun"
+	"github.com/pion/stun"
 )
 
 const permissionTimeout = time.Duration(5) * time.Minute

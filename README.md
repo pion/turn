@@ -8,12 +8,12 @@
 <p align="center">
   <a href="https://pion.ly"><img src="https://img.shields.io/badge/pion-turn-gray.svg?longCache=true&colorB=brightgreen" alt="Pion TURN"></a>
   <a href="http://gophers.slack.com/messages/pion"><img src="https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=brightgreen" alt="Slack Widget"></a>
-  <a href="https://waffle.io/pions/webrtc"><img src="https://img.shields.io/badge/pm-waffle-gray.svg?longCache=true&colorB=brightgreen" alt="Waffle board"></a>
+  <a href="https://waffle.io/pion/webrtc"><img src="https://img.shields.io/badge/pm-waffle-gray.svg?longCache=true&colorB=brightgreen" alt="Waffle board"></a>
   <br>
-  <a href="https://travis-ci.org/pions/turn"><img src="https://travis-ci.org/pions/turn.svg?branch=master" alt="Build Status"></a>
-  <a href="https://godoc.org/github.com/pions/turn"><img src="https://godoc.org/github.com/pions/turn?status.svg" alt="GoDoc"></a>
-  <a href="https://coveralls.io/github/pions/turn"><img src="https://coveralls.io/repos/github/pions/turn/badge.svg" alt="Coverage Status"></a>
-  <a href="https://goreportcard.com/report/github.com/pions/turn"><img src="https://goreportcard.com/badge/github.com/pions/turn" alt="Go Report Card"></a>
+  <a href="https://travis-ci.org/pion/turn"><img src="https://travis-ci.org/pion/turn.svg?branch=master" alt="Build Status"></a>
+  <a href="https://godoc.org/github.com/pion/turn"><img src="https://godoc.org/github.com/pion/turn?status.svg" alt="GoDoc"></a>
+  <a href="https://coveralls.io/github/pion/turn"><img src="https://coveralls.io/repos/github/pion/turn/badge.svg" alt="Coverage Status"></a>
+  <a href="https://goreportcard.com/report/github.com/pion/turn"><img src="https://goreportcard.com/badge/github.com/pion/turn" alt="Go Report Card"></a>
   <a href="https://www.codacy.com/app/Sean-Der/turn"><img src="https://api.codacy.com/project/badge/Grade/d53ec6c70576476cb16c140c2964afde" alt="Codacy Badge"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
@@ -30,7 +30,7 @@ custom requirements such as a database proceed to extending.
 
 `simple-turn` is a single static binary, and all config is driven by environment variables. On a fresh Linux AWS instance these are all the steps you would need.
 ```
-$ wget -q https://github.com/pions/turn/releases/download/1.0.3/simple-turn-linux-amd64
+$ wget -q https://github.com/pion/turn/releases/download/1.0.3/simple-turn-linux-amd64
 $ chmod +x simple-turn-linux-amd64
 $ export USERS='user=password foo=bar'
 $ export REALM=my-server.com
@@ -39,7 +39,7 @@ $ ./simple-turn-linux-amd64
 ````
 
 To explain what every step does
-* Download simple-turn for Linux x64, see [release](https://github.com/pions/turn/releases) for other platforms
+* Download simple-turn for Linux x64, see [release](https://github.com/pion/turn/releases) for other platforms
 * Make it executable
 * Configure auth, in the form of `USERNAME=PASSWORD USERNAME=PASSWORD` with no limits
 * Set your realm, this is the public URL or name of your server
@@ -62,22 +62,22 @@ If you are using Windows you would set these values in Powershell by doing. Also
 > $env:UDP_PORT = 3478
 ```
 ### Extending
-See [simple-turn](https://github.com/pions/turn/blob/master/cmd/simple-turn/main.go)
+See [simple-turn](https://github.com/pion/turn/blob/master/cmd/simple-turn/main.go)
 
-pion-turn can be configured by implementing [these callbacks](https://github.com/pions/turn/blob/master/turn.go#L11) and by passing [these arguments](https://github.com/pions/turn/blob/master/turn.go#L11)
+pion-turn can be configured by implementing [these callbacks](https://github.com/pion/turn/blob/master/turn.go#L11) and by passing [these arguments](https://github.com/pion/turn/blob/master/turn.go#L11)
 
 All that `simple-turn` does is take environment variables, and then uses the same API.
 
 
 ### Developing
 For developing a Dockerfile is available with features like hot-reloads, and is meant to be volume mounted.
-Make sure you also have github.com/pions/pkg in your path, or you can exclude the second volume mount.
+Make sure you also have github.com/pion/pkg in your path, or you can exclude the second volume mount.
 
-This is only meant for development, see [demo-conference](https://github.com/pions/demo-conference)
+This is only meant for development, see [demo-conference](https://github.com/pion/demo-conference)
 to see TURN usage as a user.
 ```
 docker build -t turn .
-docker run -v $(pwd):/usr/local/src/github.com/pions/turn -v $(pwd)/../pkg:/usr/local/src/github.com/pions/pkg turn
+docker run -v $(pwd):/usr/local/src/github.com/pion/turn -v $(pwd)/../pkg:/usr/local/src/github.com/pion/pkg turn
 ```
 
 Currently only Linux is supported until Docker supports full (host <-> container) networking on Windows/OSX
