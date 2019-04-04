@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pions/stun"
+	"github.com/pion/stun"
 )
 
 const channelBindTimeout = time.Duration(10) * time.Minute

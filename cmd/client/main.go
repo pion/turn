@@ -6,7 +6,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/pions/turn"
+	"github.com/pion/turn"
 )
 
 func main() {

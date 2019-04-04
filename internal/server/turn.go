@@ -4,10 +4,10 @@ import (
 	"crypto/md5" // #nosec
 	"strings"
 
-	"github.com/pions/stun"
+	"github.com/pion/stun"
 	"github.com/pkg/errors"
 
-	"github.com/pions/turn/internal/allocation"
+	"github.com/pion/turn/internal/allocation"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 
 	"sync"
 
-	"github.com/pions/turn/internal/ipnet"
+	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
 )
 

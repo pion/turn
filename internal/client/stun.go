@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pions/stun"
+	"github.com/pion/stun"
 	"github.com/pkg/errors"
 )
 

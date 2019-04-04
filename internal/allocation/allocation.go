@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pions/stun"
-	"github.com/pions/turn/internal/ipnet"
+	"github.com/pion/stun"
+	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
 )
 
