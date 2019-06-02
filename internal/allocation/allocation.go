@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gortc/turn"
 	"github.com/pion/stun"
 	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
@@ -15,7 +16,7 @@ import (
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
 type Allocation struct {
-	RelayAddr *stun.TransportAddr
+	RelayAddr net.Addr
 	Protocol  Protocol
 
 	TurnSocket  ipnet.PacketConn
@@ -37,7 +38,7 @@ func (a *Allocation) AddPermission(p *Permission) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
 	for _, existingPermission := range a.permissions {
-		if p.Addr.Equal(existingPermission.Addr) {
+		if ipnet.AddrEqual(p.Addr, existingPermission.Addr) {
 			existingPermission.refresh()
 			return
 		}
@@ -48,13 +49,13 @@ func (a *Allocation) AddPermission(p *Permission) {
 	p.start()
 }
 
-// RemovePermission removes the TransportAddr from the allocation's permissions
-func (a *Allocation) RemovePermission(addr *stun.TransportAddr) bool {
+// RemovePermission removes the net.Addr from the allocation's permissions
+func (a *Allocation) RemovePermission(addr net.Addr) bool {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
 
 	for i := len(a.permissions) - 1; i >= 0; i-- {
-		if a.permissions[i].Addr.Equal(addr) {
+		if ipnet.AddrEqual(a.permissions[i].Addr, addr) {
 			a.permissions = append(a.permissions[:i], a.permissions[i+1:]...)
 			return true
 		}
@@ -64,11 +65,11 @@ func (a *Allocation) RemovePermission(addr *stun.TransportAddr) bool {
 }
 
 // GetPermission gets the Permission from the allocation
-func (a *Allocation) GetPermission(addr *stun.TransportAddr) *Permission {
+func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
 	for _, p := range a.permissions {
-		if p.Addr.Equal(addr) {
+		if ipnet.AddrEqual(p.Addr, addr) {
 			return p
 		}
 	}
@@ -134,12 +135,12 @@ func (a *Allocation) GetChannelByID(id uint16) *ChannelBind {
 	return nil
 }
 
-// GetChannelByAddr gets the ChannelBind from this allocation by stun.TransportAddr
-func (a *Allocation) GetChannelByAddr(addr *stun.TransportAddr) *ChannelBind {
+// GetChannelByAddr gets the ChannelBind from this allocation by net.Addr
+func (a *Allocation) GetChannelByAddr(addr net.Addr) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
 	for _, cb := range a.channelBindings {
-		if cb.Peer.Equal(addr) {
+		if ipnet.AddrEqual(cb.Peer, addr) {
 			return cb
 		}
 	}
@@ -191,21 +192,26 @@ func (a *Allocation) packetHandler(m *Manager) {
 			return
 		}
 
-		if channel := a.GetChannelByAddr(&stun.TransportAddr{IP: cm.Dst, Port: a.RelayAddr.Port}); channel != nil {
+		if channel := a.GetChannelByAddr(&net.UDPAddr{IP: cm.Dst, Port: a.RelayAddr.(*net.UDPAddr).Port}); channel != nil {
 			channelData := make([]byte, 4)
 			binary.BigEndian.PutUint16(channelData[0:], channel.ID)
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
-			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr.Addr()); err != nil {
+			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr); err != nil {
 				fmt.Printf("Failed to send ChannelData from allocation %v %v \n", srcAddr, err)
 			}
-		} else if p := a.GetPermission(&stun.TransportAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
-			dataAttr := stun.Data{Data: buffer[:n]}
-			xorPeerAddressAttr := stun.XorPeerAddress{XorAddress: stun.XorAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}}
-			if err = stun.BuildAndSend(a.TurnSocket, a.fiveTuple.SrcAddr, stun.ClassIndication, stun.MethodData, stun.GenerateTransactionID(), &xorPeerAddressAttr, &dataAttr); err != nil {
+		} else if p := a.GetPermission(&net.UDPAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
+			dataAttr := turn.Data(buffer[:n])
+			peerAddressAttr := turn.PeerAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}
+			msg, err := stun.Build(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication), peerAddressAttr, dataAttr)
+			if err != nil {
 				fmt.Printf("Failed to send DataIndication from allocation %v %v \n", srcAddr, err)
 			}
+			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
+				fmt.Printf("Failed to send DataIndication from allocation %v %v \n", srcAddr, err)
+			}
+
 		} else {
 			fmt.Printf("Packet unhandled in relay src %v \n", srcAddr)
 		}

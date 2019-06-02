@@ -1,6 +1,10 @@
 package allocation
 
-import "github.com/pion/stun"
+import (
+	"net"
+
+	"github.com/pion/turn/internal/ipnet"
+)
 
 // Protocol is an enum for relay protocol
 type Protocol int
@@ -19,13 +23,10 @@ const (
 // the server.
 type FiveTuple struct {
 	Protocol
-	SrcAddr *stun.TransportAddr
-	DstAddr *stun.TransportAddr
+	SrcAddr, DstAddr net.Addr
 }
 
 // Equal asserts if two FiveTuples are equal
 func (f *FiveTuple) Equal(b *FiveTuple) bool {
-	return f.SrcAddr.Equal(b.SrcAddr) &&
-		f.DstAddr.Equal(b.DstAddr) &&
-		f.Protocol == b.Protocol
+	return ipnet.AddrEqual(f.SrcAddr, b.SrcAddr) && ipnet.AddrEqual(f.DstAddr, b.DstAddr)
 }

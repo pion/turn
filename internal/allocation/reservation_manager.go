@@ -1,11 +1,10 @@
 package allocation
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/pion/stun"
 )
 
 type reservation struct {
@@ -60,9 +59,9 @@ func GetRandomEvenPort() (int, error) {
 		return 0, err
 	}
 
-	addr, err := stun.NewTransportAddr(listener.LocalAddr())
-	if err != nil {
-		return 0, err
+	addr, ok := listener.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return 0, fmt.Errorf("failed to cast net.Addr to *net.UDPAddr")
 	} else if err := listener.Close(); err != nil {
 		return 0, err
 	} else if addr.Port%2 == 1 {

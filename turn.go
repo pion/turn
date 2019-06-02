@@ -5,14 +5,13 @@ import (
 
 	"net"
 
-	"github.com/pion/stun"
 	"github.com/pion/turn/internal/client"
 	"github.com/pion/turn/internal/server"
 )
 
 // Server is the interface for Pion TURN server callbacks
 type Server interface {
-	AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool)
+	AuthenticateRequest(username string, srcAddr net.Addr) (password string, ok bool)
 }
 
 // Client is the interface for Pion STUN requests

@@ -1,9 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"crypto/md5" // #nosec
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gortc/turn"
 	"github.com/pion/stun"
 	"github.com/pion/turn/internal/allocation"
 	"github.com/pion/turn/internal/ipnet"
@@ -20,7 +19,7 @@ import (
 
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN
 // with custom behavior
-type AuthHandler func(username string, srcAddr *stun.TransportAddr) (password string, ok bool)
+type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bool)
 
 // Server is an instance of the Pion TURN server
 type Server struct {
@@ -64,64 +63,54 @@ func (s *Server) Listen(address string, port int) error {
 			return errors.Wrap(err, "failed to read packet from udp socket")
 		}
 
-		srcAddr, err := stun.NewTransportAddr(addr)
-		if err != nil {
-			return errors.Wrap(err, "failed reading udp addr")
-		}
-		if err := s.handleUDPPacket(srcAddr, &stun.TransportAddr{IP: cm.Dst, Port: port}, size); err != nil {
+		if err := s.handleUDPPacket(addr, &net.UDPAddr{IP: cm.Dst, Port: port}, size); err != nil {
 			log.Println(err)
 		}
 	}
 }
 
-func (s *Server) handleUDPPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, size int) error {
-	packetType, err := stun.GetPacketType(s.packet[:size])
-	if err != nil {
-		return err
+func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, size int) error {
+	if turn.IsChannelData(s.packet[:size]) {
+		return s.handleDataPacket(srcAddr, dstAddr, size)
 	}
 
-	switch packetType {
-	case stun.PacketTypeChannelData:
-		return s.handleDataPacket(srcAddr, dstAddr, size)
-	default:
-		return s.handleTURNPacket(srcAddr, dstAddr, size)
-	}
+	return s.handleTURNPacket(srcAddr, dstAddr, size)
 }
 
-func (s *Server) handleDataPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, size int) error {
-	c, err := stun.NewChannelData(s.packet[:size])
-	if err != nil {
+func (s *Server) handleDataPacket(srcAddr, dstAddr net.Addr, size int) error {
+	c := turn.ChannelData{Raw: s.packet[:size]}
+	if err := c.Decode(); err != nil {
 		return errors.Wrap(err, "Failed to create channel data from packet")
 	}
 
-	err = s.handleChannelData(srcAddr, dstAddr, c)
+	err := s.handleChannelData(srcAddr, dstAddr, &c)
 	if err != nil {
-		return errors.Errorf("unable to handle ChannelData from %v: %v", srcAddr, err)
+		err = errors.Errorf("unable to handle ChannelData from %v: %v", srcAddr, err)
 	}
 
-	return nil
+	return err
 }
 
-func (s *Server) handleTURNPacket(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, size int) error {
-	m, err := stun.NewMessage(s.packet[:size])
-	if err != nil {
+func (s *Server) handleTURNPacket(srcAddr, dstAddr net.Addr, size int) error {
+	m := &stun.Message{Raw: append([]byte{}, s.packet[:size]...)}
+	if err := m.Decode(); err != nil {
 		return errors.Wrap(err, "failed to create stun message from packet")
 	}
 
-	h, err := s.getMessageHandler(m.Class, m.Method)
+	h, err := s.getMessageHandler(m.Type.Class, m.Type.Method)
 	if err != nil {
-		return errors.Errorf("unhandled STUN packet %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+		return errors.Errorf("unhandled STUN packet %v-%v from %v: %v", m.Type.Method, m.Type.Class, srcAddr, err)
 	}
 
 	err = h(srcAddr, dstAddr, m)
 	if err != nil {
-		return errors.Errorf("failed to handle %v-%v from %v: %v", m.Method, m.Class, srcAddr, err)
+		return errors.Errorf("failed to handle %v-%v from %v: %v", m.Type.Method, m.Type.Class, srcAddr, err)
 	}
 
 	return nil
 }
 
-type messageHandler func(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error
+type messageHandler func(srcAddr, dstAddr net.Addr, m *stun.Message) error
 
 func (s *Server) getMessageHandler(class stun.MessageClass, method stun.Method) (messageHandler, error) {
 	switch class {
@@ -154,14 +143,6 @@ func (s *Server) getMessageHandler(class stun.MessageClass, method stun.Method) 
 	}
 }
 
-// Is there really no stdlib for this?
-func min(a, b uint32) uint32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func randSeq(n int) string {
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	b := make([]rune, n)
@@ -185,26 +166,17 @@ func buildNonce() string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func assertMessageIntegrity(m *stun.Message, theirMi *stun.RawAttribute, ourKey []byte) error {
-	// Length to remove when comparing MessageIntegrity (so we can re-compute)
-	tailLength := 24
-	rawCopy := make([]byte, len(m.Raw))
-	copy(rawCopy, m.Raw)
+func assertMessageIntegrity(m *stun.Message, ourKey []byte) error {
+	messageIntegrityAttr := stun.MessageIntegrity(ourKey)
+	return messageIntegrityAttr.Check(m)
+}
 
-	if _, messageIntegrityAttrFound := m.GetOneAttribute(stun.AttrFingerprint); messageIntegrityAttrFound {
-		currLength := binary.BigEndian.Uint16(rawCopy[2:4])
-
-		binary.BigEndian.PutUint16(rawCopy[2:], currLength-8)
-		tailLength += 8
-	}
-
-	ourMi, err := stun.MessageIntegrityCalculateHMAC(ourKey, rawCopy[:len(rawCopy)-tailLength])
+func buildAndSend(conn net.PacketConn, dst net.Addr, attrs ...stun.Setter) error {
+	msg, err := stun.Build(attrs...)
 	if err != nil {
 		return err
 	}
 
-	if !bytes.Equal(ourMi, theirMi.Value) {
-		return errors.Errorf("MessageIntegrity mismatch %x %x", ourKey, theirMi.Value)
-	}
-	return nil
+	_, err = conn.WriteTo(msg.Raw, dst)
+	return err
 }

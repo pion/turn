@@ -2,9 +2,8 @@ package allocation
 
 import (
 	"fmt"
+	"net"
 	"time"
-
-	"github.com/pion/stun"
 )
 
 const channelBindTimeout = time.Duration(10) * time.Minute
@@ -12,7 +11,7 @@ const channelBindTimeout = time.Duration(10) * time.Minute
 // ChannelBind represents a TURN Channel
 // https://tools.ietf.org/html/rfc5766#section-2.5
 type ChannelBind struct {
-	Peer          *stun.TransportAddr
+	Peer          net.Addr
 	ID            uint16
 	allocation    *Allocation
 	lifetimeTimer *time.Timer

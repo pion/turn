@@ -2,9 +2,8 @@ package allocation
 
 import (
 	"fmt"
+	"net"
 	"time"
-
-	"github.com/pion/stun"
 )
 
 const permissionTimeout = time.Duration(5) * time.Minute
@@ -13,7 +12,7 @@ const permissionTimeout = time.Duration(5) * time.Minute
 // filtering mechanism of NATs that comply with [RFC4787].
 // https://tools.ietf.org/html/rfc5766#section-2.3
 type Permission struct {
-	Addr          *stun.TransportAddr
+	Addr          net.Addr
 	allocation    *Allocation
 	lifetimeTimer *time.Timer
 }

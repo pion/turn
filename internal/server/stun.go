@@ -1,18 +1,23 @@
 package server
 
 import (
+	"net"
+
 	"github.com/pion/stun"
+	"github.com/pion/turn/internal/ipnet"
 )
 
-func (s *Server) handleBindingRequest(srcAddr *stun.TransportAddr, dstAddr *stun.TransportAddr, m *stun.Message) error {
-	_ = dstAddr // Silence linter
-	return stun.BuildAndSend(s.connection, srcAddr, stun.ClassSuccessResponse, stun.MethodBinding, m.TransactionID,
-		&stun.XorMappedAddress{
-			XorAddress: stun.XorAddress{
-				IP:   srcAddr.IP,
-				Port: srcAddr.Port,
-			},
+func (s *Server) handleBindingRequest(srcAddr, dstAddr net.Addr, m *stun.Message) error {
+	ip, port, err := ipnet.AddrIPPort(srcAddr)
+	if err != nil {
+		return err
+	}
+
+	return buildAndSend(s.connection, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.BindingSuccess,
+		&stun.XORMappedAddress{
+			IP:   ip,
+			Port: port,
 		},
-		&stun.Fingerprint{},
+		stun.Fingerprint,
 	)
 }

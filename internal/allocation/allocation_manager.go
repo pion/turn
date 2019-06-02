@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/stun"
 	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
 )
@@ -66,11 +65,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.Packet
 		return nil, err
 	}
 	a.RelaySocket = conn
-
-	a.RelayAddr, err = stun.NewTransportAddr(listener.LocalAddr())
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create connection")
-	}
+	a.RelayAddr = listener.LocalAddr()
 
 	a.lifetimeTimer = time.AfterFunc(time.Duration(lifetime)*time.Second, func() {
 		if err := listener.Close(); err != nil {
