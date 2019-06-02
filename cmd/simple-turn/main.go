@@ -2,11 +2,11 @@ package main
 
 import (
 	"log"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
 
-	"github.com/pion/stun"
 	"github.com/pion/turn"
 )
 
@@ -14,7 +14,7 @@ type myTurnServer struct {
 	usersMap map[string]string
 }
 
-func (m *myTurnServer) AuthenticateRequest(username string, srcAddr *stun.TransportAddr) (password string, ok bool) {
+func (m *myTurnServer) AuthenticateRequest(username string, srcAddr net.Addr) (password string, ok bool) {
 	if password, ok := m.usersMap[username]; ok {
 		return password, true
 	}

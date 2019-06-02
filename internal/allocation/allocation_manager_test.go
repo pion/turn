@@ -5,7 +5,6 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pion/stun"
 	"github.com/pion/turn/internal/ipnet"
 )
 
@@ -81,7 +80,7 @@ func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket ipnet.Pa
 func randomFiveTuple() *FiveTuple {
 	/* #nosec */
 	return &FiveTuple{
-		SrcAddr: &stun.TransportAddr{IP: nil, Port: rand.Int()},
-		DstAddr: &stun.TransportAddr{IP: nil, Port: rand.Int()},
+		SrcAddr: &net.UDPAddr{IP: nil, Port: rand.Int()},
+		DstAddr: &net.UDPAddr{IP: nil, Port: rand.Int()},
 	}
 }
