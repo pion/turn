@@ -31,6 +31,8 @@ type Allocation struct {
 	channelBindings     []*ChannelBind
 
 	lifetimeTimer *time.Timer
+
+	closed chan interface{}
 }
 
 // AddPermission adds a new permission to the allocation
@@ -158,6 +160,29 @@ func (a *Allocation) Refresh(lifetime uint32) {
 	if !a.lifetimeTimer.Reset(time.Duration(lifetime) * time.Second) {
 		fmt.Printf("Failed to reset allocation timer for %v \n", a.fiveTuple)
 	}
+}
+
+// Close closes the allocation
+func (a *Allocation) Close() error {
+	select {
+	case <-a.closed:
+		return nil
+	default:
+	}
+	close(a.closed)
+
+	a.permissionsLock.RLock()
+	for _, p := range a.permissions {
+		p.lifetimeTimer.Stop()
+	}
+	a.permissionsLock.RUnlock()
+
+	a.channelBindingsLock.RLock()
+	for _, c := range a.channelBindings {
+		c.lifetimeTimer.Stop()
+	}
+	a.channelBindingsLock.RUnlock()
+	return a.RelaySocket.Close()
 }
 
 //  https://tools.ietf.org/html/rfc5766#section-10.3

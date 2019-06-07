@@ -28,6 +28,20 @@ func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	return nil
 }
 
+// Close closes the manager and closes all allocations it manages
+func (m *Manager) Close() error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for _, a := range m.allocations {
+		if err := a.Close(); err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
 // CreateAllocation creates a new allocation and starts relaying
 func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
 	if fiveTuple == nil {
@@ -52,6 +66,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.Packet
 	a := &Allocation{
 		fiveTuple:  fiveTuple,
 		TurnSocket: turnSocket,
+		closed:     make(chan interface{}),
 	}
 
 	network := "udp4"
@@ -89,19 +104,9 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) bool {
 	for i := len(m.allocations) - 1; i >= 0; i-- {
 		allocation := m.allocations[i]
 		if allocation.fiveTuple.Equal(fiveTuple) {
-
-			allocation.permissionsLock.RLock()
-			for _, p := range allocation.permissions {
-				p.lifetimeTimer.Stop()
+			if err := allocation.Close(); err != nil {
+				fmt.Printf("Failed to close allocation: %v \n", err)
 			}
-			allocation.permissionsLock.RUnlock()
-
-			allocation.channelBindingsLock.RLock()
-			for _, c := range allocation.channelBindings {
-				c.lifetimeTimer.Stop()
-			}
-			allocation.channelBindingsLock.RUnlock()
-
 			m.allocations = append(m.allocations[:i], m.allocations[i+1:]...)
 			return true
 		}

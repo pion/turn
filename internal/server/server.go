@@ -71,6 +71,9 @@ func (s *Server) Listen(address string, port int) error {
 
 // Close closes the connection.
 func (s *Server) Close() error {
+	if err := s.manager.Close(); err != nil {
+		return err
+	}
 	return s.connection.Close()
 }
 
