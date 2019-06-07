@@ -38,6 +38,11 @@ func Start(args StartArguments) {
 	fmt.Println(server.NewServer(args.Realm, args.Server.AuthenticateRequest).Listen("0.0.0.0", args.UDPPort))
 }
 
+// Create creates the Pion TURN server, but does not call listen
+func Create(args StartArguments) *server.Server {
+	return server.NewServer(args.Realm, args.Server.AuthenticateRequest)
+}
+
 // StartClient starts a Pion client
 func StartClient(args ClientArguments) (interface{}, error) {
 	c, err := client.NewClient(args.BindingAddress)

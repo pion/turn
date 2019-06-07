@@ -69,6 +69,11 @@ func (s *Server) Listen(address string, port int) error {
 	}
 }
 
+// Close closes the connection.
+func (s *Server) Close() error {
+	return s.connection.Close()
+}
+
 func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, size int) error {
 	if turn.IsChannelData(s.packet[:size]) {
 		return s.handleDataPacket(srcAddr, dstAddr, size)
