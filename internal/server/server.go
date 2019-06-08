@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gortc/turn"
@@ -23,6 +24,7 @@ type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bo
 
 // Server is an instance of the Pion TURN server
 type Server struct {
+	lock               sync.RWMutex
 	connection         ipnet.PacketConn
 	packet             []byte
 	realm              string
@@ -55,7 +57,9 @@ func (s *Server) Listen(address string, port int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create connection")
 	}
+	s.lock.Lock()
 	s.connection = conn
+	s.lock.Unlock()
 
 	for {
 		size, cm, addr, err := s.connection.ReadFromCM(s.packet)
@@ -71,6 +75,9 @@ func (s *Server) Listen(address string, port int) error {
 
 // Close closes the connection.
 func (s *Server) Close() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	if err := s.manager.Close(); err != nil {
 		return err
 	}
