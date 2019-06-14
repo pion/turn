@@ -204,9 +204,11 @@ func (a *Allocation) Close() error {
 //  datagram, and the XOR-PEER-ADDRESS attribute is set to the source
 //  transport address of the received UDP datagram.  The Data indication
 //  is then sent on the 5-tuple associated with the allocation.
+
+const rtpMTU = 1500
+
 func (a *Allocation) packetHandler(m *Manager) {
-	const RtpMTU = 1500
-	buffer := make([]byte, RtpMTU)
+	buffer := make([]byte, rtpMTU)
 
 	for {
 		n, cm, srcAddr, err := a.RelaySocket.ReadFromCM(buffer)

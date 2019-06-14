@@ -107,6 +107,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Mike Santry](https://github.com/santrym) - *Mascot*
 * [Sean DuBois](https://github.com/Sean-Der) - *Original Author*
 * [winds2016](https://github.com/winds2016) - *Windows platform testing*
+* [songjiayang](https://github.com/songjiayang) - *SongJiaYang*
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
