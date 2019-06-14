@@ -67,9 +67,15 @@ func (s *Server) Listen(address string, port int) error {
 			return errors.Wrap(err, "failed to read packet from udp socket")
 		}
 
-		if err := s.handleUDPPacket(addr, &net.UDPAddr{IP: cm.Dst, Port: port}, size); err != nil {
-			log.Println(err)
-		}
+		// TODO: use sync.pool to reduce memory usage
+		data := make([]byte, size)
+		copy(data, s.packet[:size])
+
+		go func() {
+			if err := s.handleUDPPacket(addr, &net.UDPAddr{IP: cm.Dst, Port: port}, data); err != nil {
+				log.Println(err)
+			}
+		}()
 	}
 }
 
@@ -84,16 +90,16 @@ func (s *Server) Close() error {
 	return s.connection.Close()
 }
 
-func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, size int) error {
-	if turn.IsChannelData(s.packet[:size]) {
-		return s.handleDataPacket(srcAddr, dstAddr, size)
+func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, data []byte) error {
+	if turn.IsChannelData(data) {
+		return s.handleDataPacket(srcAddr, dstAddr, data)
 	}
 
-	return s.handleTURNPacket(srcAddr, dstAddr, size)
+	return s.handleTURNPacket(srcAddr, dstAddr, data)
 }
 
-func (s *Server) handleDataPacket(srcAddr, dstAddr net.Addr, size int) error {
-	c := turn.ChannelData{Raw: s.packet[:size]}
+func (s *Server) handleDataPacket(srcAddr, dstAddr net.Addr, data []byte) error {
+	c := turn.ChannelData{Raw: data}
 	if err := c.Decode(); err != nil {
 		return errors.Wrap(err, "Failed to create channel data from packet")
 	}
@@ -106,8 +112,8 @@ func (s *Server) handleDataPacket(srcAddr, dstAddr net.Addr, size int) error {
 	return err
 }
 
-func (s *Server) handleTURNPacket(srcAddr, dstAddr net.Addr, size int) error {
-	m := &stun.Message{Raw: append([]byte{}, s.packet[:size]...)}
+func (s *Server) handleTURNPacket(srcAddr, dstAddr net.Addr, data []byte) error {
+	m := &stun.Message{Raw: data}
 	if err := m.Decode(); err != nil {
 		return errors.Wrap(err, "failed to create stun message from packet")
 	}
