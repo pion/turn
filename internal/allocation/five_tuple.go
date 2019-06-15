@@ -7,12 +7,12 @@ import (
 )
 
 // Protocol is an enum for relay protocol
-type Protocol int
+type Protocol uint8
 
 // Network protocols for relay
 const (
 	UDP Protocol = iota
-	TCP Protocol = iota
+	TCP
 )
 
 // FiveTuple is the combination (client IP address and port, server IP
@@ -28,5 +28,5 @@ type FiveTuple struct {
 
 // Equal asserts if two FiveTuples are equal
 func (f *FiveTuple) Equal(b *FiveTuple) bool {
-	return ipnet.AddrEqual(f.SrcAddr, b.SrcAddr) && ipnet.AddrEqual(f.DstAddr, b.DstAddr)
+	return f.Protocol == b.Protocol && ipnet.AddrEqual(f.SrcAddr, b.SrcAddr) && ipnet.AddrEqual(f.DstAddr, b.DstAddr)
 }
