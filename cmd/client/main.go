@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/pion/logging"
 	"github.com/pion/turn"
 )
 
@@ -19,13 +20,15 @@ func main() {
 		panic(errors.New("failed to parse host IP"))
 	}
 
-	args := turn.ClientArguments{
-		BindingAddress: "0.0.0.0:0",
-		ServerIP:       ip,
-		ServerPort:     *port,
+	c, err := turn.NewClient(&turn.ClientConfig{
+		ListeningAddress: "0.0.0.0:0",
+		LoggerFactory:    logging.NewDefaultLoggerFactory(),
+	})
+	if err != nil {
+		panic(err)
 	}
 
-	resp, err := turn.StartClient(args)
+	resp, err := c.SendSTUNRequest(ip, *port)
 	if err != nil {
 		panic(err)
 	}

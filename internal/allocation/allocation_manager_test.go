@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gortc/turn"
+	"github.com/pion/logging"
 	"github.com/pion/turn/internal/ipnet"
 )
 
@@ -40,7 +41,9 @@ func TestAllocation(t *testing.T) {
 
 // test invalid Allocation creations
 func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
-	m := &Manager{}
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	config := &ManagerConfig{LeveledLogger: loggerFactory.NewLogger("test")}
+	m := NewManager(config)
 	if a, err := m.CreateAllocation(nil, turnSocket, 0, turn.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
 	}
@@ -54,7 +57,9 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 
 // test valid Allocation creations
 func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
-	m := &Manager{}
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	config := &ManagerConfig{LeveledLogger: loggerFactory.NewLogger("test")}
+	m := NewManager(config)
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, turn.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
@@ -67,7 +72,9 @@ func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 
 // test that two allocations can't be created with the same FiveTuple
 func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket ipnet.PacketConn) {
-	m := &Manager{}
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	config := &ManagerConfig{LeveledLogger: loggerFactory.NewLogger("test")}
+	m := NewManager(config)
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, turn.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)

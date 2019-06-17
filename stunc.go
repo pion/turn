@@ -1,4 +1,4 @@
-package client
+package turn
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (interface{}, 
 	}
 
 	packet := make([]byte, 1500)
-	size, cm, addr, err := c.conn.ReadFromCM(packet)
+	size, addr, err := c.conn.ReadFrom(packet)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read packet from udp socket")
 	}
@@ -33,7 +33,7 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (interface{}, 
 		return nil, err
 	}
 
-	return fmt.Sprintf("pkt_size=%d dst_ip=%s src_addr=%s refl_addr=%s:%d", size, cm.Dst, addr, reflAddr.IP, reflAddr.Port), nil
+	return fmt.Sprintf("pkt_size=%d src_addr=%s refl_addr=%s:%d", size, addr, reflAddr.IP, reflAddr.Port), nil
 }
 
 func sendStunRequest(conn net.PacketConn, serverIP net.IP, serverPort int) error {
