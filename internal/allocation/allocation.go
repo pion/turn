@@ -2,12 +2,12 @@ package allocation
 
 import (
 	"encoding/binary"
-	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/gortc/turn"
+	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
@@ -16,23 +16,18 @@ import (
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
 type Allocation struct {
-	RelayAddr net.Addr
-	Protocol  Protocol
-
-	TurnSocket  ipnet.PacketConn
-	RelaySocket ipnet.PacketConn
-
-	fiveTuple *FiveTuple
-
-	permissionsLock sync.RWMutex
-	permissions     []*Permission
-
+	RelayAddr           net.Addr
+	Protocol            Protocol
+	TurnSocket          net.PacketConn
+	RelaySocket         net.PacketConn
+	fiveTuple           *FiveTuple
+	permissionsLock     sync.RWMutex
+	permissions         []*Permission
 	channelBindingsLock sync.RWMutex
 	channelBindings     []*ChannelBind
-
-	lifetimeTimer *time.Timer
-
-	closed chan interface{}
+	lifetimeTimer       *time.Timer
+	closed              chan interface{}
+	log                 logging.LeveledLogger
 }
 
 // AddPermission adds a new permission to the allocation
@@ -99,12 +94,12 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 		c.start(lifetime)
 
 		// Channel binds also refresh permissions.
-		a.AddPermission(&Permission{Addr: c.Peer})
+		a.AddPermission(NewPermission(c.Peer, a.log))
 	} else {
 		channelByID.refresh(lifetime)
 
 		// Channel binds also refresh permissions.
-		a.AddPermission(&Permission{Addr: channelByID.Peer})
+		a.AddPermission(NewPermission(channelByID.Peer, a.log))
 	}
 
 	return nil
@@ -153,12 +148,12 @@ func (a *Allocation) GetChannelByAddr(addr net.Addr) *ChannelBind {
 func (a *Allocation) Refresh(lifetime time.Duration) {
 	if lifetime == 0 {
 		if !a.lifetimeTimer.Stop() {
-			fmt.Printf("Failed to stop allocation timer for %v \n", a.fiveTuple)
+			a.log.Errorf("Failed to stop allocation timer for %v", a.fiveTuple)
 		}
 		return
 	}
 	if !a.lifetimeTimer.Reset(lifetime) {
-		fmt.Printf("Failed to reset allocation timer for %v \n", a.fiveTuple)
+		a.log.Errorf("Failed to reset allocation timer for %v", a.fiveTuple)
 	}
 }
 
@@ -212,36 +207,36 @@ func (a *Allocation) packetHandler(m *Manager) {
 	buffer := make([]byte, rtpMTU)
 
 	for {
-		n, cm, srcAddr, err := a.RelaySocket.ReadFromCM(buffer)
+		n, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
 		if err != nil {
 			if !m.DeleteAllocation(a.fiveTuple) {
-				fmt.Println("Failed to remove allocation after relay listener had closed")
+				a.log.Error("Failed to remove allocation after relay listener had closed")
 			}
 			return
 		}
 
-		if channel := a.GetChannelByAddr(&net.UDPAddr{IP: cm.Dst, Port: a.RelayAddr.(*net.UDPAddr).Port}); channel != nil {
+		if channel := a.GetChannelByAddr(a.RelaySocket.LocalAddr()); channel != nil {
 			channelData := make([]byte, 4)
 			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
 			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr); err != nil {
-				fmt.Printf("Failed to send ChannelData from allocation %v %v \n", srcAddr, err)
+				a.log.Errorf("Failed to send ChannelData from allocation %v %v", srcAddr, err)
 			}
 		} else if p := a.GetPermission(&net.UDPAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
 			dataAttr := turn.Data(buffer[:n])
 			peerAddressAttr := turn.PeerAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}
 			msg, err := stun.Build(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication), peerAddressAttr, dataAttr)
 			if err != nil {
-				fmt.Printf("Failed to send DataIndication from allocation %v %v \n", srcAddr, err)
+				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
-				fmt.Printf("Failed to send DataIndication from allocation %v %v \n", srcAddr, err)
+				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
 
 		} else {
-			fmt.Printf("Packet unhandled in relay src %v \n", srcAddr)
+			a.log.Errorf("Packet unhandled in relay src %v", srcAddr)
 		}
 	}
 

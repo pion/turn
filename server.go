@@ -1,10 +1,9 @@
-package server
+package turn
 
 import (
 	"crypto/md5" // #nosec
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -12,9 +11,10 @@ import (
 	"time"
 
 	"github.com/gortc/turn"
+	"github.com/pion/logging"
 	"github.com/pion/stun"
+	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/internal/allocation"
-	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
 )
 
@@ -22,29 +22,56 @@ import (
 // with custom behavior
 type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bool)
 
+// ServerConfig is a bag of config parameters for Server.
+type ServerConfig struct {
+	Realm              string
+	AuthHandler        AuthHandler
+	ChannelBindTimeout time.Duration
+	LoggerFactory      logging.LoggerFactory
+	Net                *vnet.Net
+}
+
 // Server is an instance of the Pion TURN server
 type Server struct {
 	lock               sync.RWMutex
-	connection         ipnet.PacketConn
+	connection         net.PacketConn
 	packet             []byte
 	realm              string
 	authHandler        AuthHandler
 	manager            *allocation.Manager
 	reservationManager *allocation.ReservationManager
 	channelBindTimeout time.Duration
+	log                logging.LeveledLogger
+	net                *vnet.Net
 }
 
 const maxStunMessageSize = 1500
 
 // NewServer creates the Pion TURN server
-func NewServer(realm string, channelBindTimeout time.Duration, a AuthHandler) *Server {
+func NewServer(config *ServerConfig) *Server {
+	const maxStunMessageSize = 1500
+	log := config.LoggerFactory.NewLogger("turn")
+
+	if config.Net == nil {
+		config.Net = vnet.NewNet(nil) // defaults to native operation
+	} else {
+		log.Warn("vnet is enabled")
+	}
+
+	manager := allocation.NewManager(&allocation.ManagerConfig{
+		LeveledLogger: log,
+		Net:           config.Net,
+	})
+
 	return &Server{
 		packet:             make([]byte, maxStunMessageSize),
-		realm:              realm,
-		authHandler:        a,
-		manager:            &allocation.Manager{},
+		realm:              config.Realm,
+		authHandler:        config.AuthHandler,
+		manager:            manager,
 		reservationManager: &allocation.ReservationManager{},
-		channelBindTimeout: channelBindTimeout,
+		channelBindTimeout: config.ChannelBindTimeout,
+		log:                log,
+		net:                config.Net,
 	}
 }
 
@@ -52,26 +79,26 @@ func NewServer(realm string, channelBindTimeout time.Duration, a AuthHandler) *S
 func (s *Server) Listen(address string, port int) error {
 	listeningAddress := fmt.Sprintf("%s:%d", address, port)
 	network := "udp4"
-	c, err := net.ListenPacket(network, listeningAddress)
+	conn, err := s.net.ListenPacket(network, listeningAddress)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Failed to listen on %s", listeningAddress))
 	}
-	conn, err := ipnet.NewPacketConn(network, c)
-	if err != nil {
-		return errors.Wrap(err, "failed to create connection")
-	}
+
+	laddr := conn.LocalAddr()
+	s.log.Infof("Listening on %s:%s", laddr.Network(), laddr.String())
+
 	s.lock.Lock()
 	s.connection = conn
 	s.lock.Unlock()
 
 	for {
-		size, cm, addr, err := s.connection.ReadFromCM(s.packet)
+		size, addr, err := s.connection.ReadFrom(s.packet)
 		if err != nil {
 			return errors.Wrap(err, "failed to read packet from udp socket")
 		}
 
-		if err := s.handleUDPPacket(addr, &net.UDPAddr{IP: cm.Dst, Port: port}, size); err != nil {
-			log.Println(err)
+		if err := s.handleUDPPacket(addr, conn.LocalAddr(), size); err != nil {
+			s.log.Error(err.Error())
 		}
 	}
 }
@@ -88,6 +115,11 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, size int) error {
+	s.log.Debugf("received %d bytes of udp from %s on %s",
+		size,
+		srcAddr.String(),
+		dstAddr.String(),
+	)
 	if turn.IsChannelData(s.packet[:size]) {
 		return s.handleDataPacket(srcAddr, dstAddr, size)
 	}
@@ -171,17 +203,17 @@ func randSeq(n int) string {
 }
 
 // TODO, include time info support stale nonces
-func buildNonce() string {
+func buildNonce() (string, error) {
 	/* #nosec */
 	h := md5.New()
 	now := time.Now().Unix()
 	if _, err := io.WriteString(h, strconv.FormatInt(now, 10)); err != nil {
-		fmt.Printf("Failed generating nonce %v \n", err)
+		return "", errors.Wrap(err, fmt.Sprintf("Failed generating nonce %v \n", err))
 	}
 	if _, err := io.WriteString(h, strconv.FormatInt(rand.Int63(), 10)); err != nil {
-		fmt.Printf("Failed generating nonce %v \n", err)
+		return "", errors.Wrap(err, fmt.Sprintf("Failed generating nonce %v \n", err))
 	}
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 func assertMessageIntegrity(m *stun.Message, ourKey []byte) error {

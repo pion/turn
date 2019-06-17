@@ -1,4 +1,4 @@
-package server
+package turn
 
 import (
 	"net"

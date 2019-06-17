@@ -1,9 +1,10 @@
 package allocation
 
 import (
-	"fmt"
 	"net"
 	"time"
+
+	"github.com/pion/logging"
 )
 
 const permissionTimeout = time.Duration(5) * time.Minute
@@ -15,18 +16,27 @@ type Permission struct {
 	Addr          net.Addr
 	allocation    *Allocation
 	lifetimeTimer *time.Timer
+	log           logging.LeveledLogger
+}
+
+// NewPermission create a new Permission
+func NewPermission(addr net.Addr, log logging.LeveledLogger) *Permission {
+	return &Permission{
+		Addr: addr,
+		log:  log,
+	}
 }
 
 func (p *Permission) start() {
 	p.lifetimeTimer = time.AfterFunc(permissionTimeout, func() {
 		if !p.allocation.RemovePermission(p.Addr) {
-			fmt.Printf("Failed to remove permission for %v %v \n", p.Addr, p.allocation.fiveTuple)
+			p.log.Errorf("Failed to remove permission for %v %v", p.Addr, p.allocation.fiveTuple)
 		}
 	})
 }
 
 func (p *Permission) refresh() {
 	if !p.lifetimeTimer.Reset(permissionTimeout) {
-		fmt.Printf("Failed to reset permission timer for %v %v \n", p.Addr, p.allocation.fiveTuple)
+		p.log.Errorf("Failed to reset permission timer for %v %v", p.Addr, p.allocation.fiveTuple)
 	}
 }

@@ -6,14 +6,34 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/turn/internal/ipnet"
+	"github.com/pion/logging"
+	"github.com/pion/transport/vnet"
 	"github.com/pkg/errors"
 )
+
+// ManagerConfig a bag of config params for Manager.
+type ManagerConfig struct {
+	LeveledLogger logging.LeveledLogger
+	Net           *vnet.Net
+}
 
 // Manager is used to hold active allocations
 type Manager struct {
 	lock        sync.RWMutex
 	allocations []*Allocation
+	log         logging.LeveledLogger
+	net         *vnet.Net
+}
+
+// NewManager creates a new instance of Manager.
+func NewManager(config *ManagerConfig) *Manager {
+	if config.Net == nil {
+		config.Net = vnet.NewNet(nil) // defaults to native operation
+	}
+	return &Manager{
+		log: config.LeveledLogger,
+		net: config.Net,
+	}
 }
 
 // GetAllocation fetches the allocation matching the passed FiveTuple
@@ -43,7 +63,7 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
 	}
@@ -67,24 +87,21 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.Packet
 		fiveTuple:  fiveTuple,
 		TurnSocket: turnSocket,
 		closed:     make(chan interface{}),
+		log:        m.log,
 	}
 
 	network := "udp4"
-	listener, err := net.ListenPacket(network, fmt.Sprintf("0.0.0.0:%d", requestedPort))
+	conn, err := m.net.ListenPacket(network, fmt.Sprintf("0.0.0.0:%d", requestedPort))
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := ipnet.NewPacketConn(network, listener)
-	if err != nil {
-		return nil, err
-	}
 	a.RelaySocket = conn
-	a.RelayAddr = listener.LocalAddr()
+	a.RelayAddr = conn.LocalAddr()
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
 		if err := listener.Close(); err != nil {
-			fmt.Printf("Failed to close listener for %v \n", a.fiveTuple)
+			a.log.Errorf("Failed to close listener for %v", a.fiveTuple)
 		}
 	})
 
@@ -105,7 +122,7 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) bool {
 		allocation := m.allocations[i]
 		if allocation.fiveTuple.Equal(fiveTuple) {
 			if err := allocation.Close(); err != nil {
-				fmt.Printf("Failed to close allocation: %v \n", err)
+				m.log.Errorf("Failed to close allocation: %v", err)
 			}
 			m.allocations = append(m.allocations[:i], m.allocations[i+1:]...)
 			return true
