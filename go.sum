@@ -1,7 +1,5 @@
-github.com/gortc/turn v0.7.1 h1:+DKoYXx8d2syTplmZ0Q3BaoTKsgClkoUzT2HpoAeK1c=
-github.com/gortc/turn v0.7.1/go.mod h1:3FZ+LvCZKCKu6YYgwuYPqEi3FqCtdjfSFnFqVQNwfjk=
-github.com/pion/stun v0.3.0 h1:hKadT0I+ijxKkVXqU+rPHKLt+Sw6dQ8D+HhvuoYMoxQ=
-github.com/pion/stun v0.3.0/go.mod h1:xrCld6XM+6GWDZdvjPlLMsTU21rNxnO6UO8XsAvHr/M=
+github.com/gortc/turn v0.8.0 h1:WWQi1jkoPmc2E7qgUMcZleveKikT9Ksi3QGIl8ZtY3Q=
+github.com/gortc/turn v0.8.0/go.mod h1:gvguwaGAFyv5/9KrcW9MkCgHALYD+e99mSM7pSCYYho=
 github.com/pion/stun v0.3.1 h1:d09JJzOmOS8ZzIp8NppCMgrxGZpJ4Ix8qirfNYyI3BA=
 github.com/pion/stun v0.3.1/go.mod h1:xrCld6XM+6GWDZdvjPlLMsTU21rNxnO6UO8XsAvHr/M=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
