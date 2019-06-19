@@ -80,7 +80,7 @@ func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 
 // AddChannelBind adds a new ChannelBind to the allocation, it also updates the
 // permissions needed for this ChannelBind
-func (a *Allocation) AddChannelBind(c *ChannelBind) error {
+func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) error {
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel id.
 	channelByID := a.GetChannelByID(c.ID)
@@ -96,12 +96,12 @@ func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 
 		c.allocation = a
 		a.channelBindings = append(a.channelBindings, c)
-		c.start()
+		c.start(lifetime)
 
 		// Channel binds also refresh permissions.
 		a.AddPermission(&Permission{Addr: c.Peer})
 	} else {
-		channelByID.refresh()
+		channelByID.refresh(lifetime)
 
 		// Channel binds also refresh permissions.
 		a.AddPermission(&Permission{Addr: channelByID.Peer})
@@ -111,7 +111,7 @@ func (a *Allocation) AddChannelBind(c *ChannelBind) error {
 }
 
 // RemoveChannelBind removes the ChannelBind from this allocation by id
-func (a *Allocation) RemoveChannelBind(id uint16) bool {
+func (a *Allocation) RemoveChannelBind(id turn.ChannelNumber) bool {
 	a.channelBindingsLock.Lock()
 	defer a.channelBindingsLock.Unlock()
 
@@ -126,7 +126,7 @@ func (a *Allocation) RemoveChannelBind(id uint16) bool {
 }
 
 // GetChannelByID gets the ChannelBind from this allocation by id
-func (a *Allocation) GetChannelByID(id uint16) *ChannelBind {
+func (a *Allocation) GetChannelByID(id turn.ChannelNumber) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
 	for _, cb := range a.channelBindings {
@@ -221,7 +221,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 
 		if channel := a.GetChannelByAddr(&net.UDPAddr{IP: cm.Dst, Port: a.RelayAddr.(*net.UDPAddr).Port}); channel != nil {
 			channelData := make([]byte, 4)
-			binary.BigEndian.PutUint16(channelData[0:], channel.ID)
+			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 

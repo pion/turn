@@ -408,12 +408,16 @@ func (s *Server) handleChannelBindRequest(srcAddr, dstAddr net.Addr, m *stun.Mes
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
+	if !channel.Valid() {
+		return errorSend(err, stun.CodeBadRequest)
+	}
+
 	peerAddr := turn.PeerAddress{}
 	if err = peerAddr.GetFrom(m); err != nil {
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
-	err = a.AddChannelBind(&allocation.ChannelBind{ID: uint16(channel), Peer: &net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port}})
+	err = a.AddChannelBind(&allocation.ChannelBind{ID: channel, Peer: &net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port}}, s.channelBindTimeout)
 	if err != nil {
 		return errorSend(err, stun.CodeBadRequest)
 	}
@@ -431,7 +435,7 @@ func (s *Server) handleChannelData(srcAddr, dstAddr net.Addr, c *turn.ChannelDat
 		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
 
-	channel := a.GetChannelByID(uint16(c.Number))
+	channel := a.GetChannelByID(c.Number)
 	if channel == nil {
 		return errors.Errorf("No channel bind found for %x \n", uint16(c.Number))
 	}

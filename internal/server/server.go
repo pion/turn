@@ -31,10 +31,11 @@ type Server struct {
 	authHandler        AuthHandler
 	manager            *allocation.Manager
 	reservationManager *allocation.ReservationManager
+	channelBindTimeout time.Duration
 }
 
 // NewServer creates the Pion TURN server
-func NewServer(realm string, a AuthHandler) *Server {
+func NewServer(realm string, channelBindTimeout time.Duration, a AuthHandler) *Server {
 	const maxStunMessageSize = 1500
 	return &Server{
 		packet:             make([]byte, maxStunMessageSize),
@@ -42,6 +43,7 @@ func NewServer(realm string, a AuthHandler) *Server {
 		authHandler:        a,
 		manager:            &allocation.Manager{},
 		reservationManager: &allocation.ReservationManager{},
+		channelBindTimeout: channelBindTimeout,
 	}
 }
 

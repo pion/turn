@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/pion/turn"
 )
@@ -46,9 +47,21 @@ func main() {
 		log.Panic(err)
 	}
 
-	turn.Start(turn.StartArguments{
+	args := turn.StartArguments{
 		Server:  m,
 		Realm:   realm,
 		UDPPort: udpPort,
-	})
+	}
+
+	channelBindTimeoutStr := os.Getenv("CHANNEL_BIND_TIMEOUT")
+	if channelBindTimeoutStr != "" {
+		channelBindTimeout, err := time.ParseDuration(channelBindTimeoutStr)
+		if err != nil {
+			log.Panicf("CHANNEL_BIND_TIMEOUT=%s is an invalid time Duration", channelBindTimeoutStr)
+		}
+
+		args.ChannelBindTimeout = channelBindTimeout
+	}
+
+	turn.Start(args)
 }
