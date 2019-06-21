@@ -150,14 +150,14 @@ func (a *Allocation) GetChannelByAddr(addr net.Addr) *ChannelBind {
 }
 
 // Refresh updates the allocations lifetime
-func (a *Allocation) Refresh(lifetime uint32) {
+func (a *Allocation) Refresh(lifetime time.Duration) {
 	if lifetime == 0 {
 		if !a.lifetimeTimer.Stop() {
 			fmt.Printf("Failed to stop allocation timer for %v \n", a.fiveTuple)
 		}
 		return
 	}
-	if !a.lifetimeTimer.Reset(time.Duration(lifetime) * time.Second) {
+	if !a.lifetimeTimer.Reset(lifetime) {
 		fmt.Printf("Failed to reset allocation timer for %v \n", a.fiveTuple)
 	}
 }
@@ -182,6 +182,7 @@ func (a *Allocation) Close() error {
 		c.lifetimeTimer.Stop()
 	}
 	a.channelBindingsLock.RUnlock()
+
 	return a.RelaySocket.Close()
 }
 

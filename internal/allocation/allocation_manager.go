@@ -43,7 +43,7 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.PacketConn, requestedPort int, lifetime uint32) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
 	}
@@ -82,7 +82,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.Packet
 	a.RelaySocket = conn
 	a.RelayAddr = listener.LocalAddr()
 
-	a.lifetimeTimer = time.AfterFunc(time.Duration(lifetime)*time.Second, func() {
+	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
 		if err := listener.Close(); err != nil {
 			fmt.Printf("Failed to close listener for %v \n", a.fiveTuple)
 		}
