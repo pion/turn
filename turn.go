@@ -92,9 +92,11 @@ func assertDontFragment(curriedSend curriedSend, m *stun.Message, attr stun.Sett
 }
 
 // https://tools.ietf.org/html/rfc5766#section-6.2
-func (s *Server) handleAllocateRequest(srcAddr, dstAddr net.Addr, m *stun.Message) error {
+// caller must hold the mutex
+func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(s.connection, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
 	}
 	respondWithError := func(err error, messageIntegrity stun.MessageIntegrity, errorCode stun.ErrorCode) error {
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
@@ -210,7 +212,7 @@ func (s *Server) handleAllocateRequest(srcAddr, dstAddr net.Addr, m *stun.Messag
 	// Check current usage vs redis usage of other servers
 	// if bad, redirect { stun.AttrErrorCode, 300 }
 	lifetimeDuration := allocationLifeTime(m)
-	a, err := s.manager.CreateAllocation(fiveTuple, s.connection, requestedPort, lifetimeDuration)
+	a, err := s.manager.CreateAllocation(fiveTuple, conn, requestedPort, lifetimeDuration)
 	if err != nil {
 		return respondWithError(err, messageIntegrity, stun.CodeInsufficientCapacity)
 	}
@@ -263,9 +265,11 @@ func (s *Server) handleAllocateRequest(srcAddr, dstAddr net.Addr, m *stun.Messag
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodAllocate, m.TransactionID, append(responseAttrs, messageIntegrity)...)
 }
 
-func (s *Server) handleRefreshRequest(srcAddr, dstAddr net.Addr, m *stun.Message) error {
+// caller must hold the mutex
+func (s *Server) handleRefreshRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(s.connection, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
 	}
 	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm, s.authHandler, srcAddr)
 	if err != nil {
@@ -292,9 +296,11 @@ func (s *Server) handleRefreshRequest(srcAddr, dstAddr net.Addr, m *stun.Message
 	)
 }
 
-func (s *Server) handleCreatePermissionRequest(srcAddr, dstAddr net.Addr, m *stun.Message) error {
+// caller must hold the mutex
+func (s *Server) handleCreatePermissionRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(s.connection, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
 	}
 
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
@@ -340,7 +346,9 @@ func (s *Server) handleCreatePermissionRequest(srcAddr, dstAddr net.Addr, m *stu
 		messageIntegrity)
 }
 
-func (s *Server) handleSendIndication(srcAddr, dstAddr net.Addr, m *stun.Message) error {
+// caller must hold the mutex
+func (s *Server) handleSendIndication(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	dstAddr := conn.LocalAddr()
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
@@ -372,9 +380,11 @@ func (s *Server) handleSendIndication(srcAddr, dstAddr net.Addr, m *stun.Message
 	return err
 }
 
-func (s *Server) handleChannelBindRequest(srcAddr, dstAddr net.Addr, m *stun.Message) error {
+// caller must hold the mutex
+func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	dstAddr := conn.LocalAddr()
 	errorSend := func(err error, attrs ...stun.Setter) error {
-		sendErr := buildAndSend(s.connection, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: m.TransactionID}, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse)}, attrs...)...)
+		sendErr := buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: m.TransactionID}, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse)}, attrs...)...)
 		if sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
@@ -391,7 +401,7 @@ func (s *Server) handleChannelBindRequest(srcAddr, dstAddr net.Addr, m *stun.Mes
 	}
 
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(s.connection, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: m.TransactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: m.TransactionID}, stun.NewType(method, class)}, attrs...)...)
 	}, m, stun.MethodChannelBind, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return errorSend(err, stun.CodeBadRequest)
@@ -416,10 +426,11 @@ func (s *Server) handleChannelBindRequest(srcAddr, dstAddr net.Addr, m *stun.Mes
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
-	return buildAndSend(s.connection, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.BindingSuccess, messageIntegrity)
+	return buildAndSend(conn, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.BindingSuccess, messageIntegrity)
 }
 
-func (s *Server) handleChannelData(srcAddr, dstAddr net.Addr, c *turn.ChannelData) error {
+func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *turn.ChannelData) error {
+	dstAddr := conn.LocalAddr()
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
 		DstAddr:  dstAddr,
