@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	maximumLifetime = uint32(3600) // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 recommendation
+	maximumLifetime = time.Hour // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
 )
 
 type curriedSend func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error
@@ -204,15 +204,8 @@ func (s *Server) handleAllocateRequest(srcAddr, dstAddr net.Addr, m *stun.Messag
 	//    attribute follow the specification in [RFC5389].
 	// Check current usage vs redis usage of other servers
 	// if bad, redirect { stun.AttrErrorCode, 300 }
-	lifetimeDuration := turn.DefaultLifetime
-	var lifetime turn.Lifetime
-	if err = lifetime.GetFrom(m); err == nil {
-		if uint32(lifetime.Duration/time.Second) < maximumLifetime {
-			lifetimeDuration = lifetime.Duration
-		}
-	}
-
-	a, err := s.manager.CreateAllocation(fiveTuple, s.connection, requestedPort, uint32(lifetimeDuration/time.Second))
+	lifetimeDuration := allocationLifeTime(m)
+	a, err := s.manager.CreateAllocation(fiveTuple, s.connection, requestedPort, lifetimeDuration)
 	if err != nil {
 		return respondWithError(err, messageIntegrity, stun.CodeInsufficientCapacity)
 	}
@@ -283,14 +276,8 @@ func (s *Server) handleRefreshRequest(srcAddr, dstAddr net.Addr, m *stun.Message
 		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
 
-	lifetimeDuration := turn.DefaultLifetime
-	var lifetime turn.Lifetime
-	if err = lifetime.GetFrom(m); err == nil {
-		if uint32(lifetime.Duration*time.Second) < maximumLifetime {
-			lifetimeDuration = lifetime.Duration
-		}
-	}
-	a.Refresh(uint32(lifetimeDuration * time.Second))
+	lifetimeDuration := allocationLifeTime(m)
+	a.Refresh(lifetimeDuration)
 
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodRefresh, m.TransactionID,
 		&turn.Lifetime{
@@ -450,4 +437,17 @@ func (s *Server) handleChannelData(srcAddr, dstAddr net.Addr, c *turn.ChannelDat
 	}
 
 	return nil
+}
+
+func allocationLifeTime(m *stun.Message) time.Duration {
+	lifetimeDuration := turn.DefaultLifetime
+
+	var lifetime turn.Lifetime
+	if err := lifetime.GetFrom(m); err == nil {
+		if lifetime.Duration < maximumLifetime {
+			lifetimeDuration = lifetime.Duration
+		}
+	}
+
+	return lifetimeDuration
 }

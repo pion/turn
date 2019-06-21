@@ -5,6 +5,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/gortc/turn"
 	"github.com/pion/turn/internal/ipnet"
 )
 
@@ -40,10 +41,10 @@ func TestAllocation(t *testing.T) {
 // test invalid Allocation creations
 func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 	m := &Manager{}
-	if a, err := m.CreateAllocation(nil, turnSocket, 0, 5000); a != nil || err == nil {
+	if a, err := m.CreateAllocation(nil, turnSocket, 0, turn.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
 	}
-	if a, err := m.CreateAllocation(randomFiveTuple(), nil, 0, 5000); a != nil || err == nil {
+	if a, err := m.CreateAllocation(randomFiveTuple(), nil, 0, turn.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil turnSocket")
 	}
 	if a, err := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0); a != nil || err == nil {
@@ -55,7 +56,7 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 	m := &Manager{}
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, 5000); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, turn.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
@@ -68,11 +69,11 @@ func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket ipnet.PacketConn) {
 	m := &Manager{}
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, 5000); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, turn.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, 5000); a != nil || err == nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, turn.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Was able to create allocation with same FiveTuple twice")
 	}
 }

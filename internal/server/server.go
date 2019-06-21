@@ -34,9 +34,10 @@ type Server struct {
 	channelBindTimeout time.Duration
 }
 
+const maxStunMessageSize = 1500
+
 // NewServer creates the Pion TURN server
 func NewServer(realm string, channelBindTimeout time.Duration, a AuthHandler) *Server {
-	const maxStunMessageSize = 1500
 	return &Server{
 		packet:             make([]byte, maxStunMessageSize),
 		realm:              realm,
