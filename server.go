@@ -18,6 +18,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	maxStunMessageSize = 1500
+)
+
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN
 // with custom behavior
 type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bool)
@@ -27,15 +31,22 @@ type ServerConfig struct {
 	Realm              string
 	AuthHandler        AuthHandler
 	ChannelBindTimeout time.Duration
+	ListeningPort      int
 	LoggerFactory      logging.LoggerFactory
 	Net                *vnet.Net
+}
+
+type listener struct {
+	conn    net.PacketConn
+	closeCh chan struct{}
 }
 
 // Server is an instance of the Pion TURN server
 type Server struct {
 	lock               sync.RWMutex
-	connection         net.PacketConn
-	packet             []byte
+	listeners          []*listener
+	listenIPs          []net.IP
+	listenPort         int
 	realm              string
 	authHandler        AuthHandler
 	manager            *allocation.Manager
@@ -49,7 +60,6 @@ const maxStunMessageSize = 1500
 
 // NewServer creates the Pion TURN server
 func NewServer(config *ServerConfig) *Server {
-	const maxStunMessageSize = 1500
 	log := config.LoggerFactory.NewLogger("turn")
 
 	if config.Net == nil {
@@ -63,8 +73,13 @@ func NewServer(config *ServerConfig) *Server {
 		Net:           config.Net,
 	})
 
+	listenPort := config.ListeningPort
+	if listenPort == 0 {
+		listenPort = 3478
+	}
+
 	return &Server{
-		packet:             make([]byte, maxStunMessageSize),
+		listenPort:         listenPort,
 		realm:              config.Realm,
 		authHandler:        config.AuthHandler,
 		manager:            manager,
@@ -75,32 +90,136 @@ func NewServer(config *ServerConfig) *Server {
 	}
 }
 
-// Listen starts listening and handling TURN traffic
-func (s *Server) Listen(address string, port int) error {
-	listeningAddress := fmt.Sprintf("%s:%d", address, port)
-	network := "udp4"
-	conn, err := s.net.ListenPacket(network, listeningAddress)
+// AddListeningIPAddr adds a listening IP address.
+// This method must be called before calling Start().
+func (s *Server) AddListeningIPAddr(addrStr string) error {
+	ip := net.ParseIP(addrStr)
+	if ip.To4() == nil {
+		return fmt.Errorf("Non-IPv4 address is not supported")
+	}
+
+	if ip.IsLinkLocalUnicast() {
+		return fmt.Errorf("link-local unicast address is not allowed")
+	}
+	s.listenIPs = append(s.listenIPs, ip)
+	return nil
+}
+
+// caller must hold the mutex
+func (s *Server) gatherSystemIPAddrs() error {
+	s.log.Debug("gathering local IP address...")
+
+	ifs, err := net.Interfaces()
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Failed to listen on %s", listeningAddress))
+		return err
+	}
+	for _, ifc := range ifs {
+		if ifc.Flags&net.FlagUp == 0 {
+			continue // skip if interface is not up
+		}
+
+		if ifc.Flags&net.FlagLoopback != 0 {
+			continue // skip loopback address
+		}
+
+		addrs, err := ifc.Addrs()
+		if err != nil {
+			return err
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch addr := addr.(type) {
+			case *net.IPNet:
+				ip = addr.IP
+			case *net.IPAddr:
+				ip = addr.IP
+			}
+
+			if ip == nil {
+				return fmt.Errorf("invalid IP address: %s", addr.String())
+			}
+
+			if ip.To4() == nil {
+				continue // skip non-IPv4 address
+			}
+
+			if ip.IsLinkLocalUnicast() {
+				continue
+			}
+
+			s.log.Debugf("- found local IP: %s", ip.String())
+			s.listenIPs = append(s.listenIPs, ip)
+		}
+	}
+
+	return nil
+}
+
+// Listen starts listening and handling TURN traffic
+// caller must hold the mutex
+func (s *Server) listen(localIP net.IP) error {
+	network := "udp4"
+	listenAddr := fmt.Sprintf("%s:%d", localIP.String(), s.listenPort)
+	conn, err := s.net.ListenPacket(network, listenAddr)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("Failed to listen on %s", listenAddr))
 	}
 
 	laddr := conn.LocalAddr()
 	s.log.Infof("Listening on %s:%s", laddr.Network(), laddr.String())
 
-	s.lock.Lock()
-	s.connection = conn
-	s.lock.Unlock()
+	closeCh := make(chan struct{})
+	s.listeners = append(s.listeners, &listener{
+		conn:    conn,
+		closeCh: closeCh,
+	})
 
-	for {
-		size, addr, err := s.connection.ReadFrom(s.packet)
-		if err != nil {
-			return errors.Wrap(err, "failed to read packet from udp socket")
+	go func() {
+		buf := make([]byte, maxStunMessageSize)
+		for {
+			n, addr, err := conn.ReadFrom(buf)
+			if err != nil {
+				s.log.Debugf("exit read loop on error: %s", err.Error())
+				break
+			}
+
+			if err := s.handleUDPPacket(conn, addr, buf[:n]); err != nil {
+				s.log.Error(err.Error())
+			}
 		}
 
-		if err := s.handleUDPPacket(addr, conn.LocalAddr(), size); err != nil {
-			s.log.Error(err.Error())
+		close(closeCh)
+	}()
+
+	return nil
+}
+
+// Start starts the server.
+func (s *Server) Start() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// If s.listenIPs is empty, gather system IPs
+	if len(s.listenIPs) == 0 {
+		err := s.gatherSystemIPAddrs()
+		if err != nil {
+			return err
+		}
+
+		if len(s.listenIPs) == 0 {
+			return fmt.Errorf("no local IP address found")
 		}
 	}
+
+	for _, localIP := range s.listenIPs {
+		err := s.listen(localIP)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Close closes the connection.
@@ -111,29 +230,47 @@ func (s *Server) Close() error {
 	if err := s.manager.Close(); err != nil {
 		return err
 	}
-	return s.connection.Close()
-}
 
-func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, size int) error {
-	s.log.Debugf("received %d bytes of udp from %s on %s",
-		size,
-		srcAddr.String(),
-		dstAddr.String(),
-	)
-	if turn.IsChannelData(s.packet[:size]) {
-		return s.handleDataPacket(srcAddr, dstAddr, size)
+	for _, l := range s.listeners {
+		err := l.conn.Close()
+		if err != nil {
+			s.log.Debugf("Close() returned error: %s", err.Error())
+		}
+
 	}
 
-	return s.handleTURNPacket(srcAddr, dstAddr, size)
+	for _, l := range s.listeners {
+		<-l.closeCh
+	}
+
+	return nil
 }
 
-func (s *Server) handleDataPacket(srcAddr, dstAddr net.Addr, size int) error {
-	c := turn.ChannelData{Raw: s.packet[:size]}
+// caller must hold the mutex
+func (s *Server) handleUDPPacket(conn net.PacketConn, srcAddr net.Addr, buf []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	s.log.Debugf("received %d bytes of udp from %s on %s",
+		len(buf),
+		srcAddr.String(),
+		conn.LocalAddr().String(),
+	)
+	if turn.IsChannelData(buf) {
+		return s.handleDataPacket(conn, srcAddr, buf)
+	}
+
+	return s.handleTURNPacket(conn, srcAddr, buf)
+}
+
+// caller must hold the mutex
+func (s *Server) handleDataPacket(conn net.PacketConn, srcAddr net.Addr, buf []byte) error {
+	c := turn.ChannelData{Raw: buf}
 	if err := c.Decode(); err != nil {
 		return errors.Wrap(err, "Failed to create channel data from packet")
 	}
 
-	err := s.handleChannelData(srcAddr, dstAddr, &c)
+	err := s.handleChannelData(conn, srcAddr, &c)
 	if err != nil {
 		err = errors.Errorf("unable to handle ChannelData from %v: %v", srcAddr, err)
 	}
@@ -141,8 +278,9 @@ func (s *Server) handleDataPacket(srcAddr, dstAddr net.Addr, size int) error {
 	return err
 }
 
-func (s *Server) handleTURNPacket(srcAddr, dstAddr net.Addr, size int) error {
-	m := &stun.Message{Raw: append([]byte{}, s.packet[:size]...)}
+// caller must hold the mutex
+func (s *Server) handleTURNPacket(conn net.PacketConn, srcAddr net.Addr, buf []byte) error {
+	m := &stun.Message{Raw: append([]byte{}, buf...)}
 	if err := m.Decode(); err != nil {
 		return errors.Wrap(err, "failed to create stun message from packet")
 	}
@@ -152,7 +290,7 @@ func (s *Server) handleTURNPacket(srcAddr, dstAddr net.Addr, size int) error {
 		return errors.Errorf("unhandled STUN packet %v-%v from %v: %v", m.Type.Method, m.Type.Class, srcAddr, err)
 	}
 
-	err = h(srcAddr, dstAddr, m)
+	err = h(conn, srcAddr, m)
 	if err != nil {
 		return errors.Errorf("failed to handle %v-%v from %v: %v", m.Type.Method, m.Type.Class, srcAddr, err)
 	}
@@ -160,7 +298,7 @@ func (s *Server) handleTURNPacket(srcAddr, dstAddr net.Addr, size int) error {
 	return nil
 }
 
-type messageHandler func(srcAddr, dstAddr net.Addr, m *stun.Message) error
+type messageHandler func(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error
 
 func (s *Server) getMessageHandler(class stun.MessageClass, method stun.Method) (messageHandler, error) {
 	switch class {

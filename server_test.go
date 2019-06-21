@@ -28,13 +28,16 @@ func TestServer(t *testing.T) {
 			LoggerFactory: loggerFactory,
 		})
 
+		err := server.AddListeningIPAddr("127.0.0.1")
+		assert.NoError(t, err, "should succeed")
+
 		doneCh := make(chan struct{})
 
 		go func() {
 			log.Debug("start listening...")
-			err := server.Listen("127.0.0.1", 3478)
-			if err != nil {
-				t.Logf("Listen returned with err: %v", err)
+			err2 := server.Start()
+			if err2 != nil {
+				t.Logf("Start returned with err: %v", err2)
 			}
 			close(doneCh)
 		}()

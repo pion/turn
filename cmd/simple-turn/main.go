@@ -4,8 +4,10 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/pion/logging"
@@ -22,6 +24,9 @@ func createAuthHandler(usersMap map[string]string) turn.AuthHandler {
 }
 
 func main() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
 	usersMap := map[string]string{}
 
 	users := os.Getenv("USERS")
@@ -59,10 +64,18 @@ func main() {
 		Realm:              realm,
 		AuthHandler:        createAuthHandler(usersMap),
 		ChannelBindTimeout: channelBindTimeout,
+		ListeningPort:      udpPort,
 		LoggerFactory:      logging.NewDefaultLoggerFactory(),
 	})
 
-	err = s.Listen("0.0.0.0", udpPort)
+	err = s.Start()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	<-sigs
+
+	err = s.Close()
 	if err != nil {
 		log.Panic(err)
 	}
