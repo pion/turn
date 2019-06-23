@@ -109,7 +109,7 @@ func (s *Server) AddListeningIPAddr(addrStr string) error {
 func (s *Server) gatherSystemIPAddrs() error {
 	s.log.Debug("gathering local IP address...")
 
-	ifs, err := net.Interfaces()
+	ifs, err := s.net.Interfaces()
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (s *Server) gatherSystemIPAddrs() error {
 
 		addrs, err := ifc.Addrs()
 		if err != nil {
-			return err
+			continue
 		}
 
 		for _, addr := range addrs {
