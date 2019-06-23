@@ -28,10 +28,12 @@ func main() {
 		panic(err)
 	}
 
-	resp, err := c.SendSTUNRequest(ip, *port)
+	mappedAddr, err := c.SendSTUNRequest(ip, *port)
 	if err != nil {
 		panic(err)
 	}
 
-	log.Println(resp)
+	log.Printf("mapped-address=%s:%s",
+		mappedAddr.Network(),
+		mappedAddr.String())
 }
