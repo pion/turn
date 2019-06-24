@@ -83,7 +83,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.Packet
 	a.RelayAddr = listener.LocalAddr()
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
-		if err := listener.Close(); err != nil {
+		if err := a.Close(); err != nil {
 			fmt.Printf("Failed to close listener for %v \n", a.fiveTuple)
 		}
 	})
