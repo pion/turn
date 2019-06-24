@@ -2,6 +2,7 @@ package allocation
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -29,17 +30,15 @@ func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 }
 
 // Close closes the manager and closes all allocations it manages
-func (m *Manager) Close() error {
+func (m *Manager) Close() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	for _, a := range m.allocations {
 		if err := a.Close(); err != nil {
-			return err
+			log.Printf("failed to close allocation <%s>: %v", a.RelayAddr.String(), err)
 		}
-
 	}
-	return nil
 }
 
 // CreateAllocation creates a new allocation and starts relaying
@@ -83,7 +82,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket ipnet.Packet
 	a.RelayAddr = listener.LocalAddr()
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
-		if err := listener.Close(); err != nil {
+		if err := a.Close(); err != nil {
 			fmt.Printf("Failed to close listener for %v \n", a.fiveTuple)
 		}
 	})

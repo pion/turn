@@ -60,9 +60,9 @@ func (s *Server) Listen(address string, port int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create connection")
 	}
-	s.lock.Lock()
+	defer s.Close()
+
 	s.connection = conn
-	s.lock.Unlock()
 
 	for {
 		size, cm, addr, err := s.connection.ReadFromCM(s.packet)
@@ -77,14 +77,15 @@ func (s *Server) Listen(address string, port int) error {
 }
 
 // Close closes the connection.
-func (s *Server) Close() error {
+func (s *Server) Close() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if err := s.manager.Close(); err != nil {
-		return err
+	s.manager.Close()
+
+	if err := s.connection.Close(); err != nil {
+		log.Printf("failed to close connection: %v", err)
 	}
-	return s.connection.Close()
 }
 
 func (s *Server) handleUDPPacket(srcAddr, dstAddr net.Addr, size int) error {
