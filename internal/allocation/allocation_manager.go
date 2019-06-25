@@ -100,7 +100,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	a.RelayAddr = conn.LocalAddr()
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
-		if err := listener.Close(); err != nil {
+		if err := conn.Close(); err != nil {
 			a.log.Errorf("Failed to close listener for %v", a.fiveTuple)
 		}
 	})

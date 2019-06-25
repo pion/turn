@@ -56,8 +56,6 @@ type Server struct {
 	net                *vnet.Net
 }
 
-const maxStunMessageSize = 1500
-
 // NewServer creates the Pion TURN server
 func NewServer(config *ServerConfig) *Server {
 	log := config.LoggerFactory.NewLogger("turn")
