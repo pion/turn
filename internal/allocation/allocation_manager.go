@@ -20,7 +20,7 @@ type ManagerConfig struct {
 // Manager is used to hold active allocations
 type Manager struct {
 	lock        sync.RWMutex
-	allocations []*Allocation
+	allocations map[string]*Allocation
 	log         logging.LeveledLogger
 	net         *vnet.Net
 }
@@ -31,21 +31,17 @@ func NewManager(config *ManagerConfig) *Manager {
 		config.Net = vnet.NewNet(nil) // defaults to native operation
 	}
 	return &Manager{
-		log: config.LeveledLogger,
-		net: config.Net,
+		log:         config.LeveledLogger,
+		net:         config.Net,
+		allocations: make(map[string]*Allocation, 64),
 	}
 }
 
 // GetAllocation fetches the allocation matching the passed FiveTuple
 func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	for _, a := range m.allocations {
-		if a.fiveTuple.Equal(fiveTuple) {
-			return a
-		}
-	}
-	return nil
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return m.allocations[fiveTuple.Fingerprint()]
 }
 
 // Close closes the manager and closes all allocations it manages
@@ -106,7 +102,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	})
 
 	m.lock.Lock()
-	m.allocations = append(m.allocations, a)
+	m.allocations[fiveTuple.Fingerprint()] = a
 	m.lock.Unlock()
 
 	go a.packetHandler(m)
@@ -114,20 +110,19 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 }
 
 // DeleteAllocation removes an allocation
-func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
+	fingerprint := fiveTuple.Fingerprint()
 
-	for i := len(m.allocations) - 1; i >= 0; i-- {
-		allocation := m.allocations[i]
-		if allocation.fiveTuple.Equal(fiveTuple) {
-			if err := allocation.Close(); err != nil {
-				m.log.Errorf("Failed to close allocation: %v", err)
-			}
-			m.allocations = append(m.allocations[:i], m.allocations[i+1:]...)
-			return true
-		}
+	m.lock.Lock()
+	allocation := m.allocations[fingerprint]
+	delete(m.allocations, fingerprint)
+	m.lock.Unlock()
+
+	if allocation == nil {
+		return
 	}
 
-	return false
+	if err := allocation.Close(); err != nil {
+		m.log.Errorf("Failed to close allocation: %v", err)
+	}
 }

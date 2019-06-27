@@ -1,9 +1,8 @@
 package allocation
 
 import (
+	"fmt"
 	"net"
-
-	"github.com/pion/turn/internal/ipnet"
 )
 
 // Protocol is an enum for relay protocol
@@ -28,5 +27,10 @@ type FiveTuple struct {
 
 // Equal asserts if two FiveTuples are equal
 func (f *FiveTuple) Equal(b *FiveTuple) bool {
-	return f.Protocol == b.Protocol && ipnet.AddrEqual(f.SrcAddr, b.SrcAddr) && ipnet.AddrEqual(f.DstAddr, b.DstAddr)
+	return f.Fingerprint() == b.Fingerprint()
+}
+
+// Fingerprint is the identity of a FiveTuple
+func (f *FiveTuple) Fingerprint() string {
+	return fmt.Sprintf("%d_%s_%s", f.Protocol, f.SrcAddr.String(), f.DstAddr.String())
 }

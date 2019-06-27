@@ -209,9 +209,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 	for {
 		n, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
 		if err != nil {
-			if !m.DeleteAllocation(a.fiveTuple) {
-				a.log.Error("Failed to remove allocation after relay listener had closed")
-			}
+			m.DeleteAllocation(a.fiveTuple)
 			return
 		}
 
