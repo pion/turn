@@ -168,6 +168,8 @@ func (a *Allocation) Close() error {
 	}
 	close(a.closed)
 
+	a.lifetimeTimer.Stop()
+
 	a.permissionsLock.RLock()
 	for _, p := range a.permissions {
 		p.lifetimeTimer.Stop()
