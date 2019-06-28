@@ -27,16 +27,14 @@ func NewPermission(addr net.Addr, log logging.LeveledLogger) *Permission {
 	}
 }
 
-func (p *Permission) start() {
-	p.lifetimeTimer = time.AfterFunc(permissionTimeout, func() {
-		if !p.allocation.RemovePermission(p.Addr) {
-			p.log.Errorf("Failed to remove permission for %v %v", p.Addr, p.allocation.fiveTuple)
-		}
+func (p *Permission) start(lifetime time.Duration) {
+	p.lifetimeTimer = time.AfterFunc(lifetime, func() {
+		p.allocation.RemovePermission(p.Addr.String())
 	})
 }
 
-func (p *Permission) refresh() {
-	if !p.lifetimeTimer.Reset(permissionTimeout) {
+func (p *Permission) refresh(lifetime time.Duration) {
+	if !p.lifetimeTimer.Reset(lifetime) {
 		p.log.Errorf("Failed to reset permission timer for %v %v", p.Addr, p.allocation.fiveTuple)
 	}
 }

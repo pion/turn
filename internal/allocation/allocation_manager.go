@@ -79,12 +79,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 		return nil, errors.Errorf("Allocations must not be created with a lifetime of 0")
 	}
 
-	a := &Allocation{
-		fiveTuple:  fiveTuple,
-		TurnSocket: turnSocket,
-		closed:     make(chan interface{}),
-		log:        m.log,
-	}
+	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
 	network := "udp4"
 	conn, err := m.net.ListenPacket(network, fmt.Sprintf("0.0.0.0:%d", requestedPort))

@@ -10,6 +10,7 @@ import (
 
 func TestChannelBind(t *testing.T) {
 	c := newChannelBind(2 * time.Second)
+
 	if c.allocation.GetChannelByID(c.ID) != c {
 		t.Errorf("GetChannelByID(%d) shouldn't be nil after added to allocation", c.ID)
 	}
@@ -17,7 +18,9 @@ func TestChannelBind(t *testing.T) {
 
 func TestChannelBindStart(t *testing.T) {
 	c := newChannelBind(2 * time.Second)
+
 	time.Sleep(3 * time.Second)
+
 	if c.allocation.GetChannelByID(c.ID) != nil {
 		t.Errorf("GetChannelByID(%d) should be nil if timeout", c.ID)
 	}
@@ -25,16 +28,18 @@ func TestChannelBindStart(t *testing.T) {
 
 func TestChannelBindReset(t *testing.T) {
 	c := newChannelBind(3 * time.Second)
+
 	time.Sleep(2 * time.Second)
 	c.refresh(3 * time.Second)
 	time.Sleep(2 * time.Second)
+
 	if c.allocation.GetChannelByID(c.ID) == nil {
 		t.Errorf("GetChannelByID(%d) shouldn't be nil after refresh", c.ID)
 	}
 }
 
 func newChannelBind(lifetime time.Duration) *ChannelBind {
-	allocation := &Allocation{}
+	a := NewAllocation(nil, nil, nil)
 
 	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:0")
 	c := &ChannelBind{
@@ -42,7 +47,7 @@ func newChannelBind(lifetime time.Duration) *ChannelBind {
 		Peer: addr,
 	}
 
-	_ = allocation.AddChannelBind(c, lifetime)
+	_ = a.AddChannelBind(c, lifetime)
 
 	return c
 }

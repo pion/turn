@@ -10,7 +10,7 @@ import (
 	"github.com/pion/turn/internal/ipnet"
 )
 
-func TestAllocation(t *testing.T) {
+func TestManager(t *testing.T) {
 	tt := []struct {
 		name string
 		f    func(*testing.T, ipnet.PacketConn)
