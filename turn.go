@@ -369,7 +369,7 @@ func (s *Server) handleSendIndication(conn net.PacketConn, srcAddr net.Addr, m *
 	}
 
 	msgDst := &net.UDPAddr{IP: peerAddress.IP, Port: peerAddress.Port}
-	if perm := a.GetPermission(msgDst); perm == nil {
+	if perm := a.GetPermission(msgDst.String()); perm == nil {
 		return errors.Errorf("Unable to handle send-indication, no permission added: %v", msgDst)
 	}
 

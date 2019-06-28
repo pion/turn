@@ -11,8 +11,9 @@ import (
 // ChannelBind represents a TURN Channel
 // https://tools.ietf.org/html/rfc5766#section-2.5
 type ChannelBind struct {
-	Peer          net.Addr
-	ID            turn.ChannelNumber
+	Peer net.Addr
+	ID   turn.ChannelNumber
+
 	allocation    *Allocation
 	lifetimeTimer *time.Timer
 	log           logging.LeveledLogger

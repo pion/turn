@@ -22,7 +22,7 @@ type Allocation struct {
 	RelaySocket         net.PacketConn
 	fiveTuple           *FiveTuple
 	permissionsLock     sync.RWMutex
-	permissions         []*Permission
+	permissions         map[string]*Permission
 	channelBindingsLock sync.RWMutex
 	channelBindings     []*ChannelBind
 	lifetimeTimer       *time.Timer
@@ -30,47 +30,49 @@ type Allocation struct {
 	log                 logging.LeveledLogger
 }
 
-// AddPermission adds a new permission to the allocation
-func (a *Allocation) AddPermission(p *Permission) {
-	a.permissionsLock.Lock()
-	defer a.permissionsLock.Unlock()
-	for _, existingPermission := range a.permissions {
-		if ipnet.AddrEqual(p.Addr, existingPermission.Addr) {
-			existingPermission.refresh()
-			return
-		}
+// NewAllocation creates a new instance of NewAllocation.
+func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
+	return &Allocation{
+		TurnSocket:  turnSocket,
+		fiveTuple:   fiveTuple,
+		permissions: make(map[string]*Permission, 64),
+		closed:      make(chan interface{}),
+		log:         log,
 	}
-
-	p.allocation = a
-	a.permissions = append(a.permissions, p)
-	p.start()
-}
-
-// RemovePermission removes the net.Addr from the allocation's permissions
-func (a *Allocation) RemovePermission(addr net.Addr) bool {
-	a.permissionsLock.Lock()
-	defer a.permissionsLock.Unlock()
-
-	for i := len(a.permissions) - 1; i >= 0; i-- {
-		if ipnet.AddrEqual(a.permissions[i].Addr, addr) {
-			a.permissions = append(a.permissions[:i], a.permissions[i+1:]...)
-			return true
-		}
-	}
-
-	return false
 }
 
 // GetPermission gets the Permission from the allocation
-func (a *Allocation) GetPermission(addr net.Addr) *Permission {
+func (a *Allocation) GetPermission(fingerprint string) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
-	for _, p := range a.permissions {
-		if ipnet.AddrEqual(p.Addr, addr) {
-			return p
-		}
+	return a.permissions[fingerprint]
+}
+
+// AddPermission adds a new permission to the allocation
+func (a *Allocation) AddPermission(p *Permission) {
+	fingerprint := p.Addr.String()
+
+	a.permissionsLock.RLock()
+	existedPermission, ok := a.permissions[fingerprint]
+	a.permissionsLock.RUnlock()
+	if ok {
+		existedPermission.refresh(permissionTimeout)
+		return
 	}
-	return nil
+
+	p.allocation = a
+	a.permissionsLock.Lock()
+	a.permissions[fingerprint] = p
+	a.permissionsLock.Unlock()
+
+	p.start(permissionTimeout)
+}
+
+// RemovePermission removes the net.Addr's fingerprint from the allocation's permissions
+func (a *Allocation) RemovePermission(fingerprint string) {
+	a.permissionsLock.Lock()
+	defer a.permissionsLock.Unlock()
+	delete(a.permissions, fingerprint)
 }
 
 // AddChannelBind adds a new ChannelBind to the allocation, it also updates the
@@ -222,9 +224,11 @@ func (a *Allocation) packetHandler(m *Manager) {
 			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send ChannelData from allocation %v %v", srcAddr, err)
 			}
-		} else if p := a.GetPermission(&net.UDPAddr{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}); p != nil {
+		} else if p := a.GetPermission(srcAddr.String()); p != nil {
+			udpAddr := srcAddr.(*net.UDPAddr)
+			peerAddressAttr := turn.PeerAddress{IP: udpAddr.IP, Port: udpAddr.Port}
 			dataAttr := turn.Data(buffer[:n])
-			peerAddressAttr := turn.PeerAddress{IP: srcAddr.(*net.UDPAddr).IP, Port: srcAddr.(*net.UDPAddr).Port}
+
 			msg, err := stun.Build(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication), peerAddressAttr, dataAttr)
 			if err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
