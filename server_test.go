@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/stretchr/testify/assert"
 )
@@ -27,6 +28,8 @@ func TestServer(t *testing.T) {
 			Realm:         "pion.ly",
 			LoggerFactory: loggerFactory,
 		})
+
+		assert.Equal(t, turn.DefaultLifetime, server.channelBindTimeout, "should match")
 
 		err := server.AddListeningIPAddr("127.0.0.1")
 		assert.NoError(t, err, "should succeed")
