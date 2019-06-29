@@ -28,12 +28,18 @@ type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bo
 
 // ServerConfig is a bag of config parameters for Server.
 type ServerConfig struct {
-	Realm              string
-	AuthHandler        AuthHandler
+	// Realm sets the realm for this server
+	Realm string
+	// AuthHandler is the handler called on each incoming auth requests.
+	AuthHandler AuthHandler
+	// ChannelBindTimeout sets the lifetime of channel binding. Defaults to 10 minutes.
 	ChannelBindTimeout time.Duration
-	ListeningPort      int
-	LoggerFactory      logging.LoggerFactory
-	Net                *vnet.Net
+	// ListeningPort sets the listening port number. Defaults to 3478.
+	ListeningPort int
+	// LoggerFactory must be set for logging from this server.
+	LoggerFactory logging.LoggerFactory
+	// Net is used by pion developers. Do not use in your application.
+	Net *vnet.Net
 }
 
 type listener struct {
@@ -76,13 +82,18 @@ func NewServer(config *ServerConfig) *Server {
 		listenPort = 3478
 	}
 
+	channelBindTimeout := config.ChannelBindTimeout
+	if channelBindTimeout == 0 {
+		channelBindTimeout = turn.DefaultLifetime
+	}
+
 	return &Server{
 		listenPort:         listenPort,
 		realm:              config.Realm,
 		authHandler:        config.AuthHandler,
 		manager:            manager,
 		reservationManager: &allocation.ReservationManager{},
-		channelBindTimeout: config.ChannelBindTimeout,
+		channelBindTimeout: channelBindTimeout,
 		log:                log,
 		net:                config.Net,
 	}
