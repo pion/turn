@@ -9,35 +9,40 @@ import (
 	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/pion/stun"
-	"github.com/pion/turn/internal/ipnet"
 	"github.com/pkg/errors"
 )
 
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
 type Allocation struct {
-	RelayAddr           net.Addr
-	Protocol            Protocol
-	TurnSocket          net.PacketConn
-	RelaySocket         net.PacketConn
-	fiveTuple           *FiveTuple
-	permissionsLock     sync.RWMutex
-	permissions         map[string]*Permission
-	channelBindingsLock sync.RWMutex
-	channelBindings     []*ChannelBind
-	lifetimeTimer       *time.Timer
-	closed              chan interface{}
-	log                 logging.LeveledLogger
+	RelayAddr   net.Addr
+	Protocol    Protocol
+	TurnSocket  net.PacketConn
+	RelaySocket net.PacketConn
+	fiveTuple   *FiveTuple
+
+	permissionsLock sync.RWMutex
+	permissions     map[string]*Permission
+
+	channelBindingsLock   sync.RWMutex
+	channelNumberBindings map[turn.ChannelNumber]*ChannelBind
+	channelPeerBindings   map[string]*ChannelBind
+
+	lifetimeTimer *time.Timer
+	closed        chan interface{}
+	log           logging.LeveledLogger
 }
 
 // NewAllocation creates a new instance of NewAllocation.
 func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
 	return &Allocation{
-		TurnSocket:  turnSocket,
-		fiveTuple:   fiveTuple,
-		permissions: make(map[string]*Permission, 64),
-		closed:      make(chan interface{}),
-		log:         log,
+		TurnSocket:            turnSocket,
+		fiveTuple:             fiveTuple,
+		permissions:           make(map[string]*Permission, 64),
+		channelNumberBindings: make(map[turn.ChannelNumber]*ChannelBind, 64),
+		channelPeerBindings:   make(map[string]*ChannelBind, 64),
+		closed:                make(chan interface{}),
+		log:                   log,
 	}
 }
 
@@ -80,70 +85,50 @@ func (a *Allocation) RemovePermission(fingerprint string) {
 func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) error {
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel id.
-	channelByID := a.GetChannelByID(c.ID)
-	channelByPeer := a.GetChannelByAddr(c.Peer)
+	channelByID := a.GetChannelByID(c.Number)
+	channelByPeer := a.GetChannelByAddr(c.Peer.String())
 	if channelByID != channelByPeer {
 		return errors.Errorf("You cannot use the same channel number with different peer")
 	}
 
 	// Add or refresh this channel.
 	if channelByID == nil {
-		a.channelBindingsLock.Lock()
-		defer a.channelBindingsLock.Unlock()
-
 		c.allocation = a
-		a.channelBindings = append(a.channelBindings, c)
-		c.start(lifetime)
 
-		// Channel binds also refresh permissions.
-		a.AddPermission(NewPermission(c.Peer, a.log))
+		a.channelBindingsLock.Lock()
+		a.channelNumberBindings[c.Number] = c
+		a.channelPeerBindings[c.Peer.String()] = c
+		a.channelBindingsLock.Unlock()
+
+		c.start(lifetime)
 	} else {
 		channelByID.refresh(lifetime)
-
-		// Channel binds also refresh permissions.
-		a.AddPermission(NewPermission(channelByID.Peer, a.log))
 	}
 
 	return nil
 }
 
 // RemoveChannelBind removes the ChannelBind from this allocation by id
-func (a *Allocation) RemoveChannelBind(id turn.ChannelNumber) bool {
+func (a *Allocation) RemoveChannelBind(c *ChannelBind) {
 	a.channelBindingsLock.Lock()
 	defer a.channelBindingsLock.Unlock()
 
-	for i := len(a.channelBindings) - 1; i >= 0; i-- {
-		if a.channelBindings[i].ID == id {
-			a.channelBindings = append(a.channelBindings[:i], a.channelBindings[i+1:]...)
-			return true
-		}
-	}
-
-	return false
+	delete(a.channelNumberBindings, c.Number)
+	delete(a.channelPeerBindings, c.Peer.String())
 }
 
 // GetChannelByID gets the ChannelBind from this allocation by id
-func (a *Allocation) GetChannelByID(id turn.ChannelNumber) *ChannelBind {
+func (a *Allocation) GetChannelByID(number turn.ChannelNumber) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
-	for _, cb := range a.channelBindings {
-		if cb.ID == id {
-			return cb
-		}
-	}
-	return nil
+	return a.channelNumberBindings[number]
 }
 
 // GetChannelByAddr gets the ChannelBind from this allocation by net.Addr
-func (a *Allocation) GetChannelByAddr(addr net.Addr) *ChannelBind {
+func (a *Allocation) GetChannelByAddr(fingerprint string) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
-	for _, cb := range a.channelBindings {
-		if ipnet.AddrEqual(cb.Peer, addr) {
-			return cb
-		}
-	}
-	return nil
+	return a.channelPeerBindings[fingerprint]
 }
 
 // Refresh updates the allocations lifetime
@@ -177,7 +162,7 @@ func (a *Allocation) Close() error {
 	a.permissionsLock.RUnlock()
 
 	a.channelBindingsLock.RLock()
-	for _, c := range a.channelBindings {
+	for _, c := range a.channelNumberBindings {
 		c.lifetimeTimer.Stop()
 	}
 	a.channelBindingsLock.RUnlock()
@@ -217,9 +202,9 @@ func (a *Allocation) packetHandler(m *Manager) {
 			return
 		}
 
-		if channel := a.GetChannelByAddr(a.RelaySocket.LocalAddr()); channel != nil {
+		if channel := a.GetChannelByAddr(srcAddr.String()); channel != nil {
 			channelData := make([]byte, 4)
-			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
+			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.Number))
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
@@ -235,6 +220,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			if err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
+
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}

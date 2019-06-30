@@ -58,6 +58,8 @@ func (m *Manager) Close() error {
 	return nil
 }
 
+const network = "udp4"
+
 // CreateAllocation creates a new allocation and starts relaying
 func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	if fiveTuple == nil {
@@ -81,7 +83,6 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
-	network := "udp4"
 	conn, err := m.net.ListenPacket(network, fmt.Sprintf("0.0.0.0:%d", requestedPort))
 	if err != nil {
 		return nil, err
