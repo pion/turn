@@ -30,7 +30,7 @@ type Allocation struct {
 	log                 logging.LeveledLogger
 }
 
-func addr2Fingerprint(addr net.Addr) string {
+func addr2IPFingerprint(addr net.Addr) string {
 	switch a := addr.(type) {
 	case *net.UDPAddr:
 		return a.IP.String()
@@ -56,13 +56,13 @@ func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
 
-	fingerprint := addr2Fingerprint(addr)
+	fingerprint := addr2IPFingerprint(addr)
 	return a.permissions[fingerprint]
 }
 
 // AddPermission adds a new permission to the allocation
 func (a *Allocation) AddPermission(p *Permission) {
-	fingerprint := addr2Fingerprint(p.Addr)
+	fingerprint := addr2IPFingerprint(p.Addr)
 
 	a.permissionsLock.RLock()
 	existedPermission, ok := a.permissions[fingerprint]
@@ -84,7 +84,7 @@ func (a *Allocation) AddPermission(p *Permission) {
 func (a *Allocation) RemovePermission(addr net.Addr) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
-	fingerprint := addr2Fingerprint(addr)
+	fingerprint := addr2IPFingerprint(addr)
 	delete(a.permissions, fingerprint)
 }
 
