@@ -212,7 +212,11 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	// Check current usage vs redis usage of other servers
 	// if bad, redirect { stun.AttrErrorCode, 300 }
 	lifetimeDuration := allocationLifeTime(m)
-	a, err := s.manager.CreateAllocation(fiveTuple, conn, requestedPort, lifetimeDuration)
+	a, err := s.manager.CreateAllocation(
+		fiveTuple, conn,
+		s.relayIPs[0], // TODO: allow more than one relay IP
+		requestedPort,
+		lifetimeDuration)
 	if err != nil {
 		return respondWithError(err, messageIntegrity, stun.CodeInsufficientCapacity)
 	}

@@ -52,6 +52,7 @@ type Server struct {
 	lock               sync.RWMutex
 	listeners          []*listener
 	listenIPs          []net.IP
+	relayIPs           []net.IP
 	listenPort         int
 	realm              string
 	authHandler        AuthHandler
@@ -100,6 +101,8 @@ func NewServer(config *ServerConfig) *Server {
 }
 
 // AddListeningIPAddr adds a listening IP address.
+// If not specified, it will automatically assigns the listening IP addresses
+// from the system.
 // This method must be called before calling Start().
 func (s *Server) AddListeningIPAddr(addrStr string) error {
 	ip := net.ParseIP(addrStr)
@@ -114,13 +117,37 @@ func (s *Server) AddListeningIPAddr(addrStr string) error {
 	return nil
 }
 
+// AddRelayIPAddr adds a listening IP address.
+// Note: current implementation can have only one relay IP address.
+// If not specified, it will automatically assigns the relay IP addresses
+// from the system.
+// This method must be called before calling Start().
+func (s *Server) AddRelayIPAddr(addrStr string) error {
+	ip := net.ParseIP(addrStr)
+	if ip.To4() == nil {
+		return fmt.Errorf("Non-IPv4 address is not supported")
+	}
+
+	if ip.IsLinkLocalUnicast() {
+		return fmt.Errorf("link-local unicast address is not allowed")
+	}
+
+	if ip.IsUnspecified() {
+		return fmt.Errorf("unspecified IP is not allowed")
+	}
+	s.relayIPs = append(s.relayIPs, ip)
+	return nil
+}
+
 // caller must hold the mutex
-func (s *Server) gatherSystemIPAddrs() error {
+func (s *Server) gatherSystemIPAddrs() ([]net.IP, error) {
 	s.log.Debug("gathering local IP address...")
+
+	var ips []net.IP
 
 	ifs, err := s.net.Interfaces()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, ifc := range ifs {
 		if ifc.Flags&net.FlagUp == 0 {
@@ -146,7 +173,7 @@ func (s *Server) gatherSystemIPAddrs() error {
 			}
 
 			if ip == nil {
-				return fmt.Errorf("invalid IP address: %s", addr.String())
+				return nil, fmt.Errorf("invalid IP address: %s", addr.String())
 			}
 
 			if ip.To4() == nil {
@@ -158,11 +185,11 @@ func (s *Server) gatherSystemIPAddrs() error {
 			}
 
 			s.log.Debugf("- found local IP: %s", ip.String())
-			s.listenIPs = append(s.listenIPs, ip)
+			ips = append(ips, ip)
 		}
 	}
 
-	return nil
+	return ips, nil
 }
 
 // Listen starts listening and handling TURN traffic
@@ -209,16 +236,24 @@ func (s *Server) Start() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// If s.listenIPs is empty, gather system IPs
+	var ips []net.IP
+
 	if len(s.listenIPs) == 0 {
-		err := s.gatherSystemIPAddrs()
+		var err error
+		ips, err = s.gatherSystemIPAddrs()
 		if err != nil {
 			return err
 		}
-
-		if len(s.listenIPs) == 0 {
+		if len(ips) == 0 {
 			return fmt.Errorf("no local IP address found")
 		}
+
+		s.listenIPs = ips
+	}
+
+	// If s.relayIPs is empty, use s.listenIPs
+	if len(s.relayIPs) == 0 {
+		s.relayIPs = s.listenIPs
 	}
 
 	for _, localIP := range s.listenIPs {
