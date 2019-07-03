@@ -59,7 +59,13 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, relayIP net.IP, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(
+	fiveTuple *FiveTuple,
+	turnSocket net.PacketConn,
+	relayIP net.IP, // nolint:interfacer
+	requestedPort int,
+	lifetime time.Duration) (*Allocation, error) {
+
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
 	}
