@@ -1,4 +1,4 @@
-package turn
+package server
 
 import (
 	"crypto/md5" // #nosec
@@ -14,8 +14,9 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/transport/vnet"
-	"github.com/pion/turn/internal/allocation"
 	"github.com/pkg/errors"
+
+	"github.com/pion/turn/internal/allocation"
 )
 
 const (
@@ -26,8 +27,8 @@ const (
 // with custom behavior
 type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bool)
 
-// ServerConfig is a bag of config parameters for Server.
-type ServerConfig struct {
+// Config is a bag of config parameters for Server.
+type Config struct {
 	// Realm sets the realm for this server
 	Realm string
 	// AuthHandler is the handler called on each incoming auth requests.
@@ -63,7 +64,7 @@ type Server struct {
 }
 
 // NewServer creates the Pion TURN server
-func NewServer(config *ServerConfig) *Server {
+func NewServer(config *Config) *Server {
 	log := config.LoggerFactory.NewLogger("turn")
 
 	if config.Net == nil {
@@ -299,15 +300,15 @@ func (s *Server) handleTURNPacket(conn net.PacketConn, srcAddr net.Addr, buf []b
 		return errors.Errorf("unhandled STUN packet %v-%v from %v: %v", m.Type.Method, m.Type.Class, srcAddr, err)
 	}
 
-	err = h(conn, srcAddr, m)
-	if err != nil {
+	ctx := newContext(conn, srcAddr, m, s.realm, s.authHandler)
+	if err = h(ctx); err != nil {
 		return errors.Errorf("failed to handle %v-%v from %v: %v", m.Type.Method, m.Type.Class, srcAddr, err)
 	}
 
 	return nil
 }
 
-type messageHandler func(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error
+type messageHandler func(ctx *context) error
 
 func (s *Server) getMessageHandler(class stun.MessageClass, method stun.Method) (messageHandler, error) {
 	switch class {

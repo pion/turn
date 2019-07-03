@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn"
+	"github.com/pion/turn/client"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 		panic(errors.New("failed to parse host IP"))
 	}
 
-	c, err := turn.NewClient(&turn.ClientConfig{
+	c, err := client.NewClient(&client.Config{
 		ListeningAddress: "0.0.0.0:0",
 		LoggerFactory:    logging.NewDefaultLoggerFactory(),
 	})

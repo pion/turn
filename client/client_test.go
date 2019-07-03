@@ -1,4 +1,4 @@
-package turn
+package client
 
 import (
 	"net"
@@ -11,7 +11,7 @@ func TestClient(t *testing.T) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
 
 	t.Run("SendSTUNRequest Parallel", func(t *testing.T) {
-		c, err := NewClient(&ClientConfig{
+		c, err := NewClient(&Config{
 			ListeningAddress: "0.0.0.0:0",
 			LoggerFactory:    loggerFactory,
 		})
@@ -52,7 +52,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("Listen error", func(t *testing.T) {
-		_, err := NewClient(&ClientConfig{
+		_, err := NewClient(&Config{
 			ListeningAddress: "255.255.255.256:65535",
 			LoggerFactory:    loggerFactory,
 		})

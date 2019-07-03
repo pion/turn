@@ -1,9 +1,8 @@
-package turn
+package client
 
 import (
 	"fmt"
 	"net"
-
 	"sync"
 
 	"github.com/pion/logging"
@@ -12,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ClientConfig is a bag of config parameters for Client.
-type ClientConfig struct {
+// Config is a bag of config parameters for Client.
+type Config struct {
 	ListeningAddress string
 	LoggerFactory    logging.LoggerFactory
 	Net              *vnet.Net
@@ -28,7 +27,7 @@ type Client struct {
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
-func NewClient(config *ClientConfig) (*Client, error) {
+func NewClient(config *Config) (*Client, error) {
 	log := config.LoggerFactory.NewLogger("turnc")
 	network := "udp4"
 

@@ -1,4 +1,4 @@
-package turn
+package server
 
 import (
 	"net"
@@ -8,6 +8,8 @@ import (
 	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/pion/turn/client"
 )
 
 func TestServer(t *testing.T) {
@@ -18,7 +20,7 @@ func TestServer(t *testing.T) {
 		credMap := map[string]string{}
 		credMap["user"] = "pass"
 
-		server := NewServer(&ServerConfig{
+		server := NewServer(&Config{
 			AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
@@ -50,7 +52,7 @@ func TestServer(t *testing.T) {
 		time.Sleep(100 * time.Microsecond)
 
 		log.Debug("creating a client.")
-		client, err := NewClient(&ClientConfig{
+		stunClient, err := client.NewClient(&client.Config{
 			ListeningAddress: "0.0.0.0:0",
 			LoggerFactory:    loggerFactory,
 		})
@@ -59,7 +61,7 @@ func TestServer(t *testing.T) {
 		}
 
 		log.Debug("sending a binding request.")
-		resp, err := client.SendSTUNRequest(net.IPv4(127, 0, 0, 1), 3478)
+		resp, err := stunClient.SendSTUNRequest(net.IPv4(127, 0, 0, 1), 3478)
 		assert.NoError(t, err, "should succeed")
 		t.Logf("resp: %v", resp)
 

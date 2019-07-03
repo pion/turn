@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn"
+	"github.com/pion/turn/server"
 )
 
-func createAuthHandler(usersMap map[string]string) turn.AuthHandler {
+func createAuthHandler(usersMap map[string]string) server.AuthHandler {
 	return func(username string, srcAddr net.Addr) (string, bool) {
 		if password, ok := usersMap[username]; ok {
 			return password, true
@@ -60,7 +60,7 @@ func main() {
 		}
 	}
 
-	s := turn.NewServer(&turn.ServerConfig{
+	s := server.NewServer(&server.Config{
 		Realm:              realm,
 		AuthHandler:        createAuthHandler(usersMap),
 		ChannelBindTimeout: channelBindTimeout,

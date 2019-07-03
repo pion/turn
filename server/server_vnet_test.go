@@ -1,4 +1,4 @@
-package turn
+package server
 
 import (
 	"net"
@@ -8,6 +8,8 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/transport/vnet"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/pion/turn/client"
 )
 
 func buildVNet() (*vnet.Router, *vnet.Net, *vnet.Net, error) {
@@ -76,7 +78,7 @@ func TestServerVNet(t *testing.T) {
 		credMap := map[string]string{}
 		credMap["user"] = "pass"
 
-		server := NewServer(&ServerConfig{
+		server := NewServer(&Config{
 			AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
@@ -107,7 +109,7 @@ func TestServerVNet(t *testing.T) {
 		time.Sleep(100 * time.Microsecond)
 
 		log.Debug("creating a client.")
-		client, err := NewClient(&ClientConfig{
+		c, err := client.NewClient(&client.Config{
 			ListeningAddress: "0.0.0.0:0",
 			Net:              lanNet,
 			LoggerFactory:    loggerFactory,
@@ -117,7 +119,7 @@ func TestServerVNet(t *testing.T) {
 		}
 
 		log.Debug("sending a binding request.")
-		reflAddr, err := client.SendSTUNRequest(net.IPv4(1, 2, 3, 4), 3478)
+		reflAddr, err := c.SendSTUNRequest(net.IPv4(1, 2, 3, 4), 3478)
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
