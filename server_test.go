@@ -14,9 +14,10 @@ func TestServer(t *testing.T) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	log := loggerFactory.NewLogger("test")
 
+	credMap := map[string]string{}
+	credMap["user"] = "pass"
+
 	t.Run("simple", func(t *testing.T) {
-		credMap := map[string]string{}
-		credMap["user"] = "pass"
 
 		server := NewServer(&ServerConfig{
 			AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
@@ -34,16 +35,9 @@ func TestServer(t *testing.T) {
 		err := server.AddListeningIPAddr("127.0.0.1")
 		assert.NoError(t, err, "should succeed")
 
-		doneCh := make(chan struct{})
-
-		go func() {
-			log.Debug("start listening...")
-			err2 := server.Start()
-			if err2 != nil {
-				t.Logf("Start returned with err: %v", err2)
-			}
-			close(doneCh)
-		}()
+		log.Debug("start listening...")
+		err = server.Start()
+		assert.NoError(t, err, "should succeed")
 
 		// make sure the server is listening before running
 		// the client.
@@ -68,7 +62,78 @@ func TestServer(t *testing.T) {
 		// Close server
 		err = server.Close()
 		assert.NoError(t, err, "should succeed")
-		log.Debug("wainting the server to terminate...")
-		<-doneCh
+	})
+
+	t.Run("Relay IPs default to the listening IPs", func(t *testing.T) {
+		server := NewServer(&ServerConfig{
+			AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+				return "", false
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+
+		assert.Equal(t, turn.DefaultLifetime, server.channelBindTimeout, "should match")
+
+		err := server.AddListeningIPAddr("127.0.0.1")
+		assert.NoError(t, err, "should succeed")
+
+		log.Debug("start listening...")
+		err = server.Start()
+		assert.NoError(t, err, "should succeed")
+
+		// make sure the server is listening before running
+		// the client.
+		time.Sleep(100 * time.Microsecond)
+
+		assert.Equal(t, 1, len(server.relayIPs), "should match")
+		assert.True(t, server.relayIPs[0].Equal(net.IPv4(127, 0, 0, 1)), "should match")
+
+		// Close server
+		err = server.Close()
+		assert.NoError(t, err, "should succeed")
+	})
+
+	t.Run("AddRelayIPAddr", func(t *testing.T) {
+		server := NewServer(&ServerConfig{
+			AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+				return "", false
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+
+		assert.Equal(t, turn.DefaultLifetime, server.channelBindTimeout, "should match")
+
+		err := server.AddListeningIPAddr("127.0.0.1")
+		assert.NoError(t, err, "should succeed")
+
+		err = server.AddRelayIPAddr("127.0.0.2")
+		assert.NoError(t, err, "should succeed")
+
+		err = server.AddRelayIPAddr("127.0.0.3")
+		assert.NoError(t, err, "should succeed")
+
+		log.Debug("start listening...")
+		err = server.Start()
+		assert.NoError(t, err, "should succeed")
+
+		// make sure the server is listening before running
+		// the client.
+		time.Sleep(100 * time.Microsecond)
+
+		assert.Equal(t, 2, len(server.relayIPs), "should match")
+		assert.True(t, server.relayIPs[0].Equal(net.IPv4(127, 0, 0, 2)), "should match")
+		assert.True(t, server.relayIPs[1].Equal(net.IPv4(127, 0, 0, 3)), "should match")
+
+		// Close server
+		err = server.Close()
+		assert.NoError(t, err, "should succeed")
 	})
 }

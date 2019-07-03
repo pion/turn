@@ -59,7 +59,7 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, relayIP net.IP, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	if fiveTuple == nil {
 		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
 	}
@@ -82,10 +82,13 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
 	network := "udp4"
-	conn, err := m.net.ListenPacket(network, fmt.Sprintf("0.0.0.0:%d", requestedPort))
+	relayAddr := fmt.Sprintf("%s:%d", relayIP.String(), requestedPort)
+	conn, err := m.net.ListenPacket(network, relayAddr)
 	if err != nil {
 		return nil, err
 	}
+
+	m.log.Debugf("listening on relay addr: %s", conn.LocalAddr().String())
 
 	a.RelaySocket = conn
 	a.RelayAddr = conn.LocalAddr()
