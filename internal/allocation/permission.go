@@ -29,7 +29,7 @@ func NewPermission(addr net.Addr, log logging.LeveledLogger) *Permission {
 
 func (p *Permission) start(lifetime time.Duration) {
 	p.lifetimeTimer = time.AfterFunc(lifetime, func() {
-		p.allocation.RemovePermission(p.Addr.String())
+		p.allocation.RemovePermission(p.Addr)
 	})
 }
 

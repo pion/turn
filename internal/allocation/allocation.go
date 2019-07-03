@@ -30,6 +30,16 @@ type Allocation struct {
 	log                 logging.LeveledLogger
 }
 
+func addr2Fingerprint(addr net.Addr) string {
+	switch a := addr.(type) {
+	case *net.UDPAddr:
+		return a.IP.String()
+	case *net.TCPAddr: // Do we really need this case?
+		return a.IP.String()
+	}
+	return "" // shoud never happen
+}
+
 // NewAllocation creates a new instance of NewAllocation.
 func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
 	return &Allocation{
@@ -42,15 +52,17 @@ func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.
 }
 
 // GetPermission gets the Permission from the allocation
-func (a *Allocation) GetPermission(fingerprint string) *Permission {
+func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
+
+	fingerprint := addr2Fingerprint(addr)
 	return a.permissions[fingerprint]
 }
 
 // AddPermission adds a new permission to the allocation
 func (a *Allocation) AddPermission(p *Permission) {
-	fingerprint := p.Addr.String()
+	fingerprint := addr2Fingerprint(p.Addr)
 
 	a.permissionsLock.RLock()
 	existedPermission, ok := a.permissions[fingerprint]
@@ -69,9 +81,10 @@ func (a *Allocation) AddPermission(p *Permission) {
 }
 
 // RemovePermission removes the net.Addr's fingerprint from the allocation's permissions
-func (a *Allocation) RemovePermission(fingerprint string) {
+func (a *Allocation) RemovePermission(addr net.Addr) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
+	fingerprint := addr2Fingerprint(addr)
 	delete(a.permissions, fingerprint)
 }
 
@@ -217,6 +230,11 @@ func (a *Allocation) packetHandler(m *Manager) {
 			return
 		}
 
+		a.log.Debugf("relay socket %s received %d bytes from %s",
+			a.RelaySocket.LocalAddr().String(),
+			n,
+			srcAddr.String())
+
 		if channel := a.GetChannelByAddr(a.RelaySocket.LocalAddr()); channel != nil {
 			channelData := make([]byte, 4)
 			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
@@ -226,7 +244,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send ChannelData from allocation %v %v", srcAddr, err)
 			}
-		} else if p := a.GetPermission(srcAddr.String()); p != nil {
+		} else if p := a.GetPermission(srcAddr); p != nil {
 			udpAddr := srcAddr.(*net.UDPAddr)
 			peerAddressAttr := turn.PeerAddress{IP: udpAddr.IP, Port: udpAddr.Port}
 			dataAttr := turn.Data(buffer[:n])
@@ -235,6 +253,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			if err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
+			a.log.Debugf("relaying message to client at %s", a.fiveTuple.SrcAddr.String())
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
