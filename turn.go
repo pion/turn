@@ -132,7 +132,7 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
-	if allocation := s.manager.GetAllocation(fiveTuple); allocation != nil {
+	if alloc := s.manager.GetAllocation(fiveTuple); alloc != nil {
 		return respondWithError(errors.Errorf("Relay already allocated for 5-TUPLE"), messageIntegrity, stun.CodeAllocMismatch)
 	}
 
@@ -445,7 +445,7 @@ func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *tur
 		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
 
-	channel := a.GetChannelByID(c.Number)
+	channel := a.GetChannelByNumber(c.Number)
 	if channel == nil {
 		return errors.Errorf("No channel bind found for %x \n", uint16(c.Number))
 	}

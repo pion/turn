@@ -92,15 +92,15 @@ func (a *Allocation) RemovePermission(addr net.Addr) {
 // permissions needed for this ChannelBind
 func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) error {
 	// Check that this channel id isn't bound to another transport address, and
-	// that this transport address isn't bound to another channel id.
-	channelByID := a.GetChannelByID(c.ID)
+	// that this transport address isn't bound to another channel number.
+	channelByNumber := a.GetChannelByNumber(c.Number)
 	channelByPeer := a.GetChannelByAddr(c.Peer)
-	if channelByID != channelByPeer {
+	if channelByNumber != channelByPeer {
 		return errors.Errorf("You cannot use the same channel number with different peer")
 	}
 
 	// Add or refresh this channel.
-	if channelByID == nil {
+	if channelByNumber == nil {
 		a.channelBindingsLock.Lock()
 		defer a.channelBindingsLock.Unlock()
 
@@ -111,22 +111,22 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 		// Channel binds also refresh permissions.
 		a.AddPermission(NewPermission(c.Peer, a.log))
 	} else {
-		channelByID.refresh(lifetime)
+		channelByNumber.refresh(lifetime)
 
 		// Channel binds also refresh permissions.
-		a.AddPermission(NewPermission(channelByID.Peer, a.log))
+		a.AddPermission(NewPermission(channelByNumber.Peer, a.log))
 	}
 
 	return nil
 }
 
 // RemoveChannelBind removes the ChannelBind from this allocation by id
-func (a *Allocation) RemoveChannelBind(id turn.ChannelNumber) bool {
+func (a *Allocation) RemoveChannelBind(number turn.ChannelNumber) bool {
 	a.channelBindingsLock.Lock()
 	defer a.channelBindingsLock.Unlock()
 
 	for i := len(a.channelBindings) - 1; i >= 0; i-- {
-		if a.channelBindings[i].ID == id {
+		if a.channelBindings[i].Number == number {
 			a.channelBindings = append(a.channelBindings[:i], a.channelBindings[i+1:]...)
 			return true
 		}
@@ -135,12 +135,12 @@ func (a *Allocation) RemoveChannelBind(id turn.ChannelNumber) bool {
 	return false
 }
 
-// GetChannelByID gets the ChannelBind from this allocation by id
-func (a *Allocation) GetChannelByID(id turn.ChannelNumber) *ChannelBind {
+// GetChannelByNumber gets the ChannelBind from this allocation by id
+func (a *Allocation) GetChannelByNumber(number turn.ChannelNumber) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
 	for _, cb := range a.channelBindings {
-		if cb.ID == id {
+		if cb.Number == number {
 			return cb
 		}
 	}
@@ -235,9 +235,9 @@ func (a *Allocation) packetHandler(m *Manager) {
 			n,
 			srcAddr.String())
 
-		if channel := a.GetChannelByAddr(a.RelaySocket.LocalAddr()); channel != nil {
+		if channel := a.GetChannelByAddr(srcAddr); channel != nil {
 			channelData := make([]byte, 4)
-			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.ID))
+			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.Number))
 			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
 			channelData = append(channelData, buffer[:n]...)
 
