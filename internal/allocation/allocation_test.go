@@ -28,7 +28,7 @@ func subTestGetPermission(t *testing.T) {
 
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
-	addr3, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3480")
+	addr3, _ := net.ResolveUDPAddr("udp", "127.0.0.2:3478")
 
 	p := &Permission{
 		Addr: addr,
@@ -36,23 +36,27 @@ func subTestGetPermission(t *testing.T) {
 	p2 := &Permission{
 		Addr: addr2,
 	}
+	p3 := &Permission{
+		Addr: addr3,
+	}
 
 	a.AddPermission(p)
 	a.AddPermission(p2)
+	a.AddPermission(p3)
 
-	foundP1 := a.GetPermission(addr.String())
+	foundP1 := a.GetPermission(addr)
 	if foundP1 != p {
-		t.Error("Got permission is not same as the the added.")
+		t.Error("Should keep the first one.")
 	}
 
-	foundP2 := a.GetPermission(addr2.String())
-	if foundP2 != p2 {
-		t.Error("Got permission is not same as the the added.")
+	foundP2 := a.GetPermission(addr2)
+	if foundP2 != p {
+		t.Error("Second one should be ignored.")
 	}
 
-	foundP3 := a.GetPermission(addr3.String())
-	if foundP3 != nil {
-		t.Error("Got permission should be nil if not added.")
+	foundP3 := a.GetPermission(addr3)
+	if foundP3 != p3 {
+		t.Error("Permission with another IP should be found")
 	}
 }
 
@@ -69,7 +73,7 @@ func subTestAddPermission(t *testing.T) {
 		t.Error("Permission's allocation should be the adder.")
 	}
 
-	foundPermission := a.GetPermission(p.Addr.String())
+	foundPermission := a.GetPermission(p.Addr)
 	if foundPermission != p {
 		t.Error("Got permission is not same as the the added.")
 	}
@@ -85,14 +89,14 @@ func subTestRemovePermission(t *testing.T) {
 
 	a.AddPermission(p)
 
-	foundPermission := a.GetPermission(p.Addr.String())
+	foundPermission := a.GetPermission(p.Addr)
 	if foundPermission != p {
 		t.Error("Got permission is not same as the the added.")
 	}
 
-	a.RemovePermission(p.Addr.String())
+	a.RemovePermission(p.Addr)
 
-	foundPermission = a.GetPermission(p.Addr.String())
+	foundPermission = a.GetPermission(p.Addr)
 	if foundPermission != nil {
 		t.Error("Got permission should be nil after removed.")
 	}
