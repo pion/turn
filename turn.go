@@ -430,10 +430,11 @@ func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr,
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
-	return buildAndSend(conn, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.BindingSuccess, messageIntegrity)
+	return buildAndSend(conn, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse), messageIntegrity)
 }
 
 func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *turn.ChannelData) error {
+	s.log.Debugf("received ChannelData from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
