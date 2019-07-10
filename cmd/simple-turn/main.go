@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 	"github.com/pion/turn"
 )
 
@@ -60,12 +61,19 @@ func main() {
 		}
 	}
 
+	var software *stun.Software
+	if sw := os.Getenv("SOFTWARE"); sw != "" {
+		attr := stun.NewSoftware(sw)
+		software = &attr
+	}
+
 	s := turn.NewServer(&turn.ServerConfig{
 		Realm:              realm,
 		AuthHandler:        createAuthHandler(usersMap),
 		ChannelBindTimeout: channelBindTimeout,
 		ListeningPort:      udpPort,
 		LoggerFactory:      logging.NewDefaultLoggerFactory(),
+		Software:           software,
 	})
 
 	err = s.Start()

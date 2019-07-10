@@ -17,14 +17,16 @@ type ClientConfig struct {
 	ListeningAddress string
 	LoggerFactory    logging.LoggerFactory
 	Net              *vnet.Net
+	Software         *stun.Software
 }
 
 // Client is a STUN server client
 type Client struct {
-	conn net.PacketConn
-	mux  sync.Mutex
-	net  *vnet.Net
-	log  logging.LeveledLogger
+	conn     net.PacketConn
+	mux      sync.Mutex
+	net      *vnet.Net
+	log      logging.LeveledLogger
+	software *stun.Software
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
@@ -39,8 +41,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 
 	c := &Client{
-		net: config.Net,
-		log: log,
+		net:      config.Net,
+		log:      log,
+		software: config.Software,
 	}
 
 	var err error
@@ -58,7 +61,12 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (net.Addr, err
 	defer c.mux.Unlock()
 
 	c.log.Debug("sending STUN request")
-	if err := sendStunRequest(c.conn, serverIP, serverPort); err != nil {
+
+	attrs := []stun.Setter{stun.TransactionID, stun.BindingRequest}
+	if c.software != nil {
+		attrs = append(attrs, *c.software)
+	}
+	if err := sendStunRequest(c.conn, serverIP, serverPort, attrs...); err != nil {
 		return nil, err
 	}
 
@@ -87,8 +95,8 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (net.Addr, err
 	}, nil
 }
 
-func sendStunRequest(conn net.PacketConn, serverIP net.IP, serverPort int) error {
-	msg, err := stun.Build(stun.TransactionID, stun.BindingRequest)
+func sendStunRequest(conn net.PacketConn, serverIP net.IP, serverPort int, attrs ...stun.Setter) error {
+	msg, err := stun.Build(attrs...)
 	if err != nil {
 		return err
 	}
