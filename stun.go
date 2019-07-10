@@ -14,11 +14,10 @@ func (s *Server) handleBindingRequest(conn net.PacketConn, srcAddr net.Addr, m *
 		return err
 	}
 
-	return buildAndSend(conn, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.BindingSuccess,
-		&stun.XORMappedAddress{
-			IP:   ip,
-			Port: port,
-		},
-		stun.Fingerprint,
-	)
+	attrs := s.makeAttrs(m.TransactionID, stun.BindingSuccess, &stun.XORMappedAddress{
+		IP:   ip,
+		Port: port,
+	}, stun.Fingerprint)
+
+	return buildAndSend(conn, srcAddr, attrs...)
 }

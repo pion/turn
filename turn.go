@@ -96,7 +96,7 @@ func assertDontFragment(curriedSend curriedSend, m *stun.Message, attr stun.Sett
 func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
 	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, s.makeAttrs(transactionID, stun.NewType(method, class), attrs...)...)
 	}
 	respondWithError := func(err error, messageIntegrity stun.MessageIntegrity, errorCode stun.ErrorCode) error {
 		if sendErr := curriedSend(stun.ClassErrorResponse, stun.MethodAllocate, m.TransactionID,
@@ -273,7 +273,7 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 func (s *Server) handleRefreshRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
 	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, s.makeAttrs(transactionID, stun.NewType(method, class), attrs...)...)
 	}
 	messageIntegrity, _, err := authenticateRequest(curriedSend, m, stun.MethodCreatePermission, s.realm, s.authHandler, srcAddr)
 	if err != nil {
@@ -304,7 +304,7 @@ func (s *Server) handleRefreshRequest(conn net.PacketConn, srcAddr net.Addr, m *
 func (s *Server) handleCreatePermissionRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
 	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: transactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, s.makeAttrs(transactionID, stun.NewType(method, class), attrs...)...)
 	}
 
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
@@ -388,7 +388,7 @@ func (s *Server) handleSendIndication(conn net.PacketConn, srcAddr net.Addr, m *
 func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
 	dstAddr := conn.LocalAddr()
 	errorSend := func(err error, attrs ...stun.Setter) error {
-		sendErr := buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: m.TransactionID}, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse)}, attrs...)...)
+		sendErr := buildAndSend(conn, srcAddr, s.makeAttrs(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse), attrs...)...)
 		if sendErr != nil {
 			err = errors.Errorf(strings.Join([]string{sendErr.Error(), err.Error()}, "\n"))
 		}
@@ -405,7 +405,7 @@ func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr,
 	}
 
 	messageIntegrity, _, err := authenticateRequest(func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
-		return buildAndSend(conn, srcAddr, append([]stun.Setter{&stun.Message{TransactionID: m.TransactionID}, stun.NewType(method, class)}, attrs...)...)
+		return buildAndSend(conn, srcAddr, s.makeAttrs(m.TransactionID, stun.NewType(method, class))...)
 	}, m, stun.MethodChannelBind, s.realm, s.authHandler, srcAddr)
 	if err != nil {
 		return errorSend(err, stun.CodeBadRequest)
@@ -430,7 +430,7 @@ func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr,
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
-	return buildAndSend(conn, srcAddr, &stun.Message{TransactionID: m.TransactionID}, stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse), messageIntegrity)
+	return buildAndSend(conn, srcAddr, s.makeAttrs(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse), messageIntegrity)...)
 }
 
 func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *turn.ChannelData) error {
@@ -460,6 +460,14 @@ func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *tur
 	}
 
 	return nil
+}
+
+func (s *Server) makeAttrs(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageType, additional ...stun.Setter) []stun.Setter {
+	attrs := append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
+	if s.software != nil {
+		attrs = append(attrs, *s.software)
+	}
+	return attrs
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {

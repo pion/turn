@@ -40,6 +40,8 @@ type ServerConfig struct {
 	LoggerFactory logging.LoggerFactory
 	// Net is used by pion developers. Do not use in your application.
 	Net *vnet.Net
+	// Software is the STUN SOFTWARE attribute. Useful for debugging purpose.
+	Software *stun.Software
 }
 
 type listener struct {
@@ -61,6 +63,7 @@ type Server struct {
 	channelBindTimeout time.Duration
 	log                logging.LeveledLogger
 	net                *vnet.Net
+	software           *stun.Software
 }
 
 // NewServer creates the Pion TURN server
@@ -97,6 +100,7 @@ func NewServer(config *ServerConfig) *Server {
 		channelBindTimeout: channelBindTimeout,
 		log:                log,
 		net:                config.Net,
+		software:           config.Software,
 	}
 }
 

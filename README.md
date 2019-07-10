@@ -109,6 +109,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [winds2016](https://github.com/winds2016) - *Windows platform testing*
 * [songjiayang](https://github.com/songjiayang) - *SongJiaYang*
 * [Yutaka Takeda](https://github.com/enobufs) - *vnet*
+* [namreg](https://github.com/namreg) - *Igor German*
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
