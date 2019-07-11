@@ -42,6 +42,8 @@ type ServerConfig struct {
 	Net *vnet.Net
 	// Software is the STUN SOFTWARE attribute. Useful for debugging purpose.
 	Software *stun.Software
+	// Sender is a custom implementation of the request Sender.
+	Sender Sender
 }
 
 type listener struct {
@@ -64,6 +66,7 @@ type Server struct {
 	log                logging.LeveledLogger
 	net                *vnet.Net
 	software           *stun.Software
+	sender             Sender
 }
 
 // NewServer creates the Pion TURN server
@@ -74,6 +77,10 @@ func NewServer(config *ServerConfig) *Server {
 		config.Net = vnet.NewNet(nil) // defaults to native operation
 	} else {
 		log.Warn("vnet is enabled")
+	}
+
+	if config.Sender == nil {
+		config.Sender = DefaultSender
 	}
 
 	manager := allocation.NewManager(&allocation.ManagerConfig{
@@ -101,6 +108,7 @@ func NewServer(config *ServerConfig) *Server {
 		log:                log,
 		net:                config.Net,
 		software:           config.Software,
+		sender:             config.Sender,
 	}
 }
 
@@ -405,14 +413,4 @@ func buildNonce() (string, error) {
 func assertMessageIntegrity(m *stun.Message, ourKey []byte) error {
 	messageIntegrityAttr := stun.MessageIntegrity(ourKey)
 	return messageIntegrityAttr.Check(m)
-}
-
-func buildAndSend(conn net.PacketConn, dst net.Addr, attrs ...stun.Setter) error {
-	msg, err := stun.Build(attrs...)
-	if err != nil {
-		return err
-	}
-
-	_, err = conn.WriteTo(msg.Raw, dst)
-	return err
 }
