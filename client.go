@@ -43,7 +43,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 
 	if config.Sender == nil {
-		config.Sender = DefaultSender
+		config.Sender = DefaultBuildAndSend
 	}
 
 	c := &Client{
