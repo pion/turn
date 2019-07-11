@@ -80,7 +80,7 @@ func NewServer(config *ServerConfig) *Server {
 	}
 
 	if config.Sender == nil {
-		config.Sender = DefaultBuildAndSend
+		config.Sender = defaultBuildAndSend
 	}
 
 	manager := allocation.NewManager(&allocation.ManagerConfig{

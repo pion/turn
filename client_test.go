@@ -74,7 +74,7 @@ func TestClient(t *testing.T) {
 				assert.Equal(t, testSoftware, software.String())
 
 				// just forward to the default sender.
-				return DefaultBuildAndSend(conn, addr, attrs...)
+				return defaultBuildAndSend(conn, addr, attrs...)
 			},
 		}
 		software := stun.NewSoftware(testSoftware)
