@@ -1,8 +1,8 @@
 package main
 
 import (
-	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 
@@ -12,19 +12,25 @@ import (
 )
 
 func main() {
-	host := flag.String("host", "74.125.143.127", "IP of TURN Server. Default is the IP of stun1.l.google.com.")
+	host := flag.String("host", "stun1.l.google.com", "IP of TURN Server. Default is stun1.l.google.com.")
 	port := flag.Int("port", 19302, "Port of TURN server.")
 	software := flag.String("software", "", "The STUN SOFTWARE attribute. Useful for debugging purpose.")
 	flag.Parse()
 
-	ip := net.ParseIP(*host)
-	if ip == nil {
-		panic(errors.New("failed to parse host IP"))
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	if err != nil {
+		panic(err)
 	}
+	defer func() {
+		if err2 := conn.Close(); err2 != nil {
+			panic(err2)
+		}
+	}()
 
 	cfg := &turn.ClientConfig{
-		ListeningAddress: "0.0.0.0:0",
-		LoggerFactory:    logging.NewDefaultLoggerFactory(),
+		STUNServerAddr: fmt.Sprintf("%s:%d", *host, *port),
+		Conn:           conn,
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
 	}
 
 	if *software != "" {
@@ -36,8 +42,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer c.Close()
 
-	mappedAddr, err := c.SendSTUNRequest(ip, *port)
+	err = c.Listen()
+	if err != nil {
+		panic(err)
+	}
+
+	mappedAddr, err := c.SendBindingRequest()
 	if err != nil {
 		panic(err)
 	}
