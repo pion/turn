@@ -18,6 +18,7 @@ type ClientConfig struct {
 	LoggerFactory    logging.LoggerFactory
 	Net              *vnet.Net
 	Software         *stun.Software
+	Sender           Sender
 }
 
 // Client is a STUN server client
@@ -27,6 +28,7 @@ type Client struct {
 	net      *vnet.Net
 	log      logging.LeveledLogger
 	software *stun.Software
+	sender   Sender
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
@@ -40,10 +42,15 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		log.Warn("vnet is enabled")
 	}
 
+	if config.Sender == nil {
+		config.Sender = DefaultSender
+	}
+
 	c := &Client{
 		net:      config.Net,
 		log:      log,
 		software: config.Software,
+		sender:   config.Sender,
 	}
 
 	var err error
@@ -66,7 +73,7 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (net.Addr, err
 	if c.software != nil {
 		attrs = append(attrs, *c.software)
 	}
-	if err := sendStunRequest(c.conn, serverIP, serverPort, attrs...); err != nil {
+	if err := c.sender(c.conn, &net.UDPAddr{IP: serverIP, Port: serverPort}, attrs...); err != nil {
 		return nil, err
 	}
 
@@ -93,13 +100,4 @@ func (c *Client) SendSTUNRequest(serverIP net.IP, serverPort int) (net.Addr, err
 		IP:   reflAddr.IP,
 		Port: reflAddr.Port,
 	}, nil
-}
-
-func sendStunRequest(conn net.PacketConn, serverIP net.IP, serverPort int, attrs ...stun.Setter) error {
-	msg, err := stun.Build(attrs...)
-	if err != nil {
-		return err
-	}
-	_, err = conn.WriteTo(msg.Raw, &net.UDPAddr{IP: serverIP, Port: serverPort})
-	return err
 }

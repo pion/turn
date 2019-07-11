@@ -19,5 +19,5 @@ func (s *Server) handleBindingRequest(conn net.PacketConn, srcAddr net.Addr, m *
 		Port: port,
 	}, stun.Fingerprint)
 
-	return buildAndSend(conn, srcAddr, attrs...)
+	return s.sender(conn, srcAddr, attrs...)
 }
