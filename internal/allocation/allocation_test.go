@@ -231,7 +231,7 @@ func subTestPacketHandler(t *testing.T) {
 	a, err := m.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, 0, turn.DefaultLifetime)
+	}, turnSocket, net.ParseIP("127.0.0.1"), 0, turn.DefaultLifetime)
 
 	assert.Nil(t, err, "should succeed")
 
