@@ -2,6 +2,7 @@ package turn
 
 import (
 	"crypto/md5" // #nosec
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -94,6 +95,7 @@ func assertDontFragment(curriedSend curriedSend, m *stun.Message, attr stun.Sett
 // https://tools.ietf.org/html/rfc5766#section-6.2
 // caller must hold the mutex
 func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	s.log.Debugf("received AllocateRequest from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
 		return s.sender(conn, srcAddr, s.makeAttrs(transactionID, stun.NewType(method, class), attrs...)...)
@@ -271,6 +273,7 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 
 // caller must hold the mutex
 func (s *Server) handleRefreshRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	s.log.Debugf("received RefreshRequest from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
 		return s.sender(conn, srcAddr, s.makeAttrs(transactionID, stun.NewType(method, class), attrs...)...)
@@ -302,6 +305,7 @@ func (s *Server) handleRefreshRequest(conn net.PacketConn, srcAddr net.Addr, m *
 
 // caller must hold the mutex
 func (s *Server) handleCreatePermissionRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	s.log.Debugf("received CreatePermission from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	curriedSend := func(class stun.MessageClass, method stun.Method, transactionID [stun.TransactionIDSize]byte, attrs ...stun.Setter) error {
 		return s.sender(conn, srcAddr, s.makeAttrs(transactionID, stun.NewType(method, class), attrs...)...)
@@ -328,6 +332,8 @@ func (s *Server) handleCreatePermissionRequest(conn net.PacketConn, srcAddr net.
 			return err
 		}
 
+		s.log.Debugf("adding permission for %s", fmt.Sprintf("%s:%d",
+			peerAddress.IP.String(), peerAddress.Port))
 		a.AddPermission(allocation.NewPermission(
 			&net.UDPAddr{
 				IP:   peerAddress.IP,
@@ -352,6 +358,7 @@ func (s *Server) handleCreatePermissionRequest(conn net.PacketConn, srcAddr net.
 
 // caller must hold the mutex
 func (s *Server) handleSendIndication(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	s.log.Debugf("received SendIndication from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  srcAddr,
@@ -386,6 +393,7 @@ func (s *Server) handleSendIndication(conn net.PacketConn, srcAddr net.Addr, m *
 
 // caller must hold the mutex
 func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr, m *stun.Message) error {
+	s.log.Debugf("received ChannelBindRequest from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	errorSend := func(err error, attrs ...stun.Setter) error {
 		sendErr := s.sender(conn, srcAddr, s.makeAttrs(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse), attrs...)...)
@@ -421,6 +429,9 @@ func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr,
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
+	s.log.Debugf("binding channel %d to %s",
+		channel,
+		fmt.Sprintf("%s:%d", peerAddr.IP.String(), peerAddr.Port))
 	err = a.AddChannelBind(allocation.NewChannelBind(
 		channel,
 		&net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port},

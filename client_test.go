@@ -3,25 +3,82 @@ package turn
 import (
 	"net"
 	"testing"
+	"time"
 
 	"github.com/pion/stun"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/pion/logging"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestClient(t *testing.T) {
-	loggerFactory := logging.NewDefaultLoggerFactory()
+func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, bool) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	if !assert.NoError(t, err, "should succeed") {
+		return nil, false
+	}
+	c, err := NewClient(&ClientConfig{
+		Conn:          conn,
+		Software:      &stun.NewSoftware("TEST SOFTWARE"),
+		LoggerFactory: loggerFactory,
+	})
+	if !assert.NoError(t, err, "should succeed") {
+		return nil, false
+	}
+	err = c.Listen()
+	if !assert.NoError(t, err, "should succeed") {
+		return nil, false
+	}
 
-	t.Run("SendSTUNRequest Parallel", func(t *testing.T) {
-		c, err := NewClient(&ClientConfig{
-			ListeningAddress: "0.0.0.0:0",
-			LoggerFactory:    loggerFactory,
-		})
-		if err != nil {
-			t.Fatal(err)
+	return c, true
+}
+
+func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, bool) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	if !assert.NoError(t, err, "should succeed") {
+		return nil, false
+	}
+	c, err := NewClient(&ClientConfig{
+		STUNServerAddr: "stun1.l.google.com:19302",
+		Conn:           conn,
+
+		LoggerFactory: loggerFactory,
+	})
+	if !assert.NoError(t, err, "should succeed") {
+		return nil, false
+	}
+	err = c.Listen()
+	if !assert.NoError(t, err, "should succeed") {
+		return nil, false
+	}
+
+	return c, true
+}
+
+func TestClientWithSTUN(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	log := loggerFactory.NewLogger("test")
+
+	t.Run("SendBindingRequest", func(t *testing.T) {
+		c, ok := createListeningTestClientWithSTUNServ(t, loggerFactory)
+		if !ok {
+			return
 		}
+		defer c.Close()
+
+		resp, err := c.SendBindingRequest()
+		assert.NoError(t, err, "should succeed")
+		log.Debugf("mapped-addr: %s", resp.String())
+		assert.Equal(t, 0, c.trMap.Size(), "should be no transaction left")
+	})
+
+	t.Run("SendBindingRequestTo Parallel", func(t *testing.T) {
+		c, ok := createListeningTestClient(t, loggerFactory)
+		if !ok {
+			return
+		}
+		defer c.Close()
 
 		// simple channel fo go routine start signaling
 		started := make(chan struct{})
@@ -29,10 +86,15 @@ func TestClient(t *testing.T) {
 		var err1 error
 		var resp1 interface{}
 
+		to, err := net.ResolveUDPAddr("udp4", "stun1.l.google.com:19302")
+		if !assert.NoError(t, err, "should succeed") {
+			return
+		}
+
 		// stun1.l.google.com:19302, more at https://gist.github.com/zziuni/3741933#file-stuns-L5
 		go func() {
 			close(started)
-			resp1, err1 = c.SendSTUNRequest(net.IPv4(74, 125, 143, 127), 19302)
+			resp1, err1 = c.SendBindingRequestTo(to)
 			close(finished)
 		}()
 
@@ -40,7 +102,7 @@ func TestClient(t *testing.T) {
 
 		<-started
 
-		resp2, err2 := c.SendSTUNRequest(net.IPv4(74, 125, 143, 127), 19302)
+		resp2, err2 := c.SendBindingRequestTo(to)
 		if err2 != nil {
 			t.Fatal(err)
 		} else {
@@ -55,61 +117,28 @@ func TestClient(t *testing.T) {
 		}
 	})
 
-	t.Run("SendSTUNRequest adds SOFTWARE attribute to message", func(t *testing.T) {
-		const testSoftware = "CLIENT_SOFTWARE"
-
-		cfg := &ClientConfig{
-			ListeningAddress: "0.0.0.0:0",
-			LoggerFactory:    loggerFactory,
-			Sender: func(conn net.PacketConn, addr net.Addr, attrs ...stun.Setter) error {
-				msg, err := stun.Build(attrs...)
-				if err != nil {
-					return errors.Wrap(err, "could not build message")
-				}
-				var software stun.Software
-				if err = software.GetFrom(msg); err != nil {
-					return errors.Wrap(err, "could not get SOFTWARE attribute")
-				}
-
-				assert.Equal(t, testSoftware, software.String())
-
-				// just forward to the default sender.
-				return defaultBuildAndSend(conn, addr, attrs...)
-			},
-		}
-		software := stun.NewSoftware(testSoftware)
-		cfg.Software = &software
-
-		c, err := NewClient(cfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = c.SendSTUNRequest(net.IPv4(74, 125, 143, 127), 19302); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("Listen error", func(t *testing.T) {
+	t.Run("NewClient should fail if Conn is nil", func(t *testing.T) {
 		_, err := NewClient(&ClientConfig{
-			ListeningAddress: "255.255.255.256:65535",
-			LoggerFactory:    loggerFactory,
+			LoggerFactory: loggerFactory,
 		})
-		if err == nil {
-			t.Fatal("listening on 255.255.255.256:65535 should fail")
-		}
+		assert.Error(t, err, "should fail")
 	})
 
-	/*
-		// Unable to perform this test atm because there is no timeout and the test may run infinitely
-		t.Run("SendSTUNRequest timeout", func(t *testing.T) {
-			c, err := NewClient("0.0.0.0:0")
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = c.SendSTUNRequest(net.IPv4(255, 255, 255, 255), 65535)
-			if err == nil {
-				t.Fatal("request to 255.255.255.255:65535 should fail")
-			}
-		})
-	*/
+	t.Run("SendBindingRequestTo timeout", func(t *testing.T) {
+		c, ok := createListeningTestClient(t, loggerFactory)
+		if !ok {
+			return
+		}
+		defer c.Close()
+
+		to, err := net.ResolveUDPAddr("udp4", "127.0.0.1:9")
+		if !assert.NoError(t, err, "should succeed") {
+			return
+		}
+
+		c.rto = 10 * time.Millisecond // force short timeout
+
+		_, err = c.SendBindingRequestTo(to)
+		log.Debug(err.Error())
+	})
 }

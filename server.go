@@ -321,6 +321,7 @@ func (s *Server) handleUDPPacket(conn net.PacketConn, srcAddr net.Addr, buf []by
 
 // caller must hold the mutex
 func (s *Server) handleDataPacket(conn net.PacketConn, srcAddr net.Addr, buf []byte) error {
+	s.log.Debugf("received DataPacket from %s", srcAddr.String())
 	c := turn.ChannelData{Raw: buf}
 	if err := c.Decode(); err != nil {
 		return errors.Wrap(err, "Failed to create channel data from packet")
@@ -336,6 +337,7 @@ func (s *Server) handleDataPacket(conn net.PacketConn, srcAddr net.Addr, buf []b
 
 // caller must hold the mutex
 func (s *Server) handleTURNPacket(conn net.PacketConn, srcAddr net.Addr, buf []byte) error {
+	s.log.Debug("handleTURNPacket")
 	m := &stun.Message{Raw: append([]byte{}, buf...)}
 	if err := m.Decode(); err != nil {
 		return errors.Wrap(err, "failed to create stun message from packet")

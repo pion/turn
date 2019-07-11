@@ -253,7 +253,9 @@ func (a *Allocation) packetHandler(m *Manager) {
 			if err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
-			a.log.Debugf("relaying message to client at %s", a.fiveTuple.SrcAddr.String())
+			a.log.Debugf("relaying message from %s to client at %s",
+				srcAddr.String(),
+				a.fiveTuple.SrcAddr.String())
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
