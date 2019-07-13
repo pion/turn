@@ -465,7 +465,11 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	tr.StopRtxTimer()
 	c.trMap.Delete(trKey)
 
-	if !tr.WriteResult(client.TransactionResult{Msg: msg, From: from}) {
+	if !tr.WriteResult(client.TransactionResult{
+		Msg:     msg,
+		From:    from,
+		Retries: tr.Retries(),
+	}) {
 		c.log.Debugf("no listener for %s", msg.String())
 	}
 
@@ -498,7 +502,7 @@ func (c *Client) handleChannelData(data []byte) error {
 	return nil
 }
 
-func (c *Client) onRtxTimeout(trKey string, nRtx int32) {
+func (c *Client) onRtxTimeout(trKey string, nRtx int) {
 	tr, ok := c.trMap.Find(trKey)
 	if !ok {
 		return // already gone

@@ -14,9 +14,10 @@ const (
 
 // TransactionResult is a bag of result values of a transaction
 type TransactionResult struct {
-	Msg  *stun.Message
-	From net.Addr
-	Err  error
+	Msg     *stun.Message
+	From    net.Addr
+	Retries int
+	Err     error
 }
 
 // TransactionConfig is a set of confi params used by NewTransaction
@@ -32,7 +33,7 @@ type Transaction struct {
 	Key      string                 // read-only
 	Raw      []byte                 // read-only
 	To       net.Addr               // read-only
-	nRtx     int32                  // modified only by the timer thread
+	nRtx     int                    // modified only by the timer thread
 	interval time.Duration          // modified only by the timer thread
 	timer    *time.Timer            // therad-safe, set only by the creator, and stopper
 	resultCh chan TransactionResult // thread-safe
@@ -51,7 +52,7 @@ func NewTransaction(config *TransactionConfig) *Transaction {
 }
 
 // StartRtxTimer starts the transaction timer
-func (t *Transaction) StartRtxTimer(onTimeout func(trKey string, nRtx int32)) {
+func (t *Transaction) StartRtxTimer(onTimeout func(trKey string, nRtx int)) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
@@ -93,6 +94,14 @@ func (t *Transaction) WaitForResult() TransactionResult {
 // Close closes the transaction
 func (t *Transaction) Close() {
 	close(t.resultCh)
+}
+
+// Retries returns the number of retransmission it has made
+func (t *Transaction) Retries() int {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
+
+	return t.nRtx
 }
 
 ////////////////////////////////////////////////////////////////////////////////
