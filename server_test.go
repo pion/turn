@@ -5,9 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/stun"
-	"github.com/pkg/errors"
-
 	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/stretchr/testify/assert"
@@ -161,24 +158,9 @@ func TestServer(t *testing.T) {
 				return "", false
 			},
 			Realm:         "pion.ly",
+			Software:      testSoftware,
 			LoggerFactory: loggerFactory,
-			Sender: func(conn net.PacketConn, addr net.Addr, attrs ...stun.Setter) error {
-				msg, err := stun.Build(attrs...)
-				if err != nil {
-					return errors.Wrap(err, "could not build message")
-				}
-				var software stun.Software
-				if err = software.GetFrom(msg); err != nil {
-					return errors.Wrap(err, "could not get SOFTWARE attribute")
-				}
-
-				assert.Equal(t, testSoftware, software.String())
-				// just forward to the default sender.
-				return defaultBuildAndSend(conn, addr, attrs...)
-			},
 		}
-		software := stun.NewSoftware(testSoftware)
-		cfg.Software = &software
 
 		server := NewServer(cfg)
 
@@ -193,17 +175,31 @@ func TestServer(t *testing.T) {
 		// the client.
 		time.Sleep(100 * time.Microsecond)
 
+		lconn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		if !assert.NoError(t, err, "should succeed") {
+			return
+		}
+		defer lconn.Close() // nolint:errcheck,gosec
+
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
-			ListeningAddress: "0.0.0.0:0",
-			LoggerFactory:    loggerFactory,
+			Conn:          lconn,
+			LoggerFactory: loggerFactory,
 		})
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
+		err = client.Listen()
+		if !assert.NoError(t, err, "should succeed") {
+			return
+		}
+		defer client.Close()
 
 		log.Debug("sending a binding request.")
-		resp, err := client.SendSTUNRequest(net.IPv4(127, 0, 0, 1), 3478)
+		resp, err := client.SendBindingRequestTo(&net.UDPAddr{
+			IP:   net.IPv4(127, 0, 0, 1),
+			Port: 3478,
+		})
 		assert.NoError(t, err, "should succeed")
 		t.Logf("resp: %v", resp)
 

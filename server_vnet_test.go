@@ -152,6 +152,7 @@ func TestServerVNet(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
+		defer lconn.Close() // nolint:errcheck,gosec
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
@@ -193,6 +194,7 @@ func TestServerVNet(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
+		defer lconn.Close() // nolint:errcheck,gosec
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{

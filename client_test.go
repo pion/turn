@@ -5,10 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/stun"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/pion/logging"
 	"github.com/stretchr/testify/assert"
 )
@@ -20,7 +16,7 @@ func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory
 	}
 	c, err := NewClient(&ClientConfig{
 		Conn:          conn,
-		Software:      &stun.NewSoftware("TEST SOFTWARE"),
+		Software:      "TEST SOFTWARE",
 		LoggerFactory: loggerFactory,
 	})
 	if !assert.NoError(t, err, "should succeed") {

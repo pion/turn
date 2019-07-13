@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/pion/logging"
-	"github.com/pion/stun"
 	"github.com/pion/turn"
 )
 
@@ -29,13 +28,9 @@ func main() {
 
 	cfg := &turn.ClientConfig{
 		STUNServerAddr: fmt.Sprintf("%s:%d", *host, *port),
+		Software:       *software,
 		Conn:           conn,
 		LoggerFactory:  logging.NewDefaultLoggerFactory(),
-	}
-
-	if *software != "" {
-		attr := stun.NewSoftware(*software)
-		cfg.Software = &attr
 	}
 
 	c, err := turn.NewClient(cfg)

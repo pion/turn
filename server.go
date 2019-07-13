@@ -41,7 +41,7 @@ type ServerConfig struct {
 	// Net is used by pion developers. Do not use in your application.
 	Net *vnet.Net
 	// Software is the STUN SOFTWARE attribute. Useful for debugging purpose.
-	Software *stun.Software
+	Software string
 	// Sender is a custom implementation of the request Sender.
 	Sender Sender
 }
@@ -65,7 +65,7 @@ type Server struct {
 	channelBindTimeout time.Duration
 	log                logging.LeveledLogger
 	net                *vnet.Net
-	software           *stun.Software
+	software           stun.Software
 	sender             Sender
 }
 
@@ -107,7 +107,7 @@ func NewServer(config *ServerConfig) *Server {
 		channelBindTimeout: channelBindTimeout,
 		log:                log,
 		net:                config.Net,
-		software:           config.Software,
+		software:           stun.NewSoftware(config.Software),
 		sender:             config.Sender,
 	}
 }
