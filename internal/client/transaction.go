@@ -67,8 +67,8 @@ func (t *Transaction) StartRtxTimer(onTimeout func(trKey string, nRtx int32)) {
 
 // StopRtxTimer stop the transaction timer
 func (t *Transaction) StopRtxTimer() {
-	t.mutex.RLock()
-	defer t.mutex.RUnlock()
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 
 	if t != nil {
 		t.timer.Stop()

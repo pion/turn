@@ -492,6 +492,8 @@ func (c *Client) handleChannelData(data []byte) error {
 		return fmt.Errorf("binding with channel %d not found", int(chData.Number))
 	}
 
+	c.log.Tracef("channel data received from %s (ch=%d)", addr.String(), int(chData.Number))
+
 	relayedConn.HandleInbound(chData.Data, addr)
 	return nil
 }
