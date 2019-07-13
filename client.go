@@ -39,7 +39,7 @@ type ClientConfig struct {
 	Username       string
 	Password       string
 	Realm          string
-	Software       *stun.Software
+	Software       string
 	RTO            time.Duration
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
 	LoggerFactory  logging.LoggerFactory
@@ -48,16 +48,16 @@ type ClientConfig struct {
 
 // Client is a STUN server client
 type Client struct {
-	conn          net.PacketConn        // read-only
-	stunServ      net.Addr              // read-only
-	turnServ      net.Addr              // read-only
-	stunServStr   string                // read-only, used for dmuxing
-	turnServStr   string                // read-only, used for dmuxing
-	username      stun.Username         // read-only
-	password      string                // read-only
-	realm         stun.Realm            // read-only
-	integrity     stun.MessageIntegrity // read-only
-	software      *stun.Software
+	conn          net.PacketConn         // read-only
+	stunServ      net.Addr               // read-only
+	turnServ      net.Addr               // read-only
+	stunServStr   string                 // read-only, used for dmuxing
+	turnServStr   string                 // read-only, used for dmuxing
+	username      stun.Username          // read-only
+	password      string                 // read-only
+	realm         stun.Realm             // read-only
+	integrity     stun.MessageIntegrity  // read-only
+	software      stun.Software          // read-only
 	trMap         *client.TransactionMap // thread-safe
 	rto           time.Duration          // read-only
 	relayedConn   *client.UDPConn        // protected by mutex ***
@@ -113,7 +113,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		username:    stun.NewUsername(config.Username),
 		password:    config.Password,
 		realm:       stun.NewRealm(config.Realm),
-		software:    config.Software,
+		software:    stun.NewSoftware(config.Software),
 		net:         config.Net,
 		trMap:       client.NewTransactionMap(),
 		rto:         defaultRTO,
@@ -188,8 +188,8 @@ func (c *Client) Close() {
 // SendBindingRequestTo sends a new STUN request to the given transport address
 func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 	attrs := []stun.Setter{stun.TransactionID, stun.BindingRequest}
-	if c.software != nil {
-		attrs = append(attrs, *c.software)
+	if len(c.software) > 0 {
+		attrs = append(attrs, c.software)
 	}
 
 	msg, err := stun.Build(attrs...)
@@ -482,7 +482,7 @@ func (c *Client) handleChannelData(data []byte) error {
 	}
 
 	relayedConn := c.relayedUDPConn()
-	if relayedConn != nil {
+	if relayedConn == nil {
 		c.log.Debug("no relayed conn allocated")
 		return nil // silently discard
 	}

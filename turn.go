@@ -475,8 +475,8 @@ func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *tur
 
 func (s *Server) makeAttrs(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageType, additional ...stun.Setter) []stun.Setter {
 	attrs := append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
-	if s.software != nil {
-		attrs = append(attrs, *s.software)
+	if len(s.software) > 0 {
+		attrs = append(attrs, s.software)
 	}
 	return attrs
 }
