@@ -188,13 +188,11 @@ func TestServerVNet(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
-		defer v.Close() // nolint:errcheck
 
 		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
-		defer lconn.Close() // nolint:errcheck,gosec
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
@@ -213,7 +211,6 @@ func TestServerVNet(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
-		defer client.Close()
 
 		log.Debug("sending a binding request.")
 		conn, err := client.Allocate()
@@ -227,7 +224,6 @@ func TestServerVNet(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
-		defer echoConn.Close() // nolint:errcheck
 
 		go func() {
 			buf := make([]byte, 1500)
@@ -258,7 +254,7 @@ func TestServerVNet(t *testing.T) {
 
 		buf := make([]byte, 1500)
 
-		for i := 0; i < 4; i++ {
+		for i := 0; i < 10; i++ {
 			log.Debug("sending \"Hello\"..")
 			_, err = conn.WriteTo([]byte("Hello"), echoConn.LocalAddr())
 			if !assert.NoError(t, err, "should succeed") {
@@ -271,12 +267,27 @@ func TestServerVNet(t *testing.T) {
 			// verify the message was received from the relay address
 			assert.Equal(t, echoConn.LocalAddr().String(), from.String(), "should match")
 
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 		}
 
+		time.Sleep(100 * time.Millisecond)
 		err = conn.Close()
 		assert.NoError(t, err, "should succeed")
+		log.Debug("RELAY CONN CLOSED")
 
-		time.Sleep(1 * time.Second) // just to see what happens..
+		err = echoConn.Close()
+		assert.NoError(t, err, "should succeed")
+		log.Debug("ECHO SERVER CLOSED")
+
+		client.Close()
+		log.Debug("TURN CLIENT CLOSED")
+
+		err = lconn.Close()
+		assert.NoError(t, err, "should succeed")
+		log.Debug("LOCAL CONN CLOSED")
+
+		err = v.Close()
+		assert.NoError(t, err, "should succeed")
+		log.Debug("VNET CLOSED")
 	})
 }

@@ -60,8 +60,8 @@ type UDPConn struct {
 	permMap           *permissionMap        // thread-safe
 	bindingMgr        *bindingManager       // thread-safe
 	integrity         stun.MessageIntegrity // read-only
-	nonce             stun.Nonce            // read-only
-	lifetime          time.Duration         // needs mutex x
+	_nonce            stun.Nonce            // needs mutex x
+	_lifetime         time.Duration         // needs mutex x
 	readCh            chan *inboundData     // thread-safe
 	closeCh           chan struct{}         // thread-safe
 	closed            *AtomicBool           // thread-safe
@@ -80,8 +80,8 @@ func NewUDPConn(config *UDPConnConfig) *UDPConn {
 		permMap:     newPermissionMap(),
 		bindingMgr:  newBindingManager(),
 		integrity:   config.Integrity,
-		nonce:       config.Nonce,
-		lifetime:    config.Lifetime,
+		_nonce:      config.Nonce,
+		_lifetime:   config.Lifetime,
 		readCh:      make(chan *inboundData, maxReadQueueSize),
 		closeCh:     make(chan struct{}),
 		closed:      NewAtomicBool(false),
@@ -89,12 +89,12 @@ func NewUDPConn(config *UDPConnConfig) *UDPConn {
 		log:         config.Log,
 	}
 
-	c.log.Debugf("initial lifetime: %d seconds", int(c.lifetime.Seconds()))
+	c.log.Debugf("initial lifetime: %d seconds", int(c.lifetime().Seconds()))
 
 	c.refreshAllocTimer = NewPeriodicTimer(
 		timerIDRefreshAlloc,
 		c.onRefreshTimers,
-		c.lifetime/2,
+		c.lifetime()/2,
 	)
 
 	c.refreshPermsTimer = NewPeriodicTimer(
@@ -203,33 +203,37 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	if !ok {
 		b = c.bindingMgr.create(addr)
 	}
-	if b.state() != bindingStateReady {
-		if b.state() == bindingStateIdle {
-			func() {
-				// block only callers with the same binding until
-				// the binding transaction has been complete
-				b.mutex.Lock()
-				defer b.mutex.Unlock()
 
-				// binding state may have been changed while waiting. check again.
-				if b.state() == bindingStateIdle {
-					err = c.bind(b)
-					if err != nil {
-						c.log.Warnf("bind() failed: %s", err.Error())
+	bindSt := b.state()
+
+	if bindSt == bindingStateIdle || bindSt == bindingStateRequest || bindSt == bindingStateFailed {
+		func() {
+			// block only callers with the same binding until
+			// the binding transaction has been complete
+			b.muBind.Lock()
+			defer b.muBind.Unlock()
+
+			// binding state may have been changed while waiting. check again.
+			if b.state() == bindingStateIdle {
+				b.setState(bindingStateRequest)
+				go func() {
+					err2 := c.bind(b)
+					if err2 != nil {
+						c.log.Warnf("bind() failed: %s", err2.Error())
 						b.setState(bindingStateFailed)
 						// keep going...
 						// TODO: consider try binding again after a while
 					} else {
 						b.setState(bindingStateReady)
 					}
-				}
-			}()
-		}
+				}()
+			}
+		}()
 
 		// send data using SendIndication
-		// TODO: send over channel when it becomes available
 		peerAddr := addr2PeerAddress(addr)
-		msg, err := stun.Build(
+		var msg *stun.Message
+		msg, err = stun.Build(
 			stun.TransactionID,
 			stun.NewType(stun.MethodSend, stun.ClassIndication),
 			turn.RequestedTransportUDP,
@@ -245,6 +249,30 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 
 		return c.obs.WriteTo(msg.Raw, c.obs.TURNServerAddr())
 	}
+
+	// binding is either ready
+
+	// check if the binding needs a refresh
+	func() {
+		b.muBind.Lock()
+		defer b.muBind.Unlock()
+
+		if b.state() == bindingStateReady && time.Since(b.refreshedAt()) > 5*time.Minute {
+			b.setState(bindingStateRefresh)
+			go func() {
+				err = c.bind(b)
+				if err != nil {
+					c.log.Warnf("bind() for refresh failed: %s", err.Error())
+					b.setState(bindingStateFailed)
+					// keep going...
+					// TODO: consider try binding again after a while
+				} else {
+					b.setRefreshedAt(time.Now())
+					b.setState(bindingStateReady)
+				}
+			}()
+		}
+	}()
 
 	// send via ChannelData
 	return c.sendChannelData(p, b.number)
@@ -263,9 +291,8 @@ func (c *UDPConn) Close() error {
 		close(c.closeCh)
 	}
 
-	c.refreshAllocation(0, true) // dontWait = true
 	c.obs.OnDeallocated(c.relayedAddr)
-	return nil
+	return c.refreshAllocation(0, true /* dontWait=true */)
 }
 
 // LocalAddr returns the local network address.
@@ -344,8 +371,8 @@ func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
 	setters = append(setters,
 		c.obs.Username(),
 		c.obs.Realm(),
-		&c.nonce,
-		&c.integrity,
+		c.nonce(),
+		c.integrity,
 		stun.Fingerprint)
 
 	msg, err := stun.Build(setters...)
@@ -375,8 +402,12 @@ func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
 
 // HandleInbound passes inbound data in UDPConn
 func (c *UDPConn) HandleInbound(data []byte, from net.Addr) {
+	// copy data
+	copied := make([]byte, len(data))
+	copy(copied, data)
+
 	select {
-	case c.readCh <- &inboundData{data: data, from: from}:
+	case c.readCh <- &inboundData{data: copied, from: from}:
 	default:
 		c.log.Warnf("receive buffer full")
 	}
@@ -392,7 +423,7 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 	return b.addr, true
 }
 
-func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) {
+func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
@@ -401,31 +432,55 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) {
 		stun.Fingerprint,
 	)
 	if err != nil {
-		c.log.Errorf("failed to build refresh request: %s", err.Error())
-		return
+		return fmt.Errorf("failed to build refresh request: %s", err.Error())
 	}
 
+	c.log.Debugf("send refresh request (dontWait=%v)", dontWait)
 	trRes, err := c.obs.PerformTransaction(msg, c.obs.TURNServerAddr(), dontWait)
 	if err != nil {
-		c.log.Errorf("failed to refresh refresh: %s", err.Error())
-		return
+		return fmt.Errorf("failed to refresh refresh: %s", err.Error())
 	}
 
 	if dontWait {
-		return
+		c.log.Debug("refresh request sent")
+		return nil
+	}
+
+	c.log.Debug("refresh request sent, and waiting response")
+
+	res := trRes.Msg
+	if res.Type.Class == stun.ClassErrorResponse {
+		var code stun.ErrorCodeAttribute
+		if err = code.GetFrom(res); err == nil {
+			if code.Code == stun.CodeStaleNonce {
+				// Update nonce
+				var nonce stun.Nonce
+				if err = nonce.GetFrom(res); err == nil {
+					c.setNonce(nonce)
+					c.log.Debug("refresh allocation: 438, got new nonce.")
+				} else {
+					c.log.Warn("refresh allocation: 438 but no nonce.")
+				}
+
+				return errTryAgain
+			}
+
+			return err
+		}
+		return fmt.Errorf("%s", res.Type)
 	}
 
 	// Getting lifetime from response
 	var updatedLifetime turn.Lifetime
-	if err := updatedLifetime.GetFrom(trRes.Msg); err != nil {
-		c.log.Errorf("failed to get lifetime from refresh response: %s", err.Error())
-		return
+	if err := updatedLifetime.GetFrom(res); err != nil {
+		return fmt.Errorf("failed to get lifetime from refresh response: %s", err.Error())
 	}
 
 	c.mutex.Lock()
-	c.lifetime = updatedLifetime.Duration
-	c.log.Debugf("updated lifetime: %d seconds", int(c.lifetime.Seconds()))
+	c.setLifetime(updatedLifetime.Duration)
+	c.log.Debugf("updated lifetime: %d seconds", int(c.lifetime().Seconds()))
 	c.mutex.Unlock()
+	return nil
 }
 
 func (c *UDPConn) refreshPermissions() {
@@ -450,7 +505,7 @@ func (c *UDPConn) bind(b *binding) error {
 		turn.ChannelNumber(b.number),
 		c.obs.Username(),
 		c.obs.Realm(),
-		c.nonce,
+		c.nonce(),
 		c.integrity,
 		stun.Fingerprint,
 	}
@@ -471,9 +526,7 @@ func (c *UDPConn) bind(b *binding) error {
 		return fmt.Errorf("unexpected response type %s", res.Type)
 	}
 
-	c.log.Debugf("channel binding successful: %s %d",
-		b.addr.String(),
-		b.number)
+	c.log.Debugf("channel binding successful: %s %d", b.addr.String(), b.number)
 
 	// Success.
 	return nil
@@ -490,31 +543,51 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 
 func (c *UDPConn) onRefreshTimers(id int) {
 	c.log.Debugf("refresh timer %d expired", id)
-	c.mutex.RLock()
-	lifetime := c.lifetime
-	c.mutex.RUnlock()
 	switch id {
 	case timerIDRefreshAlloc:
-		c.refreshAllocation(lifetime, false)
+		var err error
+		lifetime := c.lifetime()
+		// limit the max retries on errTryAgain to 3
+		// when stale nonce returns, sencond retry should succeed
+		for i := 0; i < 3; i++ {
+			err = c.refreshAllocation(lifetime, false)
+			if err != errTryAgain {
+				break
+			}
+		}
+		if err != nil {
+			c.log.Warnf("refresh allocation failed")
+		}
 	case timerIDRefreshPerms:
 		c.refreshPermissions()
 	}
 }
 
-type timeoutError struct {
-	msg string
+func (c *UDPConn) nonce() stun.Nonce {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c._nonce
 }
 
-func newTimeoutError(msg string) error {
-	return &timeoutError{
-		msg: msg,
-	}
+func (c *UDPConn) setNonce(nonce stun.Nonce) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.log.Debugf("set new nonce with %d bytes", len(nonce))
+	c._nonce = nonce
 }
 
-func (e *timeoutError) Error() string {
-	return e.msg
+func (c *UDPConn) lifetime() time.Duration {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c._lifetime
 }
 
-func (e *timeoutError) Timeout() bool {
-	return true
+func (c *UDPConn) setLifetime(lifetime time.Duration) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c._lifetime = lifetime
 }

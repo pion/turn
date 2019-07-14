@@ -104,6 +104,11 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		log.Debugf("turnServ: %s", turnServStr)
 	}
 
+	rto := defaultRTO
+	if config.RTO > 0 {
+		rto = config.RTO
+	}
+
 	c := &Client{
 		conn:        config.Conn,
 		stunServ:    stunServ,
@@ -116,7 +121,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		software:    stun.NewSoftware(config.Software),
 		net:         config.Net,
 		trMap:       client.NewTransactionMap(),
-		rto:         defaultRTO,
+		rto:         rto,
 		log:         log,
 	}
 
@@ -324,9 +329,13 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 // PerformTransaction performs STUN transaction
 func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (client.TransactionResult, error) {
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
+
+	raw := make([]byte, len(msg.Raw))
+	copy(raw, msg.Raw)
+
 	tr := client.NewTransaction(&client.TransactionConfig{
 		Key:      trKey,
-		Raw:      msg.Raw,
+		Raw:      raw,
 		To:       to,
 		Interval: c.rto,
 	})
@@ -334,7 +343,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait boo
 	c.trMap.Insert(trKey, tr)
 
 	c.log.Tracef("start %s transaction %s to %s", msg.Type, trKey, tr.To.String())
-	_, err := c.conn.WriteTo(msg.Raw, to)
+	_, err := c.conn.WriteTo(tr.Raw, to)
 	if err != nil {
 		return client.TransactionResult{}, err
 	}
@@ -411,7 +420,10 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 }
 
 func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
-	msg := &stun.Message{Raw: data}
+	raw := make([]byte, len(data))
+	copy(raw, data)
+
+	msg := &stun.Message{Raw: raw}
 	if err := msg.Decode(); err != nil {
 		return errors.Wrap(err, "failed to decode STUN message")
 	}
@@ -443,6 +455,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				c.log.Debug("no relayed conn allocated")
 				return nil // silently discard
 			}
+
 			relayedConn.HandleInbound(data, from)
 		}
 		return nil
