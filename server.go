@@ -280,26 +280,32 @@ func (s *Server) Start() error {
 
 // Close closes the connection.
 func (s *Server) Close() error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	var toJoin []*listener
+	var err error
 
-	if err := s.manager.Close(); err != nil {
-		return err
-	}
+	func() {
+		s.lock.RLock()
+		defer s.lock.RUnlock()
 
-	for _, l := range s.listeners {
-		err := l.conn.Close()
-		if err != nil {
-			s.log.Debugf("Close() returned error: %s", err.Error())
+		if err2 := s.manager.Close(); err2 != nil {
+			err = err2
 		}
 
-	}
+		for _, l := range s.listeners {
+			err2 := l.conn.Close()
+			if err2 != nil {
+				s.log.Debugf("Close() returned error: %s", err2.Error())
+				continue
+			}
+			toJoin = append(toJoin, l)
+		}
+	}()
 
 	for _, l := range s.listeners {
 		<-l.closeCh
 	}
 
-	return nil
+	return err
 }
 
 // caller must hold the mutex

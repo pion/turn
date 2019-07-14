@@ -4,6 +4,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 //  Chanel number:
@@ -18,16 +19,20 @@ type bindingState int32
 
 const (
 	bindingStateIdle bindingState = iota
+	bindingStateRequest
 	bindingStateReady
+	bindingStateRefresh
 	bindingStateFailed
 )
 
 type binding struct {
-	number uint16          // read-only
-	st     bindingState    // thread-safe (atomic op)
-	addr   net.Addr        // read-only
-	mgr    *bindingManager // read-only
-	mutex  sync.Mutex      // thread-safe, used in UDPConn
+	number       uint16          // read-only
+	st           bindingState    // thread-safe (atomic op)
+	addr         net.Addr        // read-only
+	mgr          *bindingManager // read-only
+	muBind       sync.Mutex      // thread-safe, for ChannelBind ops
+	_refreshedAt time.Time       // protected by mutex
+	mutex        sync.RWMutex    // thread-safe
 }
 
 func (b *binding) setState(state bindingState) {
@@ -36,6 +41,20 @@ func (b *binding) setState(state bindingState) {
 
 func (b *binding) state() bindingState {
 	return bindingState(atomic.LoadInt32((*int32)(&b.st)))
+}
+
+func (b *binding) setRefreshedAt(at time.Time) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b._refreshedAt = at
+}
+
+func (b *binding) refreshedAt() time.Time {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b._refreshedAt
 }
 
 // Thread-safe binding map
@@ -69,9 +88,10 @@ func (mgr *bindingManager) create(addr net.Addr) *binding {
 	defer mgr.mutex.Unlock()
 
 	b := &binding{
-		number: mgr.assignChannelNumber(),
-		addr:   addr,
-		mgr:    mgr,
+		number:       mgr.assignChannelNumber(),
+		addr:         addr,
+		mgr:          mgr,
+		_refreshedAt: time.Now(),
 	}
 
 	mgr.chanMap[b.number] = b
