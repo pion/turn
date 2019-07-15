@@ -236,7 +236,6 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		msg, err = stun.Build(
 			stun.TransactionID,
 			stun.NewType(stun.MethodSend, stun.ClassIndication),
-			turn.RequestedTransportUDP,
 			turn.Data(p),
 			peerAddr,
 			stun.Fingerprint,
@@ -361,7 +360,6 @@ func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
-		turn.RequestedTransportUDP,
 	}
 
 	for _, addr := range addrs {
@@ -427,8 +425,11 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
-		turn.RequestedTransportUDP,
 		turn.Lifetime{Duration: lifetime},
+		c.obs.Username(),
+		c.obs.Realm(),
+		c.nonce(),
+		c.integrity,
 		stun.Fingerprint,
 	)
 	if err != nil {
@@ -500,7 +501,6 @@ func (c *UDPConn) bind(b *binding) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodChannelBind, stun.ClassRequest),
-		turn.RequestedTransportUDP,
 		addr2PeerAddress(b.addr),
 		turn.ChannelNumber(b.number),
 		c.obs.Username(),
