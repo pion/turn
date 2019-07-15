@@ -71,7 +71,7 @@ func (t *Transaction) StopRtxTimer() {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
-	if t != nil {
+	if t.timer != nil {
 		t.timer.Stop()
 	}
 }
