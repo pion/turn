@@ -376,32 +376,11 @@ func (c *Client) OnDeallocated(relayedAddr net.Addr) {
 // If not handled, it is assumed that the packet is application data.
 // If an error is returned, the caller should discard the packet regardless.
 func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
-	var handled bool
-	var err error
 
-	switch {
-	case stun.IsMessage(data):
-		handled = true
-		err = c.handleSTUNMessage(data, from)
-	case len(c.turnServStr) != 0 && from.String() == c.turnServStr:
-		handled = true
-		// received from TURN server
-		if turn.IsChannelData(data) {
-			err = c.handleChannelData(data)
-		} else {
-			err = fmt.Errorf("unexpected packet from TURN server")
-		}
-	case len(c.stunServStr) != 0 && from.String() == c.stunServStr:
-		handled = true
-		// received from STUN server but it is not a STUN message
-		err = fmt.Errorf("non-STUN message from STUN server")
-	default:
-		// assume, this is an application data
-		c.log.Tracef("non-STUN/TURN packect, unhandled")
-	}
-
-	// +---------+---------+-------------------------------+
-	// | handled |   err   |       Meaning / Action        |
+	// +-------------------+-------------------------------+
+	// |   Return Values   |                               |
+	// +-------------------+       Meaning / Action        |
+	// | handled |  error  |                               |
 	// |=========+=========+===============================+
 	// |  false  |   nil   | Handle the packet as app data |
 	// |---------+---------+-------------------------------+
@@ -416,7 +395,24 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	//  - STUN message was a request
 	//  - Non-STUN message from the STUN server
 
-	return handled, err
+	switch {
+	case stun.IsMessage(data):
+		return true, c.handleSTUNMessage(data, from)
+	case len(c.turnServStr) != 0 && from.String() == c.turnServStr:
+		// received from TURN server
+		if turn.IsChannelData(data) {
+			return true, c.handleChannelData(data)
+		}
+		return true, fmt.Errorf("unexpected packet from TURN server")
+	case len(c.stunServStr) != 0 && from.String() == c.stunServStr:
+		// received from STUN server but it is not a STUN message
+		return true, fmt.Errorf("non-STUN message from STUN server")
+	default:
+		// assume, this is an application data
+		c.log.Tracef("non-STUN/TURN packect, unhandled")
+	}
+
+	return false, nil
 }
 
 func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
