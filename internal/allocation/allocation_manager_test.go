@@ -10,13 +10,12 @@ import (
 
 	"github.com/gortc/turn"
 	"github.com/pion/logging"
-	"github.com/pion/turn/internal/ipnet"
 )
 
 func TestManager(t *testing.T) {
 	tt := []struct {
 		name string
-		f    func(*testing.T, ipnet.PacketConn)
+		f    func(*testing.T, net.PacketConn)
 	}{
 		{"CreateInvalidAllocation", subTestCreateInvalidAllocation},
 		{"CreateAllocation", subTestCreateAllocation},
@@ -27,14 +26,9 @@ func TestManager(t *testing.T) {
 	}
 
 	network := "udp4"
-	c, err := net.ListenPacket(network, "0.0.0.0:0")
+	turnSocket, err := net.ListenPacket(network, "0.0.0.0:0")
 	if err != nil {
 		panic(err)
-	}
-
-	turnSocket, err := ipnet.NewPacketConn(network, c)
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	for _, tc := range tt {
@@ -46,7 +40,7 @@ func TestManager(t *testing.T) {
 }
 
 // test invalid Allocation creations
-func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
+func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m := newTestManager()
 	if a, err := m.CreateAllocation(nil, turnSocket, net.IPv4zero, 0, turn.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
@@ -60,7 +54,7 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 }
 
 // test valid Allocation creations
-func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
+func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m := newTestManager()
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, turn.DefaultLifetime); a == nil || err != nil {
@@ -73,7 +67,7 @@ func subTestCreateAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 }
 
 // test that two allocations can't be created with the same FiveTuple
-func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket ipnet.PacketConn) {
+func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.PacketConn) {
 	m := newTestManager()
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, turn.DefaultLifetime); a == nil || err != nil {
@@ -85,7 +79,7 @@ func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket ipnet.Pa
 	}
 }
 
-func subTestDeleteAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
+func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m := newTestManager()
 	fiveTuple := randomFiveTuple()
 	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, turn.DefaultLifetime); a == nil || err != nil {
@@ -103,7 +97,7 @@ func subTestDeleteAllocation(t *testing.T, turnSocket ipnet.PacketConn) {
 }
 
 // test that allocation should be closed if timeout
-func subTestAllocationTimeout(t *testing.T, turnSocket ipnet.PacketConn) {
+func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	m := newTestManager()
 	allocations := make([]*Allocation, 5)
 	lifetime := time.Second
@@ -129,7 +123,7 @@ func subTestAllocationTimeout(t *testing.T, turnSocket ipnet.PacketConn) {
 }
 
 // test for manager close
-func subTestManagerClose(t *testing.T, turnSocket ipnet.PacketConn) {
+func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 	m := newTestManager()
 	allocations := make([]*Allocation, 2)
 
