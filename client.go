@@ -13,7 +13,6 @@ import (
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/internal/client"
 	"github.com/pion/turn/internal/proto"
-
 	"github.com/pkg/errors"
 )
 
