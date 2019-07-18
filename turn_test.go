@@ -4,19 +4,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/stun"
+	"github.com/pion/turn/internal/proto"
 )
 
 func TestAllocationLifeTime(t *testing.T) {
-	lifetime := turn.Lifetime{
+	lifetime := proto.Lifetime{
 		Duration: 5 * time.Second,
 	}
 
 	m := &stun.Message{}
 	lifetimeDuration := allocationLifeTime(m)
 
-	if lifetimeDuration != turn.DefaultLifetime {
+	if lifetimeDuration != proto.DefaultLifetime {
 		t.Errorf("Allocation lifetime should be default time duration")
 	}
 
@@ -31,7 +31,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 	// If lifetime is bigger than maximumLifetime
 	{
-		lifetime := turn.Lifetime{
+		lifetime := proto.Lifetime{
 			Duration: maximumLifetime * 2,
 		}
 
@@ -39,8 +39,8 @@ func TestAllocationLifeTime(t *testing.T) {
 		_ = lifetime.AddTo(m2)
 
 		lifetimeDuration := allocationLifeTime(m2)
-		if lifetimeDuration != turn.DefaultLifetime {
-			t.Errorf("Expect lifetimeDuration is %s, but %s", turn.DefaultLifetime, lifetimeDuration)
+		if lifetimeDuration != proto.DefaultLifetime {
+			t.Errorf("Expect lifetimeDuration is %s, but %s", proto.DefaultLifetime, lifetimeDuration)
 		}
 	}
 

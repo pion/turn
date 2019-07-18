@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/logging"
+	"github.com/pion/turn/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +31,7 @@ func TestServer(t *testing.T) {
 			LoggerFactory: loggerFactory,
 		})
 
-		assert.Equal(t, turn.DefaultLifetime, server.channelBindTimeout, "should match")
+		assert.Equal(t, proto.DefaultLifetime, server.channelBindTimeout, "should match")
 
 		err := server.AddListeningIPAddr("127.0.0.1")
 		assert.NoError(t, err, "should succeed")
@@ -87,7 +87,7 @@ func TestServer(t *testing.T) {
 			LoggerFactory: loggerFactory,
 		})
 
-		assert.Equal(t, turn.DefaultLifetime, server.channelBindTimeout, "should match")
+		assert.Equal(t, proto.DefaultLifetime, server.channelBindTimeout, "should match")
 
 		err := server.AddListeningIPAddr("127.0.0.1")
 		assert.NoError(t, err, "should succeed")
@@ -120,7 +120,7 @@ func TestServer(t *testing.T) {
 			LoggerFactory: loggerFactory,
 		})
 
-		assert.Equal(t, turn.DefaultLifetime, server.channelBindTimeout, "should match")
+		assert.Equal(t, proto.DefaultLifetime, server.channelBindTimeout, "should match")
 
 		err := server.AddListeningIPAddr("127.0.0.1")
 		assert.NoError(t, err, "should succeed")

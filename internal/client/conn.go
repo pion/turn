@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/pion/stun"
+	"github.com/pion/turn/internal/proto"
 )
 
 const (
@@ -236,7 +236,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 		msg, err = stun.Build(
 			stun.TransactionID,
 			stun.NewType(stun.MethodSend, stun.ClassIndication),
-			turn.Data(p),
+			proto.Data(p),
 			peerAddr,
 			stun.Fingerprint,
 		)
@@ -342,8 +342,8 @@ func (c *UDPConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-func addr2PeerAddress(addr net.Addr) turn.PeerAddress {
-	var peerAddr turn.PeerAddress
+func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
+	var peerAddr proto.PeerAddress
 	switch a := addr.(type) {
 	case *net.UDPAddr:
 		peerAddr.IP = a.IP
@@ -425,7 +425,7 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
-		turn.Lifetime{Duration: lifetime},
+		proto.Lifetime{Duration: lifetime},
 		c.obs.Username(),
 		c.obs.Realm(),
 		c.nonce(),
@@ -472,7 +472,7 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 	}
 
 	// Getting lifetime from response
-	var updatedLifetime turn.Lifetime
+	var updatedLifetime proto.Lifetime
 	if err := updatedLifetime.GetFrom(res); err != nil {
 		return fmt.Errorf("failed to get lifetime from refresh response: %s", err.Error())
 	}
@@ -502,7 +502,7 @@ func (c *UDPConn) bind(b *binding) error {
 		stun.TransactionID,
 		stun.NewType(stun.MethodChannelBind, stun.ClassRequest),
 		addr2PeerAddress(b.addr),
-		turn.ChannelNumber(b.number),
+		proto.ChannelNumber(b.number),
 		c.obs.Username(),
 		c.obs.Realm(),
 		c.nonce(),
@@ -533,9 +533,9 @@ func (c *UDPConn) bind(b *binding) error {
 }
 
 func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
-	chData := &turn.ChannelData{
+	chData := &proto.ChannelData{
 		Data:   data,
-		Number: turn.ChannelNumber(chNum),
+		Number: proto.ChannelNumber(chNum),
 	}
 	chData.Encode()
 	return c.obs.WriteTo(chData.Raw, c.obs.TURNServerAddr())

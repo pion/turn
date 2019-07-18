@@ -8,11 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/internal/client"
+	"github.com/pion/turn/internal/proto"
+
 	"github.com/pkg/errors"
 )
 
@@ -241,7 +242,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		turn.RequestedTransportUDP,
+		proto.RequestedTransportUDP,
 		stun.Fingerprint,
 	)
 	if err != nil {
@@ -271,7 +272,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	msg, err = stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		turn.RequestedTransportUDP,
+		proto.RequestedTransportUDP,
 		&c.username,
 		&c.realm,
 		&nonce,
@@ -297,7 +298,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	}
 
 	// Getting relayed addresses from response.
-	var relayed turn.RelayedAddress
+	var relayed proto.RelayedAddress
 	if err := relayed.GetFrom(res); err != nil {
 		return nil, err
 	}
@@ -307,7 +308,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	}
 
 	// Getting lifetime from response
-	var lifetime turn.Lifetime
+	var lifetime proto.Lifetime
 	if err := lifetime.GetFrom(res); err != nil {
 		return nil, err
 	}
@@ -400,7 +401,7 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 		return true, c.handleSTUNMessage(data, from)
 	case len(c.turnServStr) != 0 && from.String() == c.turnServStr:
 		// received from TURN server
-		if turn.IsChannelData(data) {
+		if proto.IsChannelData(data) {
 			return true, c.handleChannelData(data)
 		}
 		return true, fmt.Errorf("unexpected packet from TURN server")
@@ -430,7 +431,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 
 	if msg.Type.Class == stun.ClassIndication {
 		if msg.Type.Method == stun.MethodData {
-			var peerAddr turn.PeerAddress
+			var peerAddr proto.PeerAddress
 			if err := peerAddr.GetFrom(msg); err != nil {
 				return err
 			}
@@ -439,7 +440,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				Port: peerAddr.Port,
 			}
 
-			var data turn.Data
+			var data proto.Data
 			if err := data.GetFrom(msg); err != nil {
 				return err
 			}
@@ -486,7 +487,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 }
 
 func (c *Client) handleChannelData(data []byte) error {
-	chData := &turn.ChannelData{
+	chData := &proto.ChannelData{
 		Raw: make([]byte, len(data)),
 	}
 	copy(chData.Raw, data)

@@ -6,11 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/stun"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/pion/turn/internal/ipnet"
+	"github.com/pion/turn/internal/proto"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAllocation(t *testing.T) {
@@ -107,19 +106,19 @@ func subTestAddChannelBind(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	c := NewChannelBind(turn.MinChannelNumber, addr, nil)
+	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	err := a.AddChannelBind(c, turn.DefaultLifetime)
+	err := a.AddChannelBind(c, proto.DefaultLifetime)
 	assert.Nil(t, err, "should succeed")
 	assert.Equal(t, a, c.allocation, "allocation should be the caller.")
 
-	c2 := NewChannelBind(turn.MinChannelNumber+1, addr, nil)
-	err = a.AddChannelBind(c2, turn.DefaultLifetime)
+	c2 := NewChannelBind(proto.MinChannelNumber+1, addr, nil)
+	err = a.AddChannelBind(c2, proto.DefaultLifetime)
 	assert.NotNil(t, err, "should failed with conflicted peer address")
 
 	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
-	c3 := NewChannelBind(turn.MinChannelNumber, addr2, nil)
-	err = a.AddChannelBind(c3, turn.DefaultLifetime)
+	c3 := NewChannelBind(proto.MinChannelNumber, addr2, nil)
+	err = a.AddChannelBind(c3, proto.DefaultLifetime)
 	assert.NotNil(t, err, "should fail with conflicted number.")
 }
 
@@ -127,14 +126,14 @@ func subTestGetChannelByNumber(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	c := NewChannelBind(turn.MinChannelNumber, addr, nil)
+	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	_ = a.AddChannelBind(c, turn.DefaultLifetime)
+	_ = a.AddChannelBind(c, proto.DefaultLifetime)
 
 	existChannel := a.GetChannelByNumber(c.Number)
 	assert.Equal(t, c, existChannel)
 
-	notExistChannel := a.GetChannelByNumber(turn.MinChannelNumber + 1)
+	notExistChannel := a.GetChannelByNumber(proto.MinChannelNumber + 1)
 	assert.Nil(t, notExistChannel, "should be nil for not existed channel.")
 }
 
@@ -142,9 +141,9 @@ func subTestGetChannelByAddr(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	c := NewChannelBind(turn.MinChannelNumber, addr, nil)
+	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	_ = a.AddChannelBind(c, turn.DefaultLifetime)
+	_ = a.AddChannelBind(c, proto.DefaultLifetime)
 
 	existChannel := a.GetChannelByAddr(c.Peer)
 	assert.Equal(t, c, existChannel)
@@ -158,9 +157,9 @@ func subTestRemoveChannelBind(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	c := NewChannelBind(turn.MinChannelNumber, addr, nil)
+	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	_ = a.AddChannelBind(c, turn.DefaultLifetime)
+	_ = a.AddChannelBind(c, proto.DefaultLifetime)
 
 	a.RemoveChannelBind(c.Number)
 
@@ -182,12 +181,12 @@ func subTestAllocationClose(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 	a.RelaySocket = l
 	// add mock lifetimeTimer
-	a.lifetimeTimer = time.AfterFunc(turn.DefaultLifetime, func() {})
+	a.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
 
 	// add channel
 	addr, _ := net.ResolveUDPAddr(network, "127.0.0.1:3478")
-	c := NewChannelBind(turn.MinChannelNumber, addr, nil)
-	_ = a.AddChannelBind(c, turn.DefaultLifetime)
+	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
+	_ = a.AddChannelBind(c, proto.DefaultLifetime)
 
 	// add permission
 	a.AddPermission(NewPermission(addr, nil))
@@ -231,7 +230,7 @@ func subTestPacketHandler(t *testing.T) {
 	a, err := m.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, net.ParseIP("127.0.0.1"), 0, turn.DefaultLifetime)
+	}, turnSocket, net.ParseIP("127.0.0.1"), 0, proto.DefaultLifetime)
 
 	assert.Nil(t, err, "should succeed")
 
@@ -248,8 +247,8 @@ func subTestPacketHandler(t *testing.T) {
 	// add permission with peer1 address
 	a.AddPermission(NewPermission(peerListener1.LocalAddr(), m.log))
 	// add channel with min channel number and peer2 address
-	channelBind := NewChannelBind(turn.MinChannelNumber, peerListener2.LocalAddr(), m.log)
-	_ = a.AddChannelBind(channelBind, turn.DefaultLifetime)
+	channelBind := NewChannelBind(proto.MinChannelNumber, peerListener2.LocalAddr(), m.log)
+	_ = a.AddChannelBind(channelBind, proto.DefaultLifetime)
 
 	_, port, _ := ipnet.AddrIPPort(a.RelaySocket.LocalAddr())
 	relayAddrWithHostStr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -267,7 +266,7 @@ func subTestPacketHandler(t *testing.T) {
 	err = stun.Decode(data, &msg)
 	assert.Nil(t, err, "decode data to stun message failed")
 
-	var msgData turn.Data
+	var msgData proto.Data
 	err = msgData.GetFrom(&msg)
 	assert.Nil(t, err, "get data from stun message failed")
 	assert.Equal(t, targetText, string(msgData), "get message doesn't equal the target text")
@@ -278,9 +277,9 @@ func subTestPacketHandler(t *testing.T) {
 	data = <-dataCh
 
 	// resolve channel data
-	assert.True(t, turn.IsChannelData(data), "should be channel data")
+	assert.True(t, proto.IsChannelData(data), "should be channel data")
 
-	channelData := turn.ChannelData{
+	channelData := proto.ChannelData{
 		Raw: data,
 	}
 	err = channelData.Decode()

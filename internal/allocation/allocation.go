@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/turn/internal/ipnet"
+	"github.com/pion/turn/internal/proto"
 	"github.com/pkg/errors"
 )
 
@@ -121,7 +121,7 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 }
 
 // RemoveChannelBind removes the ChannelBind from this allocation by id
-func (a *Allocation) RemoveChannelBind(number turn.ChannelNumber) bool {
+func (a *Allocation) RemoveChannelBind(number proto.ChannelNumber) bool {
 	a.channelBindingsLock.Lock()
 	defer a.channelBindingsLock.Unlock()
 
@@ -136,7 +136,7 @@ func (a *Allocation) RemoveChannelBind(number turn.ChannelNumber) bool {
 }
 
 // GetChannelByNumber gets the ChannelBind from this allocation by id
-func (a *Allocation) GetChannelByNumber(number turn.ChannelNumber) *ChannelBind {
+func (a *Allocation) GetChannelByNumber(number proto.ChannelNumber) *ChannelBind {
 	a.channelBindingsLock.RLock()
 	defer a.channelBindingsLock.RUnlock()
 	for _, cb := range a.channelBindings {
@@ -246,8 +246,8 @@ func (a *Allocation) packetHandler(m *Manager) {
 			}
 		} else if p := a.GetPermission(srcAddr); p != nil {
 			udpAddr := srcAddr.(*net.UDPAddr)
-			peerAddressAttr := turn.PeerAddress{IP: udpAddr.IP, Port: udpAddr.Port}
-			dataAttr := turn.Data(buffer[:n])
+			peerAddressAttr := proto.PeerAddress{IP: udpAddr.IP, Port: udpAddr.Port}
+			dataAttr := proto.Data(buffer[:n])
 
 			msg, err := stun.Build(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication), peerAddressAttr, dataAttr)
 			if err != nil {

@@ -4,15 +4,15 @@ import (
 	"net"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/logging"
+	"github.com/pion/turn/internal/proto"
 )
 
 // ChannelBind represents a TURN Channel
 // https://tools.ietf.org/html/rfc5766#section-2.5
 type ChannelBind struct {
 	Peer   net.Addr
-	Number turn.ChannelNumber
+	Number proto.ChannelNumber
 
 	allocation    *Allocation
 	lifetimeTimer *time.Timer
@@ -20,7 +20,7 @@ type ChannelBind struct {
 }
 
 // NewChannelBind creates a new ChannelBind
-func NewChannelBind(number turn.ChannelNumber, peer net.Addr, log logging.LeveledLogger) *ChannelBind {
+func NewChannelBind(number proto.ChannelNumber, peer net.Addr, log logging.LeveledLogger) *ChannelBind {
 	return &ChannelBind{
 		Number: number,
 		Peer:   peer,
