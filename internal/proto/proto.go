@@ -1,4 +1,4 @@
-// package proto implements RFC 5766 Traversal Using Relays around NAT.
+// Package proto implements RFC 5766 Traversal Using Relays around NAT.
 //
 // Merged from gortc/turn v0.80.
 package proto

@@ -31,4 +31,10 @@ func (a *RelayedAddress) GetFrom(m *stun.Message) error {
 	return (*stun.XORMappedAddress)(a).GetFromAs(m, stun.AttrXORRelayedAddress)
 }
 
+// XORRelayedAddress implements XOR-RELAYED-ADDRESS attribute.
+//
+// It specifies the address and port that the server allocated to the
+// client. It is encoded in the same way as XOR-MAPPED-ADDRESS.
+//
+// RFC 5766 Section 14.5
 type XORRelayedAddress = RelayedAddress
