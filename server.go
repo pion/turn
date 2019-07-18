@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/internal/allocation"
+	"github.com/pion/turn/internal/proto"
 	"github.com/pkg/errors"
 )
 
@@ -95,7 +95,7 @@ func NewServer(config *ServerConfig) *Server {
 
 	channelBindTimeout := config.ChannelBindTimeout
 	if channelBindTimeout == 0 {
-		channelBindTimeout = turn.DefaultLifetime
+		channelBindTimeout = proto.DefaultLifetime
 	}
 
 	return &Server{
@@ -318,7 +318,7 @@ func (s *Server) handleUDPPacket(conn net.PacketConn, srcAddr net.Addr, buf []by
 		srcAddr.String(),
 		conn.LocalAddr().String(),
 	)
-	if turn.IsChannelData(buf) {
+	if proto.IsChannelData(buf) {
 		return s.handleDataPacket(conn, srcAddr, buf)
 	}
 
@@ -328,7 +328,7 @@ func (s *Server) handleUDPPacket(conn net.PacketConn, srcAddr net.Addr, buf []by
 // caller must hold the mutex
 func (s *Server) handleDataPacket(conn net.PacketConn, srcAddr net.Addr, buf []byte) error {
 	s.log.Debugf("received DataPacket from %s", srcAddr.String())
-	c := turn.ChannelData{Raw: buf}
+	c := proto.ChannelData{Raw: buf}
 	if err := c.Decode(); err != nil {
 		return errors.Wrap(err, "Failed to create channel data from packet")
 	}

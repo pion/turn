@@ -7,12 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gortc/turn"
 	"github.com/pion/stun"
-
 	"github.com/pion/turn/internal/allocation"
 	"github.com/pion/turn/internal/ipnet"
-
+	"github.com/pion/turn/internal/proto"
 	"github.com/pkg/errors"
 )
 
@@ -144,11 +142,11 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	//    Request) error.  Otherwise, if the attribute is included but
 	//    specifies a protocol other that UDP, the server rejects the
 	//    request with a 442 (Unsupported Transport Protocol) error.
-	var requestedTransport turn.RequestedTransport
+	var requestedTransport proto.RequestedTransport
 	if err = requestedTransport.GetFrom(m); err != nil {
 		return respondWithError(err, messageIntegrity, stun.CodeBadRequest)
 	}
-	if requestedTransport.Protocol != turn.ProtoUDP {
+	if requestedTransport.Protocol != proto.ProtoUDP {
 		return respondWithError(err, messageIntegrity, stun.CodeUnsupportedTransProto)
 	}
 
@@ -169,9 +167,9 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	//     corresponding relayed transport address is still available).  If
 	//     the token is not valid for some reason, the server rejects the
 	//     request with a 508 (Insufficient Capacity) error.
-	var reservationTokenAttr turn.ReservationToken
+	var reservationTokenAttr proto.ReservationToken
 	if err = reservationTokenAttr.GetFrom(m); err == nil {
-		var evenPort turn.EvenPort
+		var evenPort proto.EvenPort
 		if err = evenPort.GetFrom(m); err == nil {
 			return respondWithError(errors.Errorf("Request must not contain RESERVATION-TOKEN and EVEN-PORT"), messageIntegrity, stun.CodeBadRequest)
 		}
@@ -189,7 +187,7 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	//    below).  If the server cannot satisfy the request, then the
 	//    server rejects the request with a 508 (Insufficient Capacity)
 	//    error.
-	var evenPort turn.EvenPort
+	var evenPort proto.EvenPort
 	if err = evenPort.GetFrom(m); err == nil {
 		randomPort := 0
 		randomPort, err = allocation.GetRandomEvenPort()
@@ -250,11 +248,11 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	}
 
 	responseAttrs := []stun.Setter{
-		&turn.RelayedAddress{
+		&proto.RelayedAddress{
 			IP:   dstIP,
 			Port: relayPort,
 		},
-		&turn.Lifetime{
+		&proto.Lifetime{
 			Duration: lifetimeDuration,
 		},
 		&stun.XORMappedAddress{
@@ -265,7 +263,7 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 
 	if reservationToken != "" {
 		s.reservationManager.CreateReservation(reservationToken, relayPort)
-		responseAttrs = append(responseAttrs, turn.ReservationToken([]byte(reservationToken)))
+		responseAttrs = append(responseAttrs, proto.ReservationToken([]byte(reservationToken)))
 	}
 
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodAllocate, m.TransactionID, append(responseAttrs, messageIntegrity)...)
@@ -296,7 +294,7 @@ func (s *Server) handleRefreshRequest(conn net.PacketConn, srcAddr net.Addr, m *
 	a.Refresh(lifetimeDuration)
 
 	return curriedSend(stun.ClassSuccessResponse, stun.MethodRefresh, m.TransactionID,
-		&turn.Lifetime{
+		&proto.Lifetime{
 			Duration: lifetimeDuration,
 		},
 		messageIntegrity,
@@ -327,7 +325,7 @@ func (s *Server) handleCreatePermissionRequest(conn net.PacketConn, srcAddr net.
 	addCount := 0
 
 	if err := m.ForEach(stun.AttrXORPeerAddress, func(m *stun.Message) error {
-		var peerAddress turn.PeerAddress
+		var peerAddress proto.PeerAddress
 		if err := peerAddress.GetFrom(m); err != nil {
 			return err
 		}
@@ -369,12 +367,12 @@ func (s *Server) handleSendIndication(conn net.PacketConn, srcAddr net.Addr, m *
 		return errors.Errorf("No allocation found for %v:%v", srcAddr, dstAddr)
 	}
 
-	dataAttr := turn.Data{}
+	dataAttr := proto.Data{}
 	if err := dataAttr.GetFrom(m); err != nil {
 		return err
 	}
 
-	peerAddress := turn.PeerAddress{}
+	peerAddress := proto.PeerAddress{}
 	if err := peerAddress.GetFrom(m); err != nil {
 		return err
 	}
@@ -419,12 +417,12 @@ func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr,
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
-	var channel turn.ChannelNumber
+	var channel proto.ChannelNumber
 	if err = channel.GetFrom(m); err != nil {
 		return errorSend(err, stun.CodeBadRequest)
 	}
 
-	peerAddr := turn.PeerAddress{}
+	peerAddr := proto.PeerAddress{}
 	if err = peerAddr.GetFrom(m); err != nil {
 		return errorSend(err, stun.CodeBadRequest)
 	}
@@ -444,7 +442,7 @@ func (s *Server) handleChannelBindRequest(conn net.PacketConn, srcAddr net.Addr,
 	return s.sender(conn, srcAddr, s.makeAttrs(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse), messageIntegrity)...)
 }
 
-func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *turn.ChannelData) error {
+func (s *Server) handleChannelData(conn net.PacketConn, srcAddr net.Addr, c *proto.ChannelData) error {
 	s.log.Debugf("received ChannelData from %s", srcAddr.String())
 	dstAddr := conn.LocalAddr()
 	a := s.manager.GetAllocation(&allocation.FiveTuple{
@@ -482,9 +480,9 @@ func (s *Server) makeAttrs(transactionID [stun.TransactionIDSize]byte, msgType s
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {
-	lifetimeDuration := turn.DefaultLifetime
+	lifetimeDuration := proto.DefaultLifetime
 
-	var lifetime turn.Lifetime
+	var lifetime proto.Lifetime
 	if err := lifetime.GetFrom(m); err == nil {
 		if lifetime.Duration < maximumLifetime {
 			lifetimeDuration = lifetime.Duration

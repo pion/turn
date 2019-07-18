@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gortc/turn"
+	"github.com/pion/turn/internal/proto"
 )
 
 func TestChannelBind(t *testing.T) {
@@ -43,7 +43,7 @@ func newChannelBind(lifetime time.Duration) *ChannelBind {
 
 	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:0")
 	c := &ChannelBind{
-		Number: turn.MinChannelNumber,
+		Number: proto.MinChannelNumber,
 		Peer:   addr,
 	}
 
