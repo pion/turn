@@ -161,12 +161,6 @@ func (a *Allocation) GetChannelByAddr(addr net.Addr) *ChannelBind {
 
 // Refresh updates the allocations lifetime
 func (a *Allocation) Refresh(lifetime time.Duration) {
-	if lifetime == 0 {
-		if !a.lifetimeTimer.Stop() {
-			a.log.Errorf("Failed to stop allocation timer for %v", a.fiveTuple)
-		}
-		return
-	}
 	if !a.lifetimeTimer.Reset(lifetime) {
 		a.log.Errorf("Failed to reset allocation timer for %v", a.fiveTuple)
 	}

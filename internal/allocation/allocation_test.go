@@ -3,6 +3,7 @@ package allocation
 import (
 	"fmt"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ func TestAllocation(t *testing.T) {
 		{"GetChannelByNumber", subTestGetChannelByNumber},
 		{"GetChannelByAddr", subTestGetChannelByAddr},
 		{"RemoveChannelBind", subTestRemoveChannelBind},
+		{"Refresh", subTestAllocationRefresh},
 		{"Close", subTestAllocationClose},
 		{"packetHandler", subTestPacketHandler},
 	}
@@ -168,6 +170,21 @@ func subTestRemoveChannelBind(t *testing.T) {
 
 	channelByAddr := a.GetChannelByAddr(c.Peer)
 	assert.Nil(t, channelByAddr)
+}
+
+func subTestAllocationRefresh(t *testing.T) {
+	a := NewAllocation(nil, nil, nil)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	a.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {
+		wg.Done()
+	})
+	a.Refresh(0)
+	wg.Wait()
+
+	// lifetimeTimer has expired
+	assert.False(t, a.lifetimeTimer.Stop())
 }
 
 func subTestAllocationClose(t *testing.T) {
