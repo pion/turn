@@ -16,7 +16,7 @@ before_script:
 
 script:
   - golangci-lint run ./...
-  - rm -rf cmd # Remove examples, no test coverage for them
+  - rm -rf examples # Remove examples, no test coverage for them
   - go test -coverpkg=$(go list ./... | tr '\n' ',') -coverprofile=cover.out -v -race -covermode=atomic ./...
   - bash <(curl -s https://codecov.io/bash)
   - bash .github/assert-contributors.sh
