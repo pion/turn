@@ -21,6 +21,7 @@ type ManagerConfig struct {
 type Manager struct {
 	lock        sync.RWMutex
 	allocations map[string]*Allocation
+	extIPMap    map[string]net.IP
 	log         logging.LeveledLogger
 	net         *vnet.Net
 }
@@ -34,6 +35,7 @@ func NewManager(config *ManagerConfig) *Manager {
 		log:         config.LeveledLogger,
 		net:         config.Net,
 		allocations: make(map[string]*Allocation, 64),
+		extIPMap:    make(map[string]net.IP),
 	}
 }
 
@@ -87,9 +89,9 @@ func (m *Manager) CreateAllocation(
 
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
-	network := "udp4"
-	relayAddr := fmt.Sprintf("%s:%d", relayIP.String(), requestedPort)
-	conn, err := m.net.ListenPacket(network, relayAddr)
+	conn, err := m.net.ListenPacket(
+		"udp4",
+		fmt.Sprintf("%s:%d", relayIP.String(), requestedPort))
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +99,19 @@ func (m *Manager) CreateAllocation(
 	m.log.Debugf("listening on relay addr: %s", conn.LocalAddr().String())
 
 	a.RelaySocket = conn
-	a.RelayAddr = conn.LocalAddr()
+
+	// Determine RelayAddr.
+	// If there's a corresponding external IP address, replace
+	// the relay IP with the external one.
+	relayAddr := conn.LocalAddr().(*net.UDPAddr)
+	if extIP, ok := m.extIPMap[relayAddr.IP.String()]; ok {
+		a.RelayAddr = &net.UDPAddr{
+			IP:   extIP,
+			Port: relayAddr.Port,
+		}
+	} else {
+		a.RelayAddr = conn.LocalAddr()
+	}
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
 		m.DeleteAllocation(a.fiveTuple)
@@ -127,4 +141,12 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 	if err := allocation.Close(); err != nil {
 		m.log.Errorf("Failed to close allocation: %v", err)
 	}
+}
+
+// AddExternalIPMapping add a external IP address mapping.
+func (m *Manager) AddExternalIPMapping(extIP, locIP net.IP) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.extIPMap[locIP.String()] = extIP
 }

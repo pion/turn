@@ -213,7 +213,8 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 	// if bad, redirect { stun.AttrErrorCode, 300 }
 	lifetimeDuration := allocationLifeTime(m)
 	a, err := s.manager.CreateAllocation(
-		fiveTuple, conn,
+		fiveTuple,
+		conn,
 		s.relayIPs[0], // TODO: allow more than one relay IP
 		requestedPort,
 		lifetimeDuration)
@@ -237,19 +238,14 @@ func (s *Server) handleAllocateRequest(conn net.PacketConn, srcAddr net.Addr, m 
 		return respondWithError(err, messageIntegrity, stun.CodeBadRequest)
 	}
 
-	_, relayPort, err := ipnet.AddrIPPort(a.RelayAddr)
-	if err != nil {
-		return respondWithError(err, messageIntegrity, stun.CodeBadRequest)
-	}
-
-	dstIP, _, err := ipnet.AddrIPPort(dstAddr)
+	relayIP, relayPort, err := ipnet.AddrIPPort(a.RelayAddr)
 	if err != nil {
 		return respondWithError(err, messageIntegrity, stun.CodeBadRequest)
 	}
 
 	responseAttrs := []stun.Setter{
 		&proto.RelayedAddress{
-			IP:   dstIP,
+			IP:   relayIP,
 			Port: relayPort,
 		},
 		&proto.Lifetime{

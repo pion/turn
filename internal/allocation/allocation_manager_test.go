@@ -23,6 +23,7 @@ func TestManager(t *testing.T) {
 		{"DeleteAllocation", subTestDeleteAllocation},
 		{"AllocationTimeout", subTestAllocationTimeout},
 		{"Close", subTestManagerClose},
+		{"ExternalIPMapping", subTestExternalIPMapping},
 	}
 
 	network := "udp4"
@@ -143,6 +144,41 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 		if !isClose(alloc.RelaySocket) {
 			t.Error("Manager's allocations should be closed")
 		}
+	}
+}
+
+// test for external mapping
+func subTestExternalIPMapping(t *testing.T, turnSocket net.PacketConn) {
+	m := newTestManager()
+	fiveTuple := randomFiveTuple()
+
+	extIP := net.ParseIP("1.2.3.4")
+	m.AddExternalIPMapping(extIP, net.IPv4zero)
+
+	a, err := m.CreateAllocation(
+		fiveTuple,
+		turnSocket,
+		net.IPv4zero,
+		0,
+		proto.DefaultLifetime)
+
+	if a == nil || err != nil {
+		t.Errorf("Failed to create allocation %v %v", a, err)
+	}
+
+	relAddr, ok := a.RelayAddr.(*net.UDPAddr)
+	if !ok {
+		t.Errorf("RelayAddr must be a net.UDPAddr")
+	}
+
+	// IP addr should match the external IP
+	if !relAddr.IP.Equal(extIP) {
+		t.Errorf("should have the external IP")
+	}
+
+	m.DeleteAllocation(fiveTuple)
+	if a = m.GetAllocation(fiveTuple); a != nil {
+		t.Errorf("Get allocation with %v should be nil after delete", fiveTuple)
 	}
 }
 
