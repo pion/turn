@@ -209,4 +209,49 @@ func TestServer(t *testing.T) {
 		err = server.Close()
 		assert.NoError(t, err, "should succeed")
 	})
+
+	t.Run("AddExternalIPAddr", func(t *testing.T) {
+		server := NewServer(&ServerConfig{
+			LoggerFactory: loggerFactory,
+		})
+
+		err := server.AddExternalIPAddr("1.2.3.4")
+		assert.NoError(t, err, "should succeed")
+
+		assert.Equal(t, 1, len(server.extIPMappings), "should be 1")
+		assert.True(
+			t,
+			server.extIPMappings[0][0].Equal(net.ParseIP("1.2.3.4")),
+			"should be true")
+		assert.Nil(t, server.extIPMappings[0][1], "should be nil")
+	})
+
+	t.Run("AddExternalIPAddr 2", func(t *testing.T) {
+		server := NewServer(&ServerConfig{
+			LoggerFactory: loggerFactory,
+		})
+
+		err := server.AddExternalIPAddr("1.2.3.4/10.0.0.2")
+		assert.NoError(t, err, "should succeed")
+		err = server.AddExternalIPAddr("1.2.3.5/10.0.0.3")
+		assert.NoError(t, err, "should succeed")
+
+		assert.Equal(t, 2, len(server.extIPMappings), "should be 2")
+		assert.True(
+			t,
+			server.extIPMappings[0][0].Equal(net.ParseIP("1.2.3.4")),
+			"should be true")
+		assert.True(
+			t,
+			server.extIPMappings[0][1].Equal(net.ParseIP("10.0.0.2")),
+			"should be true")
+		assert.True(
+			t,
+			server.extIPMappings[1][0].Equal(net.ParseIP("1.2.3.5")),
+			"should be true")
+		assert.True(
+			t,
+			server.extIPMappings[1][1].Equal(net.ParseIP("10.0.0.3")),
+			"should be true")
+	})
 }

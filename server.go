@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,6 +58,7 @@ type Server struct {
 	listeners          []*listener
 	listenIPs          []net.IP
 	relayIPs           []net.IP
+	extIPMappings      [][2]net.IP
 	listenPort         int
 	realm              string
 	authHandler        AuthHandler
@@ -148,6 +150,33 @@ func (s *Server) AddRelayIPAddr(addrStr string) error {
 		return fmt.Errorf("unspecified IP is not allowed")
 	}
 	s.relayIPs = append(s.relayIPs, ip)
+	return nil
+}
+
+// AddExternalIPAddr adds a mapping to an external IP address.
+// This is useful when the TURN server is behind a 1-to-1 NAT, or a D-NAT
+// (which is typical when hosting on AWS EC2).
+// The argument should be a dotted-decimal representation of external IP address.
+// If there is more than on IP address, the argument should be a cancatenation of
+// external IP and local IP delimited by a '/'.
+// Ex 1: "185.199.108.153"
+// Ex 2: "185.199.108.153/10.0.1.2"
+// By default, no address mapping is used.
+// This method must be called before calling Start().
+func (s *Server) AddExternalIPAddr(mapping string) error {
+	var extIP, locIP net.IP
+	ipStrs := strings.Split(mapping, "/")
+	extIP = net.ParseIP(ipStrs[0])
+	if extIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ipStrs[0])
+	}
+	if len(ipStrs) > 1 {
+		locIP = net.ParseIP(ipStrs[1])
+		if locIP == nil {
+			return fmt.Errorf("invalid IP address: %s", ipStrs[1])
+		}
+	}
+	s.extIPMappings = append(s.extIPMappings, [2]net.IP{extIP, locIP})
 	return nil
 }
 
@@ -249,7 +278,6 @@ func (s *Server) Start() error {
 	defer s.lock.Unlock()
 
 	var ips []net.IP
-
 	if len(s.listenIPs) == 0 {
 		var err error
 		ips, err = s.gatherSystemIPAddrs()
@@ -266,6 +294,24 @@ func (s *Server) Start() error {
 	// If s.relayIPs is empty, use s.listenIPs
 	if len(s.relayIPs) == 0 {
 		s.relayIPs = s.listenIPs
+	}
+
+	// Set external IP mapping for the allocation manager
+	for _, mapping := range s.extIPMappings {
+		extIPIsV4 := (mapping[0].To4() != nil)
+		if mapping[1] == nil {
+			for _, relayIP := range s.relayIPs {
+				relayIPIsV4 := (relayIP.To4() != nil)
+				if (extIPIsV4 && relayIPIsV4) || (!extIPIsV4 && !relayIPIsV4) {
+					s.manager.AddExternalIPMapping(mapping[0], relayIP)
+				}
+			}
+		} else {
+			relayIPIsV4 := (mapping[1].To4() != nil)
+			if (extIPIsV4 && relayIPIsV4) || (!extIPIsV4 && !relayIPIsV4) {
+				s.manager.AddExternalIPMapping(mapping[0], mapping[1])
+			}
+		}
 	}
 
 	for _, localIP := range s.listenIPs {
