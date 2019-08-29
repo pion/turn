@@ -515,6 +515,7 @@ func (c *UDPConn) bind(b *binding) error {
 	trRes, err := c.obs.PerformTransaction(msg, c.obs.TURNServerAddr(), false)
 	if err != nil {
 		c.bindingMgr.deleteByAddr(b.addr)
+		return err
 	}
 
 	res := trRes.Msg
