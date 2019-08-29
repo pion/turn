@@ -474,10 +474,8 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 		return fmt.Errorf("failed to get lifetime from refresh response: %s", err.Error())
 	}
 
-	c.mutex.Lock()
 	c.setLifetime(updatedLifetime.Duration)
 	c.log.Debugf("updated lifetime: %d seconds", int(c.lifetime().Seconds()))
-	c.mutex.Unlock()
 	return nil
 }
 
