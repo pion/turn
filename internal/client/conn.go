@@ -64,7 +64,6 @@ type UDPConn struct {
 	_lifetime         time.Duration         // needs mutex x
 	readCh            chan *inboundData     // thread-safe
 	closeCh           chan struct{}         // thread-safe
-	closed            *AtomicBool           // thread-safe
 	readTimer         *time.Timer           // thread-safe
 	refreshAllocTimer *PeriodicTimer        // thread-safe
 	refreshPermsTimer *PeriodicTimer        // thread-safe
@@ -84,7 +83,6 @@ func NewUDPConn(config *UDPConnConfig) *UDPConn {
 		_lifetime:   config.Lifetime,
 		readCh:      make(chan *inboundData, maxReadQueueSize),
 		closeCh:     make(chan struct{}),
-		closed:      NewAtomicBool(false),
 		readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
 		log:         config.Log,
 	}
@@ -124,7 +122,7 @@ func NewUDPConn(config *UDPConnConfig) *UDPConn {
 // an Error with Timeout() == true after a fixed time limit;
 // see SetDeadline and SetReadDeadline.
 func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	for c.closed.False() {
+	for {
 		select {
 		case ibData := <-c.readCh:
 			n := copy(p, ibData.data)
@@ -142,16 +140,15 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			}
 
 		case <-c.closeCh:
-			c.closed.SetToTrue()
+			return 0, nil, &net.OpError{
+				Op:   "read",
+				Net:  c.LocalAddr().Network(),
+				Addr: c.LocalAddr(),
+				Err:  fmt.Errorf("use of closed network connection"),
+			}
 		}
 	}
 
-	return 0, nil, &net.OpError{
-		Op:   "read",
-		Net:  c.LocalAddr().Network(),
-		Addr: c.LocalAddr(),
-		Err:  fmt.Errorf("use of closed network connection"),
-	}
 }
 
 // WriteTo writes a packet with payload p to addr.
