@@ -88,7 +88,14 @@ func (t *Transaction) WriteResult(res TransactionResult) bool {
 
 // WaitForResult waits for the transaction result
 func (t *Transaction) WaitForResult() TransactionResult {
-	return <-t.resultCh
+	result := <-t.resultCh
+
+	// Msg can be nil if we got this result from a channel close
+	if result.Msg == nil {
+		result.Msg = &stun.Message{}
+	}
+
+	return result
 }
 
 // Close closes the transaction
