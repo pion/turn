@@ -8,6 +8,7 @@ linters:
   enable-all: true
   disable:
     - lll
+    - funlen
 
 issues:
   exclude-use-default: false
