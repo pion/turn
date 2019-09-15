@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -88,13 +89,10 @@ func (t *Transaction) WriteResult(res TransactionResult) bool {
 
 // WaitForResult waits for the transaction result
 func (t *Transaction) WaitForResult() TransactionResult {
-	result := <-t.resultCh
-
-	// Msg can be nil if we got this result from a channel close
-	if result.Msg == nil {
-		result.Msg = &stun.Message{}
+	result, ok := <-t.resultCh
+	if !ok {
+		result.Err = fmt.Errorf("transaction closed")
 	}
-
 	return result
 }
 
