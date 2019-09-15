@@ -112,6 +112,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [namreg](https://github.com/namreg) - *Igor German*
 * [Aleksandr Razumov](https://github.com/ernado) - *protocol*
 * [Robert Eperjesi](https://github.com/epes)
+* [Lukas Rezek](https://github.com/lrezek)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
