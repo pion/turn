@@ -113,6 +113,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Aleksandr Razumov](https://github.com/ernado) - *protocol*
 * [Robert Eperjesi](https://github.com/epes)
 * [Lukas Rezek](https://github.com/lrezek)
+* [Hongchao Ma(马洪超)](https://github.com/hcm007)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text

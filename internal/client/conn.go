@@ -518,6 +518,10 @@ func (c *UDPConn) bind(b *binding) error {
 
 	res := trRes.Msg
 
+	if res == nil{
+		return fmt.Errorf("stun message pointer is nil")
+	}
+
 	if res.Type != stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse) {
 		return fmt.Errorf("unexpected response type %s", res.Type)
 	}
