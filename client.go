@@ -78,7 +78,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 	if config.Net == nil {
 		config.Net = vnet.NewNet(nil) // defaults to native operation
-	} else {
+	} else if config.Net.IsVirtual() {
 		log.Warn("vnet is enabled")
 	}
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/transport/vnet"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,8 +39,8 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 	c, err := NewClient(&ClientConfig{
 		STUNServerAddr: "stun1.l.google.com:19302",
 		Conn:           conn,
-
-		LoggerFactory: loggerFactory,
+		Net:            vnet.NewNet(nil),
+		LoggerFactory:  loggerFactory,
 	})
 	if !assert.NoError(t, err, "should succeed") {
 		return nil, false
