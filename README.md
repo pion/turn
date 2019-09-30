@@ -114,6 +114,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Robert Eperjesi](https://github.com/epes)
 * [Lukas Rezek](https://github.com/lrezek)
 * [Hugo Arregui](https://github.com/hugoArregui)
+* [Aaron France](https://github.com/AeroNotix)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
