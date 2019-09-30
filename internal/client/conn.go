@@ -385,6 +385,10 @@ func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
+			if code.Code == stun.CodeStaleNonce {
+				c.setNonceFromMsg(msg)
+				return errTryAgain
+			}
 			err = fmt.Errorf("%s (error %s)", res.Type, code)
 		} else {
 			err = fmt.Errorf("%s", res.Type)
@@ -416,6 +420,17 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 		return nil, false
 	}
 	return b.addr, true
+}
+
+func (c *UDPConn) setNonceFromMsg(msg *stun.Message) {
+	// Update nonce
+	var nonce stun.Nonce
+	if err := nonce.GetFrom(msg); err == nil {
+		c.setNonce(nonce)
+		c.log.Debug("refresh allocation: 438, got new nonce.")
+	} else {
+		c.log.Warn("refresh allocation: 438 but no nonce.")
+	}
 }
 
 func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error {
@@ -451,18 +466,9 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
 			if code.Code == stun.CodeStaleNonce {
-				// Update nonce
-				var nonce stun.Nonce
-				if err = nonce.GetFrom(res); err == nil {
-					c.setNonce(nonce)
-					c.log.Debug("refresh allocation: 438, got new nonce.")
-				} else {
-					c.log.Warn("refresh allocation: 438 but no nonce.")
-				}
-
+				c.setNonceFromMsg(res)
 				return errTryAgain
 			}
-
 			return err
 		}
 		return fmt.Errorf("%s", res.Type)
@@ -479,17 +485,21 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 	return nil
 }
 
-func (c *UDPConn) refreshPermissions() {
+func (c *UDPConn) refreshPermissions() error {
 	addrs := c.permMap.addrs()
 	if len(addrs) == 0 {
 		c.log.Debug("no permission to refresh")
-		return
+		return nil
 	}
 	if err := c.createPermissions(addrs...); err != nil {
+		if err == errTryAgain {
+			return errTryAgain
+		}
 		c.log.Errorf("fail to refresh permissions: %s", err.Error())
-		return
+		return err
 	}
 	c.log.Debug("refresh permissions successful")
+	return nil
 }
 
 func (c *UDPConn) bind(b *binding) error {
@@ -555,7 +565,16 @@ func (c *UDPConn) onRefreshTimers(id int) {
 			c.log.Warnf("refresh allocation failed")
 		}
 	case timerIDRefreshPerms:
-		c.refreshPermissions()
+		var err error
+		for i := 0; i < 3; i++ {
+			err = c.refreshPermissions()
+			if err != errTryAgain {
+				break
+			}
+		}
+		if err != nil {
+			c.log.Warnf("refresh permissions failed")
+		}
 	}
 }
 
