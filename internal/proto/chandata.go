@@ -10,11 +10,10 @@ import (
 //
 // See RFC 5766 Section 11.4
 type ChannelData struct {
-	Data    []byte // can be subslice of Raw
-	Length  int    // ignored while encoding, len(Data) is used
-	Padding bool   // use  padding
-	Number  ChannelNumber
-	Raw     []byte
+	Data   []byte // can be subslice of Raw
+	Length int    // ignored while encoding, len(Data) is used
+	Number ChannelNumber
+	Raw    []byte
 }
 
 // Equal returns true if b == c.
@@ -58,9 +57,6 @@ func (c *ChannelData) Encode() {
 	c.Raw = c.Raw[:0]
 	c.WriteHeader()
 	c.Raw = append(c.Raw, c.Data...)
-	if !c.Padding {
-		return
-	}
 	padded := nearestPaddedValueLength(len(c.Raw))
 	if bytesToAdd := padded - len(c.Raw); bytesToAdd > 0 {
 		for i := 0; i < bytesToAdd; i++ {
