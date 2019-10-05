@@ -218,25 +218,6 @@ func BenchmarkChannelData_Decode(b *testing.B) {
 	}
 }
 
-func TestChannelData_Padding(t *testing.T) {
-	c := &ChannelData{
-		Data:    []byte{1},
-		Padding: true,
-		Number:  MinChannelNumber + 1,
-	}
-	c.Encode()
-	n := &ChannelData{
-		Raw: make([]byte, len(c.Raw)),
-	}
-	copy(n.Raw, c.Raw)
-	if err := n.Decode(); err != nil {
-		t.Error(err)
-	}
-	if !n.Equal(c) {
-		t.Error("should be equal")
-	}
-}
-
 func TestChromeChannelData(t *testing.T) {
 	var (
 		r = bytes.NewReader(loadData(t, "02_chandata.hex"))
