@@ -29,7 +29,7 @@ Pion TURN is a Go toolkit for build TURN servers and clients. We wrote it to sol
 * **Scalable** - Create allocations and mutate state at runtime. Designed to make scaling easy.
 
 # Examples
-We provide two simple client/server examples in [examples](examples/README.md). If more examples could be helpful please file an issue, we are always looking
+We provide two simple client/server examples in [examples](examples). If more examples could be helpful please file an issue, we are always looking
 to expand and improve `pion/turn` to make it easier for developers.
 
 You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
