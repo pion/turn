@@ -34,6 +34,8 @@ to expand and improve `pion/turn` to make it easier for developers.
 
 You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
 
+# [FAQ](https://github.com/pion/webrtc/wiki/FAQ)
+
 ### RFCs
 #### Implemented
 * [RFC 5389: Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5389)
