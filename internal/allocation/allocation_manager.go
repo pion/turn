@@ -7,36 +7,49 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/vnet"
-	"github.com/pkg/errors"
 )
 
 // ManagerConfig a bag of config params for Manager.
 type ManagerConfig struct {
-	LeveledLogger logging.LeveledLogger
-	Net           *vnet.Net
+	LeveledLogger      logging.LeveledLogger
+	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
+	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+}
+
+type reservation struct {
+	token string
+	port  int
 }
 
 // Manager is used to hold active allocations
 type Manager struct {
-	lock        sync.RWMutex
-	allocations map[string]*Allocation
-	extIPMap    map[string]net.IP
-	log         logging.LeveledLogger
-	net         *vnet.Net
+	lock sync.RWMutex
+	log  logging.LeveledLogger
+
+	allocations  map[string]*Allocation
+	reservations []*reservation
+
+	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
+	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 }
 
 // NewManager creates a new instance of Manager.
-func NewManager(config *ManagerConfig) *Manager {
-	if config.Net == nil {
-		config.Net = vnet.NewNet(nil) // defaults to native operation
+func NewManager(config ManagerConfig) (*Manager, error) {
+	switch {
+	case config.AllocatePacketConn == nil:
+		return nil, fmt.Errorf("AllocatePacketConn must be set")
+	case config.AllocateConn == nil:
+		return nil, fmt.Errorf("AllocateConn must be set")
+	case config.LeveledLogger == nil:
+		return nil, fmt.Errorf("LeveledLogger must be set")
 	}
+
 	return &Manager{
-		log:         config.LeveledLogger,
-		net:         config.Net,
-		allocations: make(map[string]*Allocation, 64),
-		extIPMap:    make(map[string]net.IP),
-	}
+		log:                config.LeveledLogger,
+		allocations:        make(map[string]*Allocation, 64),
+		allocatePacketConn: config.AllocatePacketConn,
+		allocateConn:       config.AllocateConn,
+	}, nil
 }
 
 // GetAllocation fetches the allocation matching the passed FiveTuple
@@ -64,54 +77,36 @@ func (m *Manager) Close() error {
 func (m *Manager) CreateAllocation(
 	fiveTuple *FiveTuple,
 	turnSocket net.PacketConn,
-	relayIP net.IP, // nolint:interfacer
 	requestedPort int,
 	lifetime time.Duration) (*Allocation, error) {
 
-	if fiveTuple == nil {
-		return nil, errors.Errorf("Allocations must not be created with nil FivTuple")
-	}
-	if fiveTuple.SrcAddr == nil {
-		return nil, errors.Errorf("Allocations must not be created with nil FiveTuple.SrcAddr")
-	}
-	if fiveTuple.DstAddr == nil {
-		return nil, errors.Errorf("Allocations must not be created with nil FiveTuple.DstAddr")
-	}
-	if a := m.GetAllocation(fiveTuple); a != nil {
-		return nil, errors.Errorf("Allocation attempt created with duplicate FiveTuple %v", fiveTuple)
-	}
-	if turnSocket == nil {
-		return nil, errors.Errorf("Allocations must not be created with nil turnSocket")
-	}
-	if lifetime == 0 {
-		return nil, errors.Errorf("Allocations must not be created with a lifetime of 0")
+	switch {
+	case fiveTuple == nil:
+		return nil, fmt.Errorf("Allocations must not be created with nil FivTuple")
+	case fiveTuple.SrcAddr == nil:
+		return nil, fmt.Errorf("Allocations must not be created with nil FiveTuple.SrcAddr")
+	case fiveTuple.DstAddr == nil:
+		return nil, fmt.Errorf("Allocations must not be created with nil FiveTuple.DstAddr")
+	case turnSocket == nil:
+		return nil, fmt.Errorf("Allocations must not be created with nil turnSocket")
+	case lifetime == 0:
+		return nil, fmt.Errorf("Allocations must not be created with a lifetime of 0")
 	}
 
+	if a := m.GetAllocation(fiveTuple); a != nil {
+		return nil, fmt.Errorf("Allocation attempt created with duplicate FiveTuple %v", fiveTuple)
+	}
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
-	conn, err := m.net.ListenPacket(
-		"udp4",
-		fmt.Sprintf("%s:%d", relayIP.String(), requestedPort))
+	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
 	if err != nil {
 		return nil, err
 	}
 
-	m.log.Debugf("listening on relay addr: %s", conn.LocalAddr().String())
-
 	a.RelaySocket = conn
+	a.RelayAddr = relayAddr
 
-	// Determine RelayAddr.
-	// If there's a corresponding external IP address, replace
-	// the relay IP with the external one.
-	relayAddr := conn.LocalAddr().(*net.UDPAddr)
-	if extIP, ok := m.extIPMap[relayAddr.IP.String()]; ok {
-		a.RelayAddr = &net.UDPAddr{
-			IP:   extIP,
-			Port: relayAddr.Port,
-		}
-	} else {
-		a.RelayAddr = conn.LocalAddr()
-	}
+	m.log.Debugf("listening on relay addr: %s", a.RelayAddr.String())
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
 		m.DeleteAllocation(a.fiveTuple)
@@ -143,10 +138,55 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 	}
 }
 
-// AddExternalIPMapping add a external IP address mapping.
-func (m *Manager) AddExternalIPMapping(extIP, locIP net.IP) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+// CreateReservation stores the reservation for the token+port
+func (m *Manager) CreateReservation(reservationToken string, port int) {
+	time.AfterFunc(30*time.Second, func() {
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		for i := len(m.reservations) - 1; i >= 0; i-- {
+			if m.reservations[i].token == reservationToken {
+				m.reservations = append(m.reservations[:i], m.reservations[i+1:]...)
+				return
+			}
+		}
+	})
 
-	m.extIPMap[locIP.String()] = extIP
+	m.lock.Lock()
+	m.reservations = append(m.reservations, &reservation{
+		token: reservationToken,
+		port:  port,
+	})
+	m.lock.Unlock()
+}
+
+// GetReservation returns the port for a given reservation if it exists
+func (m *Manager) GetReservation(reservationToken string) (int, bool) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	for _, r := range m.reservations {
+		if r.token == reservationToken {
+			return r.port, true
+		}
+	}
+	return 0, false
+}
+
+// GetRandomEvenPort returns a random un-allocated udp4 port
+func (m *Manager) GetRandomEvenPort() (int, error) {
+	conn, addr, err := m.allocatePacketConn("udp4", 0)
+	if err != nil {
+		return 0, err
+	}
+
+	udpAddr, ok := addr.(*net.UDPAddr)
+	if !ok {
+		return 0, fmt.Errorf("failed to cast net.Addr to *net.UDPAddr")
+	} else if err := conn.Close(); err != nil {
+		return 0, err
+	} else if udpAddr.Port%2 == 1 {
+		return m.GetRandomEvenPort()
+	}
+
+	return udpAddr.Port, nil
 }

@@ -1,7 +1,7 @@
 package allocation
 
 import (
-	"encoding/binary"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -10,7 +10,6 @@ import (
 	"github.com/pion/stun"
 	"github.com/pion/turn/internal/ipnet"
 	"github.com/pion/turn/internal/proto"
-	"github.com/pkg/errors"
 )
 
 // Allocation is tied to a FiveTuple and relays traffic
@@ -56,8 +55,7 @@ func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
 
-	fingerprint := addr2IPFingerprint(addr)
-	return a.permissions[fingerprint]
+	return a.permissions[addr2IPFingerprint(addr)]
 }
 
 // AddPermission adds a new permission to the allocation
@@ -67,6 +65,7 @@ func (a *Allocation) AddPermission(p *Permission) {
 	a.permissionsLock.RLock()
 	existedPermission, ok := a.permissions[fingerprint]
 	a.permissionsLock.RUnlock()
+
 	if ok {
 		existedPermission.refresh(permissionTimeout)
 		return
@@ -84,8 +83,7 @@ func (a *Allocation) AddPermission(p *Permission) {
 func (a *Allocation) RemovePermission(addr net.Addr) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
-	fingerprint := addr2IPFingerprint(addr)
-	delete(a.permissions, fingerprint)
+	delete(a.permissions, addr2IPFingerprint(addr))
 }
 
 // AddChannelBind adds a new ChannelBind to the allocation, it also updates the
@@ -94,9 +92,9 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel number.
 	channelByNumber := a.GetChannelByNumber(c.Number)
-	channelByPeer := a.GetChannelByAddr(c.Peer)
-	if channelByNumber != channelByPeer {
-		return errors.Errorf("You cannot use the same channel number with different peer")
+
+	if channelByNumber != a.GetChannelByAddr(c.Peer) {
+		return fmt.Errorf("You cannot use the same channel number with different peer")
 	}
 
 	// Add or refresh this channel.
@@ -230,12 +228,13 @@ func (a *Allocation) packetHandler(m *Manager) {
 			srcAddr.String())
 
 		if channel := a.GetChannelByAddr(srcAddr); channel != nil {
-			channelData := make([]byte, 4)
-			binary.BigEndian.PutUint16(channelData[0:], uint16(channel.Number))
-			binary.BigEndian.PutUint16(channelData[2:], uint16(n))
-			channelData = append(channelData, buffer[:n]...)
+			channelData := &proto.ChannelData{
+				Data:   buffer[:n],
+				Number: channel.Number,
+			}
+			channelData.Encode()
 
-			if _, err = a.TurnSocket.WriteTo(channelData, a.fiveTuple.SrcAddr); err != nil {
+			if _, err = a.TurnSocket.WriteTo(channelData.Raw, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send ChannelData from allocation %v %v", srcAddr, err)
 			}
 		} else if p := a.GetPermission(srcAddr); p != nil {

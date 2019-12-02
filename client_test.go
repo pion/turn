@@ -81,7 +81,6 @@ func TestClientWithSTUN(t *testing.T) {
 		started := make(chan struct{})
 		finished := make(chan struct{})
 		var err1 error
-		var resp1 interface{}
 
 		to, err := net.ResolveUDPAddr("udp4", "stun1.l.google.com:19302")
 		if !assert.NoError(t, err, "should succeed") {
@@ -91,7 +90,7 @@ func TestClientWithSTUN(t *testing.T) {
 		// stun1.l.google.com:19302, more at https://gist.github.com/zziuni/3741933#file-stuns-L5
 		go func() {
 			close(started)
-			resp1, err1 = c.SendBindingRequestTo(to)
+			_, err1 = c.SendBindingRequestTo(to)
 			close(finished)
 		}()
 
@@ -99,18 +98,13 @@ func TestClientWithSTUN(t *testing.T) {
 
 		<-started
 
-		resp2, err2 := c.SendBindingRequestTo(to)
-		if err2 != nil {
+		if _, err = c.SendBindingRequestTo(to); err != nil {
 			t.Fatal(err)
-		} else {
-			t.Log(resp2)
 		}
 
 		<-finished
 		if err1 != nil {
 			t.Fatal(err)
-		} else {
-			t.Log(resp1)
 		}
 	})
 
