@@ -7,21 +7,22 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    - maligned
     - lll
     - funlen
+    - govet
+    - stylecheck
+    - godox
+    - errcheck
+    - gosec
+    - whitespace
+    - gochecknoglobals
+    - scopelint
+    - prealloc
+    - dupl
 
 issues:
   exclude-use-default: false
-  max-per-linter: 0
-  max-same-issues: 50
 
-  exclude-rules:
-    - path: internal/proto/.+_test
-      linters:
-        - scopelint
-        - gosec
-        - errcheck
-        - prealloc
-    - path: internal/proto
-      linters:
-        - gochecknoglobals
+run:
+  skip-dirs-use-default: false

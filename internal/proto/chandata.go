@@ -128,6 +128,11 @@ func IsChannelData(buf []byte) bool {
 	if len(buf) < channelDataHeaderSize {
 		return false
 	}
+
+	if int(bin.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])) > len(buf[channelDataHeaderSize:]) {
+		return false
+	}
+
 	// Quick check for channel number.
 	num := bin.Uint16(buf[0:channelNumberSize])
 	return isChannelNumberValid(num)

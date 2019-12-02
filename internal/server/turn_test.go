@@ -1,4 +1,4 @@
-package turn
+package server
 
 import (
 	"testing"
@@ -32,7 +32,7 @@ func TestAllocationLifeTime(t *testing.T) {
 	// If lifetime is bigger than maximumLifetime
 	{
 		lifetime := proto.Lifetime{
-			Duration: maximumLifetime * 2,
+			Duration: maximumAllocationLifetime * 2,
 		}
 
 		m2 := &stun.Message{}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/turn/internal/proto"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestManager(t *testing.T) {
@@ -23,7 +24,6 @@ func TestManager(t *testing.T) {
 		{"DeleteAllocation", subTestDeleteAllocation},
 		{"AllocationTimeout", subTestAllocationTimeout},
 		{"Close", subTestManagerClose},
-		{"ExternalIPMapping", subTestExternalIPMapping},
 	}
 
 	network := "udp4"
@@ -42,23 +42,27 @@ func TestManager(t *testing.T) {
 
 // test invalid Allocation creations
 func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
-	if a, err := m.CreateAllocation(nil, turnSocket, net.IPv4zero, 0, proto.DefaultLifetime); a != nil || err == nil {
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
+	if a, err := m.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
 	}
-	if a, err := m.CreateAllocation(randomFiveTuple(), nil, net.IPv4zero, 0, proto.DefaultLifetime); a != nil || err == nil {
+	if a, err := m.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil turnSocket")
 	}
-	if a, err := m.CreateAllocation(randomFiveTuple(), turnSocket, net.IPv4zero, 0, 0); a != nil || err == nil {
+	if a, err := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with 0 lifetime")
 	}
 }
 
 // test valid Allocation creations
 func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
@@ -69,21 +73,25 @@ func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 
 // test that two allocations can't be created with the same FiveTuple
 func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, proto.DefaultLifetime); a != nil || err == nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a != nil || err == nil {
 		t.Errorf("Was able to create allocation with same FiveTuple twice")
 	}
 }
 
 func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
@@ -99,14 +107,16 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 
 // test that allocation should be closed if timeout
 func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
 	allocations := make([]*Allocation, 5)
 	lifetime := time.Second
 
 	for index := range allocations {
 		fiveTuple := randomFiveTuple()
 
-		a, err := m.CreateAllocation(fiveTuple, turnSocket, net.IPv4zero, 0, lifetime)
+		a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, lifetime)
 		if err != nil {
 			t.Errorf("Failed to create allocation with %v", fiveTuple)
 		}
@@ -125,12 +135,14 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 
 // test for manager close
 func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
 	allocations := make([]*Allocation, 2)
 
-	a1, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, net.IPv4zero, 0, time.Second)
+	a1, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second)
 	allocations[0] = a1
-	a2, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, net.IPv4zero, 0, time.Minute)
+	a2, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute)
 	allocations[1] = a2
 
 	// make a1 timeout
@@ -147,41 +159,6 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// test for external mapping
-func subTestExternalIPMapping(t *testing.T, turnSocket net.PacketConn) {
-	m := newTestManager()
-	fiveTuple := randomFiveTuple()
-
-	extIP := net.ParseIP("1.2.3.4")
-	m.AddExternalIPMapping(extIP, net.IPv4zero)
-
-	a, err := m.CreateAllocation(
-		fiveTuple,
-		turnSocket,
-		net.IPv4zero,
-		0,
-		proto.DefaultLifetime)
-
-	if a == nil || err != nil {
-		t.Errorf("Failed to create allocation %v %v", a, err)
-	}
-
-	relAddr, ok := a.RelayAddr.(*net.UDPAddr)
-	if !ok {
-		t.Errorf("RelayAddr must be a net.UDPAddr")
-	}
-
-	// IP addr should match the external IP
-	if !relAddr.IP.Equal(extIP) {
-		t.Errorf("should have the external IP")
-	}
-
-	m.DeleteAllocation(fiveTuple)
-	if a = m.GetAllocation(fiveTuple); a != nil {
-		t.Errorf("Get allocation with %v should be nil after delete", fiveTuple)
-	}
-}
-
 func randomFiveTuple() *FiveTuple {
 	/* #nosec */
 	return &FiveTuple{
@@ -190,9 +167,21 @@ func randomFiveTuple() *FiveTuple {
 	}
 }
 
-func newTestManager() *Manager {
+func newTestManager() (*Manager, error) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
-	config := &ManagerConfig{LeveledLogger: loggerFactory.NewLogger("test")}
+
+	config := ManagerConfig{
+		LeveledLogger: loggerFactory.NewLogger("test"),
+		AllocatePacketConn: func(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+			conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+			if err != nil {
+				return nil, nil, err
+			}
+
+			return conn, conn.LocalAddr(), nil
+		},
+		AllocateConn: func(network string, requestedPort int) (net.Conn, net.Addr, error) { return nil, nil, nil },
+	}
 	return NewManager(config)
 }
 
