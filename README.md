@@ -4,7 +4,7 @@
   Pion TURN
   <br>
 </h1>
-<h4 align="center">An extendable TURN server written in Go</h4>
+<h4 align="center">A toolkit for building TURN clients and servers in Go</h4>
 <p align="center">
   <a href="https://pion.ly"><img src="https://img.shields.io/badge/pion-turn-gray.svg?longCache=true&colorB=brightgreen" alt="Pion TURN"></a>
   <a href="http://gophers.slack.com/messages/pion"><img src="https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=brightgreen" alt="Slack Widget"></a>
