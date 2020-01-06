@@ -4,13 +4,8 @@
 package proto
 
 import (
-	"encoding/binary"
-
 	"github.com/pion/stun"
 )
-
-// bin is shorthand for binary.BigEndian.
-var bin = binary.BigEndian
 
 // Default ports for TURN from RFC 5766 Section 4.
 const (
@@ -20,13 +15,16 @@ const (
 	DefaultTLSPort = stun.DefaultTLSPort
 )
 
-var (
-	// AllocateRequest is shorthand for allocation request message type.
-	AllocateRequest = stun.NewType(stun.MethodAllocate, stun.ClassRequest)
-	// CreatePermissionRequest is shorthand for create permission request type.
-	CreatePermissionRequest = stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)
-	// SendIndication is shorthand for send indication message type.
-	SendIndication = stun.NewType(stun.MethodSend, stun.ClassIndication)
-	// RefreshRequest is shorthand for refresh request message type.
-	RefreshRequest = stun.NewType(stun.MethodRefresh, stun.ClassRequest)
-)
+// CreatePermissionRequest is shorthand for create permission request type.
+func CreatePermissionRequest() stun.MessageType {
+	return stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)
+}
+
+// AllocateRequest is shorthand for allocation request message type.
+func AllocateRequest() stun.MessageType { return stun.NewType(stun.MethodAllocate, stun.ClassRequest) }
+
+// SendIndication is shorthand for send indication message type.
+func SendIndication() stun.MessageType { return stun.NewType(stun.MethodSend, stun.ClassIndication) }
+
+// RefreshRequest is shorthand for refresh request message type.
+func RefreshRequest() stun.MessageType { return stun.NewType(stun.MethodRefresh, stun.ClassRequest) }

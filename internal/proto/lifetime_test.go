@@ -3,30 +3,11 @@ package proto
 import (
 	"testing"
 
-	"fmt"
 	"time"
 
 	"github.com/pion/stun"
+	"github.com/stretchr/testify/assert"
 )
-
-func ExampleLifetime() {
-	// Encoding lifetime to message.
-	m := new(stun.Message)
-	Lifetime{time.Minute}.AddTo(m)
-	m.WriteHeader()
-
-	// Decoding message.
-	mDec := new(stun.Message)
-	if _, err := m.WriteTo(mDec); err != nil {
-		panic(err)
-	}
-	// Decoding lifetime from message.
-	l := Lifetime{}
-	l.GetFrom(m)
-	fmt.Println("Decoded:", l)
-	// Output:
-	// Decoded: 1m0s
-}
 
 func BenchmarkLifetime(b *testing.B) {
 	b.Run("AddTo", func(b *testing.B) {
@@ -42,7 +23,7 @@ func BenchmarkLifetime(b *testing.B) {
 	})
 	b.Run("GetFrom", func(b *testing.B) {
 		m := new(stun.Message)
-		Lifetime{time.Minute}.AddTo(m)
+		assert.NoError(b, Lifetime{time.Minute}.AddTo(m))
 		for i := 0; i < b.N; i++ {
 			l := Lifetime{}
 			if err := l.GetFrom(m); err != nil {
@@ -66,7 +47,7 @@ func TestLifetime(t *testing.T) {
 			l := Lifetime{
 				Duration: time.Minute,
 			}
-			l.AddTo(m)
+			l.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -75,7 +56,7 @@ func TestLifetime(t *testing.T) {
 		l := &Lifetime{time.Second}
 		if wasAllocs(func() {
 			// On heap.
-			l.AddTo(m)
+			l.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -101,7 +82,7 @@ func TestLifetime(t *testing.T) {
 				t.Errorf("Decoded %q, expected %q", life, l)
 			}
 			if wasAllocs(func() {
-				life.GetFrom(decoded)
+				life.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

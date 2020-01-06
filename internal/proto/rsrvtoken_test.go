@@ -14,7 +14,7 @@ func TestReservationToken(t *testing.T) {
 		if wasAllocs(func() {
 			// On stack.
 			tk := ReservationToken(tok)
-			tk.AddTo(m)
+			tk.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -23,7 +23,7 @@ func TestReservationToken(t *testing.T) {
 		tk := make(ReservationToken, 8)
 		if wasAllocs(func() {
 			// On heap.
-			tk.AddTo(m)
+			tk.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -57,7 +57,7 @@ func TestReservationToken(t *testing.T) {
 				t.Errorf("Decoded %v, expected %v", tok, tk)
 			}
 			if wasAllocs(func() {
-				tok.GetFrom(decoded)
+				tok.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

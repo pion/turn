@@ -63,9 +63,3 @@ func (t *RequestedTransport) GetFrom(m *stun.Message) error {
 	t.Protocol = Protocol(v[0])
 	return nil
 }
-
-// RequestedTransportUDP is setter for requested transport attribute with
-// value ProtoUDP (17).
-var RequestedTransportUDP stun.Setter = RequestedTransport{
-	Protocol: ProtoUDP,
-}

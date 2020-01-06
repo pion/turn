@@ -71,13 +71,11 @@ func TestFiveTuple_Equal(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if v := tc.a.Equal(tc.b); v != tc.v {
-				t.Errorf("%s [%v!=%v] %s",
-					tc.a, v, tc.v, tc.b,
-				)
-			}
-		})
+		if v := tc.a.Equal(tc.b); v != tc.v {
+			t.Errorf("(%s) %s [%v!=%v] %s",
+				tc.name, tc.a, v, tc.v, tc.b,
+			)
+		}
 	}
 }
 

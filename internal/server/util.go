@@ -53,7 +53,7 @@ func buildAndSend(conn net.PacketConn, dst net.Addr, attrs ...stun.Setter) error
 // Send a STUN packet and return the original error to the caller
 func buildAndSendErr(conn net.PacketConn, dst net.Addr, err error, attrs ...stun.Setter) error {
 	if sendErr := buildAndSend(conn, dst, attrs...); sendErr != nil {
-		err = fmt.Errorf("Failed to send error message %w %w", sendErr, err)
+		err = fmt.Errorf("failed to send error message %v %v", sendErr, err)
 	}
 	return err
 }
@@ -75,7 +75,6 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 			stun.NewNonce(nonce),
 			stun.NewRealm(r.Realm),
 		), nil
-
 	}
 
 	nonceAttr := &stun.Nonce{}
@@ -97,7 +96,7 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 
 	ourKey, ok := r.AuthHandler(usernameAttr.String(), usernameAttr.String(), r.SrcAddr)
 	if !ok {
-		return nil, badRequestMsg, fmt.Errorf("No user exists for %s", usernameAttr.String())
+		return nil, badRequestMsg, fmt.Errorf("no user exists for %s", usernameAttr.String())
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(m); err != nil {

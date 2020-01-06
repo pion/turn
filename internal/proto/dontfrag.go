@@ -16,6 +16,3 @@ func (DontFragmentAttr) IsSet(m *stun.Message) bool {
 	_, err := m.Get(stun.AttrDontFragment)
 	return err == nil
 }
-
-// DontFragment is shorthand for DontFragmentAttr.
-var DontFragment DontFragmentAttr

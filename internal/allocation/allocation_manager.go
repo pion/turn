@@ -68,33 +68,27 @@ func (m *Manager) Close() error {
 		if err := a.Close(); err != nil {
 			return err
 		}
-
 	}
 	return nil
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(
-	fiveTuple *FiveTuple,
-	turnSocket net.PacketConn,
-	requestedPort int,
-	lifetime time.Duration) (*Allocation, error) {
-
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
-		return nil, fmt.Errorf("Allocations must not be created with nil FivTuple")
+		return nil, fmt.Errorf("allocations must not be created with nil FivTuple")
 	case fiveTuple.SrcAddr == nil:
-		return nil, fmt.Errorf("Allocations must not be created with nil FiveTuple.SrcAddr")
+		return nil, fmt.Errorf("allocations must not be created with nil FiveTuple.SrcAddr")
 	case fiveTuple.DstAddr == nil:
-		return nil, fmt.Errorf("Allocations must not be created with nil FiveTuple.DstAddr")
+		return nil, fmt.Errorf("allocations must not be created with nil FiveTuple.DstAddr")
 	case turnSocket == nil:
-		return nil, fmt.Errorf("Allocations must not be created with nil turnSocket")
+		return nil, fmt.Errorf("allocations must not be created with nil turnSocket")
 	case lifetime == 0:
-		return nil, fmt.Errorf("Allocations must not be created with a lifetime of 0")
+		return nil, fmt.Errorf("allocations must not be created with a lifetime of 0")
 	}
 
 	if a := m.GetAllocation(fiveTuple); a != nil {
-		return nil, fmt.Errorf("Allocation attempt created with duplicate FiveTuple %v", fiveTuple)
+		return nil, fmt.Errorf("allocation attempt created with duplicate FiveTuple %v", fiveTuple)
 	}
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 

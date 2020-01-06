@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPeerAddress(t *testing.T) {
@@ -24,9 +25,10 @@ func TestPeerAddress(t *testing.T) {
 	}
 	m.WriteHeader()
 	decoded := new(stun.Message)
-	decoded.Write(m.Raw)
+
+	_, err := decoded.Write(m.Raw)
+	assert.NoError(t, err)
+
 	var aGot PeerAddress
-	if err := aGot.GetFrom(decoded); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, aGot.GetFrom(decoded))
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun"
+	"github.com/stretchr/testify/assert"
 )
 
 func BenchmarkChannelNumber(b *testing.B) {
@@ -20,7 +21,7 @@ func BenchmarkChannelNumber(b *testing.B) {
 	})
 	b.Run("GetFrom", func(b *testing.B) {
 		m := new(stun.Message)
-		ChannelNumber(12).AddTo(m)
+		assert.NoError(b, ChannelNumber(12).AddTo(m))
 		for i := 0; i < b.N; i++ {
 			var n ChannelNumber
 			if err := n.GetFrom(m); err != nil {
@@ -42,7 +43,7 @@ func TestChannelNumber(t *testing.T) {
 		if wasAllocs(func() {
 			// Case with ChannelNumber on stack.
 			n := ChannelNumber(6)
-			n.AddTo(m)
+			n.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -52,7 +53,7 @@ func TestChannelNumber(t *testing.T) {
 		nP := &n
 		if wasAllocs(func() {
 			// On heap.
-			nP.AddTo(m)
+			nP.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -79,7 +80,7 @@ func TestChannelNumber(t *testing.T) {
 			}
 			if wasAllocs(func() {
 				var num ChannelNumber
-				num.GetFrom(decoded)
+				num.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}
@@ -109,10 +110,8 @@ func TestChannelNumber_Valid(t *testing.T) {
 		{MaxChannelNumber, true},
 		{MaxChannelNumber + 1, false},
 	} {
-		t.Run(tc.n.String(), func(t *testing.T) {
-			if v := tc.n.Valid(); v != tc.value {
-				t.Errorf("unexpected: %v != %v", tc.value, v)
-			}
-		})
+		if v := tc.n.Valid(); v != tc.value {
+			t.Errorf("unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)
+		}
 	}
 }

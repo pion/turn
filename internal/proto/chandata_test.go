@@ -87,11 +87,9 @@ func TestChannelData_Equal(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if v := tc.a.Equal(tc.b); v != tc.value {
-				t.Errorf("unexpected: %v != %v", tc.value, v)
-			}
-		})
+		if v := tc.a.Equal(tc.b); v != tc.value {
+			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.value, v)
+		}
 	}
 }
 
@@ -126,14 +124,12 @@ func TestChannelData_Decode(t *testing.T) {
 			err:  ErrBadChannelDataLength,
 		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := &ChannelData{
-				Raw: tc.buf,
-			}
-			if err := m.Decode(); err != tc.err {
-				t.Errorf("unexpected: %v != %v", tc.err, err)
-			}
-		})
+		m := &ChannelData{
+			Raw: tc.buf,
+		}
+		if err := m.Decode(); err != tc.err {
+			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.err, err)
+		}
 	}
 }
 
@@ -170,11 +166,9 @@ func TestIsChannelData(t *testing.T) {
 			buf:  []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if v := IsChannelData(tc.buf); v != tc.value {
-				t.Errorf("unexpected: %v != %v", tc.value, v)
-			}
-		})
+		if v := IsChannelData(tc.buf); v != tc.value {
+			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.value, v)
+		}
 	}
 }
 

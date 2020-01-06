@@ -1,3 +1,4 @@
+// Package client implements the API for a TURN client
 package client
 
 import (
@@ -148,7 +149,6 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			}
 		}
 	}
-
 }
 
 // WriteTo writes a packet with payload p to addr.

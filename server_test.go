@@ -93,12 +93,10 @@ type VNet struct {
 }
 
 func (v *VNet) Close() error {
-	err := v.server.Close()
-	v.wan.Stop()
-	if err != nil {
+	if err := v.server.Close(); err != nil {
 		return err
 	}
-	return nil
+	return v.wan.Stop()
 }
 
 func buildVNet() (*VNet, error) {
@@ -222,13 +220,15 @@ func TestServerVNet(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
-		defer v.Close()
+		defer func() {
+			assert.NoError(t, v.Close())
+		}()
 
 		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
-		defer lconn.Close()
+		assert.NoError(t, err, "should succeed")
+		defer func() {
+			assert.NoError(t, lconn.Close())
+		}()
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
@@ -237,13 +237,8 @@ func TestServerVNet(t *testing.T) {
 			Net:            v.netL0,
 			LoggerFactory:  loggerFactory,
 		})
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
-		err = client.Listen()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err, "should succeed")
+		assert.NoError(t, client.Listen(), "should succeed")
 		defer client.Close()
 
 		log.Debug("sending a binding request.")

@@ -1,6 +1,7 @@
 package turn
 
 import (
+	// #nosec
 	"crypto/md5"
 	"fmt"
 	"net"

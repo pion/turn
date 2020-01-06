@@ -16,7 +16,7 @@ func wasAllocs(f func()) bool {
 
 func loadData(tb testing.TB, name string) []byte {
 	name = filepath.Join("testdata", name)
-	f, err := os.Open(name)
+	f, err := os.Open(name) // #nosec
 	if err != nil {
 		tb.Fatal(err)
 	}

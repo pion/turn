@@ -82,7 +82,6 @@ func subTestAddPermission(t *testing.T) {
 
 	foundPermission := a.GetPermission(p.Addr)
 	assert.Equal(t, p, foundPermission)
-
 }
 
 func subTestRemovePermission(t *testing.T) {
