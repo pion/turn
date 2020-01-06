@@ -1,7 +1,10 @@
 package turn
 
 import (
+	"crypto/md5"
+	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/pion/logging"
@@ -62,7 +65,15 @@ func (c *ListenerConfig) validate() error {
 }
 
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
-type AuthHandler func(username string, srcAddr net.Addr) (password string, ok bool)
+type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok bool)
+
+// GenerateAuthKey is a convince function to easily generate keys in the format used by AuthHandler
+func GenerateAuthKey(username, realm, password string) []byte {
+	// #nosec
+	h := md5.New()
+	fmt.Fprint(h, strings.Join([]string{username, realm, password}, ":"))
+	return h.Sum(nil)
+}
 
 // ServerConfig configures the Pion TURN Server
 type ServerConfig struct {

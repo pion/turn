@@ -24,7 +24,7 @@ type Request struct {
 	ChannelBindTimeout time.Duration
 
 	// User Callbacks
-	AuthHandler func(username string, srcAddr net.Addr) (password string, ok bool)
+	AuthHandler func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
 }
 
 // HandleRequest processes the give Request

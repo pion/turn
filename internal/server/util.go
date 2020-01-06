@@ -78,7 +78,6 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 
 	}
 
-	var ourKey [16]byte
 	nonceAttr := &stun.Nonce{}
 	usernameAttr := &stun.Username{}
 	realmAttr := &stun.Realm{}
@@ -96,18 +95,16 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 		return nil, badRequestMsg, err
 	}
 
-	password, ok := r.AuthHandler(usernameAttr.String(), r.SrcAddr)
+	ourKey, ok := r.AuthHandler(usernameAttr.String(), usernameAttr.String(), r.SrcAddr)
 	if !ok {
 		return nil, badRequestMsg, fmt.Errorf("No user exists for %s", usernameAttr.String())
 	}
 
-	/* #nosec */
-	ourKey = md5.Sum([]byte(usernameAttr.String() + ":" + realmAttr.String() + ":" + password))
-	if err := stun.MessageIntegrity(ourKey[:]).Check(m); err != nil {
+	if err := stun.MessageIntegrity(ourKey).Check(m); err != nil {
 		return nil, badRequestMsg, err
 	}
 
-	return stun.NewLongTermIntegrity(usernameAttr.String(), realmAttr.String(), password), nil, nil
+	return stun.MessageIntegrity(ourKey), nil, nil
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {

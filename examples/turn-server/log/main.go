@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -10,8 +11,41 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/pion/stun"
 	"github.com/pion/turn"
 )
+
+// stunLogger wraps a PacketConn and prints incoming/outgoing STUN packets
+// This pattern could be used to capture/inspect/modify data as well
+type stunLogger struct {
+	net.PacketConn
+}
+
+func (s *stunLogger) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	if n, err = s.PacketConn.WriteTo(p, addr); err == nil && stun.IsMessage(p) {
+		msg := &stun.Message{Raw: p}
+		if err = msg.Decode(); err != nil {
+			return
+		}
+
+		fmt.Printf("Outbound STUN: %s \n", msg.String())
+	}
+
+	return
+}
+
+func (s *stunLogger) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	if n, addr, err = s.PacketConn.ReadFrom(p); err == nil && stun.IsMessage(p) {
+		msg := &stun.Message{Raw: p}
+		if err = msg.Decode(); err != nil {
+			return
+		}
+
+		fmt.Printf("Inbound STUN: %s \n", msg.String())
+	}
+
+	return
+}
 
 func main() {
 	publicIP := flag.String("public-ip", "", "IP Address that TURN can be contacted by.")
@@ -26,10 +60,10 @@ func main() {
 		log.Fatalf("'users' is required")
 	}
 
-	// Create a TCP listener to pass into pion/turn
-	// pion/turn itself doesn't allocate any TCP listeners, but lets the user pass them in
+	// Create a UDP listener to pass into pion/turn
+	// pion/turn itself doesn't allocate any UDP sockets, but lets the user pass them in
 	// this allows us to add logging, storage or modify inbound/outbound traffic
-	tcpListener, err := net.Listen("tcp4", "0.0.0.0:"+strconv.Itoa(*port))
+	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:"+strconv.Itoa(*port))
 	if err != nil {
 		log.Panicf("Failed to create TURN server listener: %s", err)
 	}
@@ -52,13 +86,13 @@ func main() {
 			}
 			return nil, false
 		},
-		// ListenerConfig is a list of Listeners and the configuration around them
-		ListenerConfigs: []turn.ListenerConfig{
+		// PacketConnConfigs is a list of UDP Listeners and the configuration around them
+		PacketConnConfigs: []turn.PacketConnConfig{
 			{
-				Listener: tcpListener,
+				PacketConn: &stunLogger{udpListener},
 				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP(*publicIP),
-					Address:      "0.0.0.0",
+					RelayAddress: net.ParseIP(*publicIP), // Claim that we are listening on IP passed by user (This should be your Public IP)
+					Address:      "0.0.0.0",              // But actually be listening on every interface
 				},
 			},
 		},

@@ -15,8 +15,8 @@ func TestServer(t *testing.T) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	log := loggerFactory.NewLogger("test")
 
-	credMap := map[string]string{
-		"user": "pass",
+	credMap := map[string][]byte{
+		"user": GenerateAuthKey("user", "pion.ly", "pass"),
 	}
 
 	t.Run("simple", func(t *testing.T) {
@@ -26,11 +26,11 @@ func TestServer(t *testing.T) {
 		}
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
+			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
-				return "", false
+				return nil, false
 			},
 			PacketConnConfigs: []PacketConnConfig{
 				{
@@ -160,8 +160,7 @@ func buildVNet() (*VNet, error) {
 	}
 
 	// start server...
-	credMap := map[string]string{}
-	credMap["user"] = "pass"
+	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
 
 	udpListener, err := net0.ListenPacket("udp4", "0.0.0.0:3478")
 	if err != nil {
@@ -169,11 +168,11 @@ func buildVNet() (*VNet, error) {
 	}
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username string, srcAddr net.Addr) (password string, ok bool) {
+		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
 			if pw, ok := credMap[username]; ok {
 				return pw, true
 			}
-			return "", false
+			return nil, false
 		},
 		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{
