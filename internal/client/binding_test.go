@@ -70,6 +70,5 @@ func TestBindingManager(t *testing.T) {
 		assert.False(t, ok, "should fail")
 		ok = m.deleteByNumber(uint16(5555))
 		assert.False(t, ok, "should fail")
-
 	})
 }

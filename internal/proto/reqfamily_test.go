@@ -27,7 +27,7 @@ func TestRequestedAddressFamily(t *testing.T) {
 		if wasAllocs(func() {
 			// On stack.
 			r := RequestedFamilyIPv4
-			r.AddTo(m)
+			r.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -37,7 +37,7 @@ func TestRequestedAddressFamily(t *testing.T) {
 		*r = RequestedFamilyIPv4
 		if wasAllocs(func() {
 			// On heap.
-			r.AddTo(m)
+			r.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -63,7 +63,7 @@ func TestRequestedAddressFamily(t *testing.T) {
 				t.Errorf("Decoded %q, expected %q", req, r)
 			}
 			if wasAllocs(func() {
-				r.GetFrom(decoded)
+				r.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

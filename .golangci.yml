@@ -7,17 +7,9 @@ linters-settings:
 linters:
   enable-all: true
   disable:
-    - maligned
     - lll
     - funlen
-    - govet
-    - stylecheck
     - godox
-    - errcheck
-    - gosec
-    - whitespace
-    - gochecknoglobals
-    - scopelint
     - prealloc
     - dupl
 

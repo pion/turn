@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"encoding/binary"
 	"errors"
 	"strconv"
 
@@ -22,7 +23,7 @@ const channelNumberSize = 4
 // AddTo adds CHANNEL-NUMBER to message.
 func (n ChannelNumber) AddTo(m *stun.Message) error {
 	v := make([]byte, channelNumberSize)
-	bin.PutUint16(v[:2], uint16(n))
+	binary.BigEndian.PutUint16(v[:2], uint16(n))
 	// v[2:4] are zeroes (RFFU = 0)
 	m.Add(stun.AttrChannelNumber, v)
 	return nil
@@ -38,7 +39,7 @@ func (n *ChannelNumber) GetFrom(m *stun.Message) error {
 		return err
 	}
 	_ = v[channelNumberSize-1] // asserting length
-	*n = ChannelNumber(bin.Uint16(v[:2]))
+	*n = ChannelNumber(binary.BigEndian.Uint16(v[:2]))
 	// v[2:4] is RFFU and equals to 0.
 	return nil
 }

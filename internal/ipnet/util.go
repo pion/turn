@@ -1,3 +1,4 @@
+// Package ipnet contains helper functions around net and IP
 package ipnet
 
 import (

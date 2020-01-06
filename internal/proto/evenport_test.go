@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEvenPort(t *testing.T) {
@@ -28,10 +29,9 @@ func TestEvenPort(t *testing.T) {
 		m.WriteHeader()
 		decoded := new(stun.Message)
 		var port EvenPort
-		decoded.Write(m.Raw)
-		if err := port.GetFrom(m); err != nil {
-			t.Fatal(err)
-		}
+		_, err := decoded.Write(m.Raw)
+		assert.NoError(t, err)
+		assert.NoError(t, port.GetFrom(m))
 		if port != p {
 			t.Fatal("not equal")
 		}
@@ -58,7 +58,7 @@ func TestEvenPort(t *testing.T) {
 				t.Errorf("Decoded %q, expected %q", port.String(), p.String())
 			}
 			if wasAllocs(func() {
-				port.GetFrom(decoded)
+				port.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

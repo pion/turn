@@ -32,7 +32,7 @@ func TestRequestedTransport(t *testing.T) {
 			r := RequestedTransport{
 				Protocol: ProtoUDP,
 			}
-			r.AddTo(m)
+			r.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -43,7 +43,7 @@ func TestRequestedTransport(t *testing.T) {
 		}
 		if wasAllocs(func() {
 			// On heap.
-			r.AddTo(m)
+			r.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -73,7 +73,7 @@ func TestRequestedTransport(t *testing.T) {
 				t.Errorf("Decoded %q, expected %q", req, r)
 			}
 			if wasAllocs(func() {
-				r.GetFrom(decoded)
+				r.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

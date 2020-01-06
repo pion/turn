@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun"
+	"github.com/stretchr/testify/assert"
 )
 
 func BenchmarkData(b *testing.B) {
@@ -12,7 +13,7 @@ func BenchmarkData(b *testing.B) {
 		m := new(stun.Message)
 		d := make(Data, 10)
 		for i := 0; i < b.N; i++ {
-			d.AddTo(m)
+			assert.NoError(b, d.AddTo(m))
 			m.Reset()
 		}
 	})
@@ -34,7 +35,7 @@ func TestData(t *testing.T) {
 		if wasAllocs(func() {
 			// On stack.
 			d := Data(v)
-			d.AddTo(m)
+			d.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -43,7 +44,7 @@ func TestData(t *testing.T) {
 		d := &Data{1, 2, 3, 4}
 		if wasAllocs(func() {
 			// On heap.
-			d.AddTo(m)
+			d.AddTo(m) //nolint
 			m.Reset()
 		}) {
 			t.Error("Unexpected allocations")
@@ -70,7 +71,7 @@ func TestData(t *testing.T) {
 			}
 			if wasAllocs(func() {
 				var dataDecoded Data
-				dataDecoded.GetFrom(decoded)
+				dataDecoded.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

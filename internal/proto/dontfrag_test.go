@@ -7,6 +7,8 @@ import (
 )
 
 func TestDontFragment(t *testing.T) {
+	var DontFragment DontFragmentAttr
+
 	t.Run("False", func(t *testing.T) {
 		m := new(stun.Message)
 		m.WriteHeader()

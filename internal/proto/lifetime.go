@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"encoding/binary"
 	"time"
 
 	"github.com/pion/stun"
@@ -30,7 +31,7 @@ const lifetimeSize = 4 // 4 bytes, 32 bits
 // AddTo adds LIFETIME to message.
 func (l Lifetime) AddTo(m *stun.Message) error {
 	v := make([]byte, lifetimeSize)
-	bin.PutUint32(v, uint32(l.Seconds()))
+	binary.BigEndian.PutUint32(v, uint32(l.Seconds()))
 	m.Add(stun.AttrLifetime, v)
 	return nil
 }
@@ -45,11 +46,7 @@ func (l *Lifetime) GetFrom(m *stun.Message) error {
 		return err
 	}
 	_ = v[lifetimeSize-1] // asserting length
-	seconds := bin.Uint32(v)
+	seconds := binary.BigEndian.Uint32(v)
 	l.Duration = time.Second * time.Duration(seconds)
 	return nil
 }
-
-// ZeroLifetime is shorthand for setting zero lifetime
-// that indicates to close allocation.
-var ZeroLifetime stun.Setter = Lifetime{}

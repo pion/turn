@@ -240,7 +240,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransportUDP,
+		proto.RequestedTransport{Protocol: proto.ProtoUDP},
 		stun.Fingerprint,
 	)
 	if err != nil {
@@ -270,7 +270,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	msg, err = stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransportUDP,
+		proto.RequestedTransport{Protocol: proto.ProtoUDP},
 		&c.username,
 		&c.realm,
 		&nonce,
@@ -375,7 +375,6 @@ func (c *Client) OnDeallocated(relayedAddr net.Addr) {
 // If not handled, it is assumed that the packet is application data.
 // If an error is returned, the caller should discard the packet regardless.
 func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
-
 	// +-------------------+-------------------------------+
 	// |   Return Values   |                               |
 	// +-------------------+       Meaning / Action        |
@@ -416,11 +415,11 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 
 	msg := &stun.Message{Raw: raw}
 	if err := msg.Decode(); err != nil {
-		return fmt.Errorf("Failed to decode STUN message: %w", err)
+		return fmt.Errorf("failed to decode STUN message: %w", err)
 	}
 
 	if msg.Type.Class == stun.ClassRequest {
-		return fmt.Errorf("unpexpected STUN request message: %s", msg.String())
+		return fmt.Errorf("unexpected STUN request message: %s", msg.String())
 	}
 
 	if msg.Type.Class == stun.ClassIndication {

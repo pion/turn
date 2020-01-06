@@ -1,3 +1,4 @@
+// Package allocation contains all CRUD operations for allocations
 package allocation
 
 import (
@@ -94,7 +95,7 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 	channelByNumber := a.GetChannelByNumber(c.Number)
 
 	if channelByNumber != a.GetChannelByAddr(c.Peer) {
-		return fmt.Errorf("You cannot use the same channel number with different peer")
+		return fmt.Errorf("you cannot use the same channel number with different peer")
 	}
 
 	// Add or refresh this channel.
@@ -252,10 +253,8 @@ func (a *Allocation) packetHandler(m *Manager) {
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
-
 		} else {
 			a.log.Errorf("Packet unhandled in relay src %v", srcAddr)
 		}
 	}
-
 }

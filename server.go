@@ -1,6 +1,8 @@
+// Package turn contains the public API for pion/turn, a toolkit for building TURN clients and servers
 package turn
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -51,8 +53,8 @@ func NewServer(config ServerConfig) (*Server, error) {
 		go s.packetConnReadLoop(p.PacketConn, p.RelayAddressGenerator)
 	}
 
-	for _, l := range config.ListenerConfigs {
-		go func() {
+	for _, listener := range config.ListenerConfigs {
+		go func(l ListenerConfig) {
 			conn, err := l.Listener.Accept()
 			if err != nil {
 				s.log.Debugf("exit accept loop on error: %s", err.Error())
@@ -60,7 +62,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 			}
 
 			go s.connReadLoop(conn, l.RelayAddressGenerator)
-		}()
+		}(listener)
 	}
 
 	return s, nil
@@ -68,15 +70,30 @@ func NewServer(config ServerConfig) (*Server, error) {
 
 // Close stops the TURN Server. It cleans up any associated state and closes all connections it is managing
 func (s *Server) Close() error {
+	var errors []error
+
 	for _, p := range s.packetConnConfigs {
-		p.PacketConn.Close()
+		if err := p.PacketConn.Close(); err != nil {
+			errors = append(errors, err)
+		}
 	}
 
 	for _, l := range s.listenerConfigs {
-		l.Listener.Close()
+		if err := l.Listener.Close(); err != nil {
+			errors = append(errors, err)
+		}
 	}
 
-	return nil
+	if len(errors) == 0 {
+		return nil
+	}
+
+	err := fmt.Errorf("Server failed to close")
+	for _, e := range errors {
+		err = fmt.Errorf("%w; Close error (%v) ", err, e)
+	}
+
+	return err
 }
 
 func (s *Server) connReadLoop(c net.Conn, r RelayAddressGenerator) {
@@ -118,7 +135,6 @@ func (s *Server) connReadLoop(c net.Conn, r RelayAddressGenerator) {
 			s.log.Errorf("error when handling datagram: %v", err)
 		}
 	}
-
 }
 
 func (s *Server) packetConnReadLoop(p net.PacketConn, r RelayAddressGenerator) {

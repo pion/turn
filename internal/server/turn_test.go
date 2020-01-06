@@ -43,5 +43,4 @@ func TestAllocationLifeTime(t *testing.T) {
 			t.Errorf("Expect lifetimeDuration is %s, but %s", proto.DefaultLifetime, lifetimeDuration)
 		}
 	}
-
 }
