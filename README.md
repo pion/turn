@@ -29,8 +29,17 @@ Pion TURN is a Go toolkit for build TURN servers and clients. We wrote it to sol
 * **Safe** - Stability and safety is important for network services. Go provides everything we need.
 * **Scalable** - Create allocations and mutate state at runtime. Designed to make scaling easy.
 
+# Using
+`pion/turn` is an API for building STUN/TURN clients and servers, not a binary you deploy then configure. It may require copying our examples and
+making minor modifications to fit your need, no knowledge of Go is required however. You may be able to download the pre-made binaries of our examples
+if you wish to get started quickly.
+
+The advantage of this is that you don't need to deal with complicated config files, or custom APIs to modify the state of Pion TURN.
+After you instantiate an instance of a Pion TURN server or client you interact with it like any library. The quickest way to get started is to look at the
+[examples](examples) or [GoDoc](https://godoc.org/github.com/pion/turn)
+
 # Examples
-We provide two simple client/server examples in [examples](examples). If more examples could be helpful please file an issue, we are always looking
+We try to cover most common use cases in [examples](examples). If more examples could be helpful please file an issue, we are always looking
 to expand and improve `pion/turn` to make it easier for developers.
 
 You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
