@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/internal/proto"
+	"github.com/pion/turn/v2/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 

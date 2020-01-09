@@ -11,8 +11,8 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/transport/vnet"
-	"github.com/pion/turn/internal/client"
-	"github.com/pion/turn/internal/proto"
+	"github.com/pion/turn/v2/internal/client"
+	"github.com/pion/turn/v2/internal/proto"
 )
 
 const (

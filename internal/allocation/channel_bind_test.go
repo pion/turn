@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/turn/internal/proto"
+	"github.com/pion/turn/v2/internal/proto"
 )
 
 func TestChannelBind(t *testing.T) {

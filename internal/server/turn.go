@@ -5,9 +5,9 @@ import (
 	"net"
 
 	"github.com/pion/stun"
-	"github.com/pion/turn/internal/allocation"
-	"github.com/pion/turn/internal/ipnet"
-	"github.com/pion/turn/internal/proto"
+	"github.com/pion/turn/v2/internal/allocation"
+	"github.com/pion/turn/v2/internal/ipnet"
+	"github.com/pion/turn/v2/internal/proto"
 )
 
 // // https://tools.ietf.org/html/rfc5766#section-6.2

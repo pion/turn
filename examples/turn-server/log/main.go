@@ -12,7 +12,7 @@ import (
 	"syscall"
 
 	"github.com/pion/stun"
-	"github.com/pion/turn"
+	"github.com/pion/turn/v2"
 )
 
 // stunLogger wraps a PacketConn and prints incoming/outgoing STUN packets
