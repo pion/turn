@@ -1,0 +1,90 @@
+before:
+  hooks:
+    - go mod tidy
+
+archives:
+- replacements:
+    darwin: Darwin
+    linux: Linux
+    windows: Windows
+    386: i386
+    amd64: x86_64
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
+
+builds:
+  - binary: turn-client
+    goos:
+      - darwin
+      - windows
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./examples/turn-client/
+
+  - binary: add-software-attribute
+    goos:
+      - darwin
+      - windows
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./examples/turn-server/add-software-attribute
+
+  - binary: log
+    goos:
+      - darwin
+      - windows
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./examples/turn-server/log
+
+  - binary: simple
+    goos:
+      - darwin
+      - windows
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./examples/turn-server/simple/
+
+  - binary: tcp
+    goos:
+      - darwin
+      - windows
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./examples/turn-server/tcp/
