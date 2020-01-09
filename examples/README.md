@@ -1,19 +1,35 @@
 # Examples
 
 ## turn-server
-A simple TURN server.
-It demonstrates how to write a TURN server and run it.
+The `turn-server` directory contains 4 examples that show common Pion TURN usages. All of these examples take the following arguments.
 
-It takes a few environment variables:
-* USERS   : &lt;username&gt;=&lt;password&gt;[,&lt;username&gt;=&lt;password&gt;,...] pairs
-* REALM   : Realm name (defaults to "pion.ly")
-* UDP_PORT: Listening port (defaults to 3478)
+* -users     : &lt;username&gt;=&lt;password&gt;[,&lt;username&gt;=&lt;password&gt;,...] pairs
+* -realm     : Realm name (defaults to "pion.ly")
+* -port      : Listening port (defaults to 3478)
+* -public-ip : IP that your TURN server is reachable on, for local development then can just be your local IP, avoid using `127.0.0.1` as some browsers discard from that IP.
 
+The four example servers are
+
+#### add-software-attribute
+This examples adds the SOFTWARE attribute with the value "CustomTURNServer" to every outbound STUN packet. This could be useful if you want to add debug info to your outbound packets.
+
+You could also use this same pattern to filter/modify packets if needed.
+
+#### log
+This example logs all inbound/outbound STUN packets. This could be useful if you want to store all inbound/outbound traffic or generate rich logs.
+
+You could also intercept these reads/writes if you want to filter traffic going to/from specific peers.
+
+#### simple
+This example is the most minimal invocation of a Pion TURN instance possible. It has no custom behavior, and could be a good starting place for running your own TURN server.
+
+#### tcp
+This example demonstrates listening on TCP. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TCP and UDP.
 
 ```sh
+$ cd simple
 $ go build
-$ PIONS_LOG_INFO=all USERS=user=pass REALM=pion.ly ./turn-server
-turn INFO: 2019/07/14 14:40:17 Listening on udp:10.0.0.135:3478
+$ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
 ```
 
 ## turn-client
