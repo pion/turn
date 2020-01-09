@@ -43,17 +43,19 @@ func NewServer(config ServerConfig) (*Server, error) {
 		authHandler:        config.AuthHandler,
 		realm:              config.Realm,
 		channelBindTimeout: config.ChannelBindTimeout,
+		packetConnConfigs:  config.PacketConnConfigs,
+		listenerConfigs:    config.ListenerConfigs,
 	}
 
 	if s.channelBindTimeout == 0 {
 		s.channelBindTimeout = proto.DefaultLifetime
 	}
 
-	for _, p := range config.PacketConnConfigs {
+	for _, p := range s.packetConnConfigs {
 		go s.packetConnReadLoop(p.PacketConn, p.RelayAddressGenerator)
 	}
 
-	for _, listener := range config.ListenerConfigs {
+	for _, listener := range s.listenerConfigs {
 		go func(l ListenerConfig) {
 			conn, err := l.Listener.Accept()
 			if err != nil {

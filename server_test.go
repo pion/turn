@@ -6,12 +6,19 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/transport/test"
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestServer(t *testing.T) {
+	lim := test.TimeOut(time.Second * 30)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	log := loggerFactory.NewLogger("test")
 
@@ -69,7 +76,10 @@ func TestServer(t *testing.T) {
 		if !assert.NoError(t, err, "should succeed") {
 			return
 		}
-		defer client.Close()
+		defer func() {
+			assert.NoError(t, conn.Close())
+			client.Close()
+		}()
 
 		log.Debug("sending a binding request.")
 
@@ -212,6 +222,12 @@ func buildVNet() (*VNet, error) {
 }
 
 func TestServerVNet(t *testing.T) {
+	lim := test.TimeOut(time.Second * 30)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	log := loggerFactory.NewLogger("test")
 
@@ -335,23 +351,11 @@ func TestServerVNet(t *testing.T) {
 		}
 
 		time.Sleep(100 * time.Millisecond)
-		err = conn.Close()
-		assert.NoError(t, err, "should succeed")
-		log.Debug("RELAY CONN CLOSED")
-
-		err = echoConn.Close()
-		assert.NoError(t, err, "should succeed")
-		log.Debug("ECHO SERVER CLOSED")
-
 		client.Close()
-		log.Debug("TURN CLIENT CLOSED")
 
-		err = lconn.Close()
-		assert.NoError(t, err, "should succeed")
-		log.Debug("LOCAL CONN CLOSED")
-
-		err = v.Close()
-		assert.NoError(t, err, "should succeed")
-		log.Debug("VNET CLOSED")
+		assert.NoError(t, conn.Close(), "should succeed")
+		assert.NoError(t, echoConn.Close(), "should succeed")
+		assert.NoError(t, lconn.Close(), "should succeed")
+		assert.NoError(t, v.Close(), "should succeed")
 	})
 }
