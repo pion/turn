@@ -25,6 +25,7 @@ changelog:
 
 builds:
   - binary: turn-client
+    id: turn-client
     goos:
       - darwin
       - windows
@@ -38,6 +39,7 @@ builds:
     main: ./examples/turn-client/
 
   - binary: add-software-attribute
+    id: add-software-attribute
     goos:
       - darwin
       - windows
@@ -51,6 +53,7 @@ builds:
     main: ./examples/turn-server/add-software-attribute
 
   - binary: log
+    id: log
     goos:
       - darwin
       - windows
@@ -64,6 +67,7 @@ builds:
     main: ./examples/turn-server/log
 
   - binary: simple
+    id: simple
     goos:
       - darwin
       - windows
@@ -77,6 +81,7 @@ builds:
     main: ./examples/turn-server/simple/
 
   - binary: tcp
+    id: tcp
     goos:
       - darwin
       - windows
