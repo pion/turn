@@ -79,6 +79,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Lukas Rezek](https://github.com/lrezek)
 * [Hugo Arregui](https://github.com/hugoArregui)
 * [Aaron France](https://github.com/AeroNotix)
+* [Atsushi Watanabe](https://github.com/at-wat)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
