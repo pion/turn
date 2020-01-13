@@ -182,17 +182,23 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 		return err
 	}
 
-	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
+	lifetimeDuration := allocationLifeTime(m)
+	fiveTuple := &allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
 		DstAddr:  r.Conn.LocalAddr(),
 		Protocol: allocation.UDP,
-	})
-	if a == nil {
-		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
 	}
 
-	lifetimeDuration := allocationLifeTime(m)
-	a.Refresh(lifetimeDuration)
+	if lifetimeDuration != 0 {
+		a := r.AllocationManager.GetAllocation(fiveTuple)
+
+		if a == nil {
+			return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		}
+		a.Refresh(lifetimeDuration)
+	} else {
+		r.AllocationManager.DeleteAllocation(fiveTuple)
+	}
 
 	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodRefresh, stun.ClassSuccessResponse), []stun.Setter{
 		&proto.Lifetime{

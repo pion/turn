@@ -71,28 +71,16 @@ func TestServer(t *testing.T) {
 			Conn:          conn,
 			LoggerFactory: loggerFactory,
 		})
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
-		err = client.Listen()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
-		defer func() {
-			assert.NoError(t, conn.Close())
-			client.Close()
-		}()
-
-		log.Debug("sending a binding request.")
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
 
 		_, err = client.SendBindingRequestTo(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 3478})
 		assert.NoError(t, err, "should succeed")
 
-		log.Debug("now closing the server...")
+		client.Close()
+		assert.NoError(t, conn.Close())
 
-		// Close server
-		err = server.Close()
-		assert.NoError(t, err, "should succeed")
+		assert.NoError(t, server.Close())
 	})
 }
 
