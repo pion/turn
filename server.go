@@ -99,7 +99,6 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) connReadLoop(c net.Conn, r RelayAddressGenerator) {
-	buf := make([]byte, inboundMTU)
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 		AllocatePacketConn: r.AllocatePacketConn,
 		AllocateConn:       r.AllocateConn,
@@ -116,6 +115,7 @@ func (s *Server) connReadLoop(c net.Conn, r RelayAddressGenerator) {
 	}()
 
 	stunConn := NewSTUNConn(c)
+	buf := make([]byte, inboundMTU)
 	for {
 		n, addr, err := stunConn.ReadFrom(buf)
 
@@ -140,7 +140,6 @@ func (s *Server) connReadLoop(c net.Conn, r RelayAddressGenerator) {
 }
 
 func (s *Server) packetConnReadLoop(p net.PacketConn, r RelayAddressGenerator) {
-	buf := make([]byte, inboundMTU)
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 		AllocatePacketConn: r.AllocatePacketConn,
 		AllocateConn:       r.AllocateConn,
@@ -156,6 +155,7 @@ func (s *Server) packetConnReadLoop(p net.PacketConn, r RelayAddressGenerator) {
 		}
 	}()
 
+	buf := make([]byte, inboundMTU)
 	for {
 		n, addr, err := p.ReadFrom(buf)
 
