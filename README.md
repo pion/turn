@@ -42,6 +42,9 @@ After you instantiate an instance of a Pion TURN server or client you interact w
 We try to cover most common use cases in [examples](examples). If more examples could be helpful please file an issue, we are always looking
 to expand and improve `pion/turn` to make it easier for developers.
 
+To build any example you just need to run `go build` in the directory of the example you care about.
+It is also very easy to [cross compile](https://dave.cheney.net/2015/08/22/cross-compilation-with-go-1-5) Go programs.
+
 You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
 
 # [FAQ](https://github.com/pion/webrtc/wiki/FAQ)
