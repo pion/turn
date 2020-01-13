@@ -352,7 +352,7 @@ func handleChannelData(r Request, c *proto.ChannelData) error {
 
 	l, err := a.RelaySocket.WriteTo(c.Data, channel.Peer)
 	if err != nil {
-		return fmt.Errorf("failed writing to socket: %w", err)
+		return fmt.Errorf("failed writing to socket: %s", err.Error())
 	} else if l != len(c.Data) {
 		return fmt.Errorf("packet write smaller than packet %d != %d (expected)", l, len(c.Data))
 	}

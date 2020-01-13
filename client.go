@@ -415,7 +415,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 
 	msg := &stun.Message{Raw: raw}
 	if err := msg.Decode(); err != nil {
-		return fmt.Errorf("failed to decode STUN message: %w", err)
+		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
 	}
 
 	if msg.Type.Class == stun.ClassRequest {
