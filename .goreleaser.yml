@@ -24,8 +24,8 @@ changelog:
     - '^test:'
 
 builds:
-  - binary: turn-client
-    id: turn-client
+  - binary: turn-client-tcp
+    id: turn-client-tcp
     goos:
       - darwin
       - windows
@@ -36,10 +36,24 @@ builds:
       - 386
     env:
       - CGO_ENABLED=0
-    main: ./examples/turn-client/
+    main: ./examples/turn-client/tcp
 
-  - binary: add-software-attribute
-    id: add-software-attribute
+  - binary: turn-client-udp
+    id: turn-client-udp
+    goos:
+      - darwin
+      - windows
+      - linux
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+    env:
+      - CGO_ENABLED=0
+    main: ./examples/turn-client/udp
+
+  - binary: turn-server-add-software-attribute
+    id: turn-server-add-software-attribute
     goos:
       - darwin
       - windows
@@ -52,8 +66,8 @@ builds:
       - CGO_ENABLED=0
     main: ./examples/turn-server/add-software-attribute
 
-  - binary: log
-    id: log
+  - binary: turn-server-log
+    id: turn-server-log
     goos:
       - darwin
       - windows
@@ -66,8 +80,8 @@ builds:
       - CGO_ENABLED=0
     main: ./examples/turn-server/log
 
-  - binary: simple
-    id: simple
+  - binary: turn-server-simple
+    id: turn-server-simple
     goos:
       - darwin
       - windows
@@ -80,8 +94,8 @@ builds:
       - CGO_ENABLED=0
     main: ./examples/turn-server/simple/
 
-  - binary: tcp
-    id: tcp
+  - binary: turn-server-tcp
+    id: turn-server-tcp
     goos:
       - darwin
       - windows

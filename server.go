@@ -51,19 +51,53 @@ func NewServer(config ServerConfig) (*Server, error) {
 		s.channelBindTimeout = proto.DefaultLifetime
 	}
 
-	for _, p := range s.packetConnConfigs {
-		go s.packetConnReadLoop(p.PacketConn, p.RelayAddressGenerator)
+	for i := range s.packetConnConfigs {
+		go func(p PacketConnConfig) {
+			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+				AllocatePacketConn: p.RelayAddressGenerator.AllocatePacketConn,
+				AllocateConn:       p.RelayAddressGenerator.AllocateConn,
+				LeveledLogger:      s.log,
+			})
+			if err != nil {
+				s.log.Errorf("exit read loop on error: %s", err.Error())
+				return
+			}
+			defer func() {
+				if err := allocationManager.Close(); err != nil {
+					s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
+				}
+			}()
+
+			s.readLoop(p.PacketConn, allocationManager)
+		}(s.packetConnConfigs[i])
 	}
 
 	for _, listener := range s.listenerConfigs {
 		go func(l ListenerConfig) {
-			conn, err := l.Listener.Accept()
+			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+				AllocatePacketConn: l.RelayAddressGenerator.AllocatePacketConn,
+				AllocateConn:       l.RelayAddressGenerator.AllocateConn,
+				LeveledLogger:      s.log,
+			})
 			if err != nil {
-				s.log.Debugf("exit accept loop on error: %s", err.Error())
+				s.log.Errorf("exit read loop on error: %s", err.Error())
 				return
 			}
+			defer func() {
+				if err := allocationManager.Close(); err != nil {
+					s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
+				}
+			}()
 
-			go s.connReadLoop(conn, l.RelayAddressGenerator)
+			for {
+				conn, err := l.Listener.Accept()
+				if err != nil {
+					s.log.Debugf("exit accept loop on error: %s", err.Error())
+					return
+				}
+
+				go s.readLoop(NewSTUNConn(conn), allocationManager)
+			}
 		}(listener)
 	}
 
@@ -98,67 +132,10 @@ func (s *Server) Close() error {
 	return err
 }
 
-func (s *Server) connReadLoop(c net.Conn, r RelayAddressGenerator) {
-	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: r.AllocatePacketConn,
-		AllocateConn:       r.AllocateConn,
-		LeveledLogger:      s.log,
-	})
-	if err != nil {
-		s.log.Errorf("exit read loop on error: %s", err.Error())
-		return
-	}
-	defer func() {
-		if err := allocationManager.Close(); err != nil {
-			s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
-		}
-	}()
-
-	stunConn := NewSTUNConn(c)
-	buf := make([]byte, inboundMTU)
-	for {
-		n, addr, err := stunConn.ReadFrom(buf)
-
-		if err != nil {
-			s.log.Debugf("exit read loop on error: %s", err.Error())
-			return
-		}
-
-		if err := server.HandleRequest(server.Request{
-			Conn:               stunConn,
-			SrcAddr:            addr,
-			Buff:               buf[:n],
-			Log:                s.log,
-			AuthHandler:        s.authHandler,
-			Realm:              s.realm,
-			AllocationManager:  allocationManager,
-			ChannelBindTimeout: s.channelBindTimeout,
-		}); err != nil {
-			s.log.Errorf("error when handling datagram: %v", err)
-		}
-	}
-}
-
-func (s *Server) packetConnReadLoop(p net.PacketConn, r RelayAddressGenerator) {
-	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: r.AllocatePacketConn,
-		AllocateConn:       r.AllocateConn,
-		LeveledLogger:      s.log,
-	})
-	if err != nil {
-		s.log.Errorf("exit read loop on error: %s", err.Error())
-		return
-	}
-	defer func() {
-		if err := allocationManager.Close(); err != nil {
-			s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
-		}
-	}()
-
+func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manager) {
 	buf := make([]byte, inboundMTU)
 	for {
 		n, addr, err := p.ReadFrom(buf)
-
 		if err != nil {
 			s.log.Debugf("exit read loop on error: %s", err.Error())
 			return
