@@ -254,7 +254,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
 		} else {
-			a.log.Errorf("Packet unhandled in relay src %v", srcAddr)
+			a.log.Infof("No Permission or Channel exists for %v on allocation %v", srcAddr, a.RelayAddr.String())
 		}
 	}
 }
