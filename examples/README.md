@@ -33,14 +33,24 @@ $ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
 ```
 
 ## turn-client
-A simple TURN client.
-It demonstrates how to write a TURN client and run it.
+The `turn-client` directory contains 2 examples that show common Pion TURN usages. All of these examples take the following arguments.
 
-The following command simply allocates a relay socket (relayConn), then exits.
+* -host      : TURN server host
+* -ping      : Run ping test
+* -port      : Listening port (defaults to 3478)
+* -realm     : Realm name (defaults to "pion.ly")
+* -user      : &lt;username&gt;=&lt;password&gt; pair
+
+#### tcp
+Dials the requested TURN server via TCP
+
+#### udp
+Dials the requested TURN server via UDP
 
 ```sh
+$ go udp
 $ go build
-./turn-client -host <turn-server-name> -user=user=pass
+$ ./udp -host <turn-server-name> -user=user=pass
 ```
 
 By adding `-ping`, it will perform a ping test. (it internally creates a 'pinger' and send
