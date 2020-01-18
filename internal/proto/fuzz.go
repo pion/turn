@@ -60,16 +60,16 @@ func FuzzSetters(data []byte) int {
 	m1.Add(a.t, value)
 	err := a.g.GetFrom(m1)
 	if err == stun.ErrAttributeNotFound {
-		fmt.Println("unexpected 404")
-		panic(err) // nolint
+		fmt.Println("unexpected 404") // nolint
+		panic(err)                    // nolint
 	}
 	if err != nil {
 		return 1
 	}
 	m2.WriteHeader()
 	if err := a.g.AddTo(m2); err != nil {
-		fmt.Println("failed to add attribute to m2")
-		panic(err) // nolint
+		fmt.Println("failed to add attribute to m2") // nolint
+		panic(err)                                   // nolint
 	}
 	m3.WriteHeader()
 	v, err := m2.Get(a.t)
@@ -79,8 +79,8 @@ func FuzzSetters(data []byte) int {
 	m3.Add(a.t, v)
 
 	if !m2.Equal(m3) {
-		fmt.Println(m2, "not equal", m3)
-		panic("not equal") // nolint
+		fmt.Println(m2, "not equal", m3) // nolint
+		panic("not equal")               // nolint
 	}
 	return 1
 }
