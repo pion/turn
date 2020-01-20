@@ -64,9 +64,8 @@ func TestServer(t *testing.T) {
 
 		log.Debug("creating a client.")
 		conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
+
 		client, err := NewClient(&ClientConfig{
 			Conn:          conn,
 			LoggerFactory: loggerFactory,
@@ -223,9 +222,7 @@ func TestServerVNet(t *testing.T) {
 
 	t.Run("SendBindingRequest", func(t *testing.T) {
 		v, err := buildVNet()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, v.Close())
 		}()
@@ -249,9 +246,7 @@ func TestServerVNet(t *testing.T) {
 
 		log.Debug("sending a binding request.")
 		reflAddr, err := client.SendBindingRequest()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
 		log.Debugf("mapped-address: %v", reflAddr.String())
 		udpAddr := reflAddr.(*net.UDPAddr)
 
@@ -262,14 +257,10 @@ func TestServerVNet(t *testing.T) {
 
 	t.Run("Echo via relay", func(t *testing.T) {
 		v, err := buildVNet()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
 
 		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
@@ -281,26 +272,18 @@ func TestServerVNet(t *testing.T) {
 			Net:            v.netL0,
 			LoggerFactory:  loggerFactory,
 		})
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
-		err = client.Listen()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
 
 		log.Debug("sending a binding request.")
 		conn, err := client.Allocate()
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
 
 		log.Debugf("laddr: %s", conn.LocalAddr().String())
 
 		echoConn, err := v.net1.ListenPacket("udp4", "1.2.3.5:5678")
-		if !assert.NoError(t, err, "should succeed") {
-			return
-		}
+		assert.NoError(t, err)
 
 		go func() {
 			buf := make([]byte, 1500)
@@ -316,9 +299,7 @@ func TestServerVNet(t *testing.T) {
 
 				// echo the data
 				_, err2 = echoConn.WriteTo(buf[:n], from)
-				if !assert.NoError(t, err2, "should succeed") {
-					break
-				}
+				assert.NoError(t, err2)
 			}
 		}()
 
@@ -327,12 +308,10 @@ func TestServerVNet(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			log.Debug("sending \"Hello\"..")
 			_, err = conn.WriteTo([]byte("Hello"), echoConn.LocalAddr())
-			if !assert.NoError(t, err, "should succeed") {
-				return
-			}
+			assert.NoError(t, err)
 
 			_, from, err2 := conn.ReadFrom(buf)
-			assert.NoError(t, err2, "should succeed")
+			assert.NoError(t, err2)
 
 			// verify the message was received from the relay address
 			assert.Equal(t, echoConn.LocalAddr().String(), from.String(), "should match")

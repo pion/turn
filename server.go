@@ -4,6 +4,7 @@ package turn
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pion/logging"
@@ -22,6 +23,7 @@ type Server struct {
 	authHandler        AuthHandler
 	realm              string
 	channelBindTimeout time.Duration
+	nonces             *sync.Map
 
 	packetConnConfigs []PacketConnConfig
 	listenerConfigs   []ListenerConfig
@@ -45,6 +47,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 		channelBindTimeout: config.ChannelBindTimeout,
 		packetConnConfigs:  config.PacketConnConfigs,
 		listenerConfigs:    config.ListenerConfigs,
+		nonces:             &sync.Map{},
 	}
 
 	if s.channelBindTimeout == 0 {
@@ -150,6 +153,7 @@ func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manage
 			Realm:              s.realm,
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,
+			Nonces:             s.nonces,
 		}); err != nil {
 			s.log.Errorf("error when handling datagram: %v", err)
 		}
