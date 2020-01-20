@@ -1,9 +1,10 @@
-//Package server implements the private API for implement a TURN server
+//Package server implements the private API to implement a TURN server
 package server
 
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pion/logging"
@@ -14,18 +15,20 @@ import (
 
 // Request contains all the state needed to process a single incoming datagram
 type Request struct {
+	// Current Request State
 	Conn    net.PacketConn
 	SrcAddr net.Addr
 	Buff    []byte
 
-	// Shared across all Requests
+	// Server State
+	AllocationManager *allocation.Manager
+	Nonces            *sync.Map
+
+	// User Configuration
+	AuthHandler        func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
 	Log                logging.LeveledLogger
-	AllocationManager  *allocation.Manager
 	Realm              string
 	ChannelBindTimeout time.Duration
-
-	// User Callbacks
-	AuthHandler func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
 }
 
 // HandleRequest processes the give Request

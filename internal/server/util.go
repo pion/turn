@@ -17,6 +17,8 @@ import (
 
 const (
 	maximumAllocationLifetime = time.Hour // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
+	nonceLifetime             = time.Hour // https://tools.ietf.org/html/rfc5766#section-4
+
 )
 
 func randSeq(n int) string {
@@ -62,19 +64,28 @@ func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageTy
 	return append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
 }
 
-func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) (stun.MessageIntegrity, []stun.Setter, error) {
-	if !m.Contains(stun.AttrMessageIntegrity) {
+func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) (stun.MessageIntegrity, bool, error) {
+	respondWithNonce := func(responseCode stun.ErrorCode) (stun.MessageIntegrity, bool, error) {
 		nonce, err := buildNonce()
 		if err != nil {
-			return stun.MessageIntegrity{}, nil, err
+			return nil, false, err
 		}
 
-		return nil, buildMsg(m.TransactionID,
+		// Nonce has already been taken
+		if _, keyCollision := r.Nonces.LoadOrStore(nonce, time.Now()); keyCollision {
+			return nil, false, fmt.Errorf("duplicated Nonce generated, discarding request")
+		}
+
+		return nil, false, buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID,
 			stun.NewType(callingMethod, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeUnauthorized},
+			&stun.ErrorCodeAttribute{Code: responseCode},
 			stun.NewNonce(nonce),
 			stun.NewRealm(r.Realm),
-		), nil
+		)...)
+	}
+
+	if !m.Contains(stun.AttrMessageIntegrity) {
+		return respondWithNonce(stun.CodeUnauthorized)
 	}
 
 	nonceAttr := &stun.Nonce{}
@@ -82,28 +93,33 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 	realmAttr := &stun.Realm{}
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(callingMethod, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
-	if err := realmAttr.GetFrom(m); err != nil {
-		return nil, badRequestMsg, err
-	}
-
 	if err := nonceAttr.GetFrom(m); err != nil {
-		return nil, badRequestMsg, err
+		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	if err := usernameAttr.GetFrom(m); err != nil {
-		return nil, badRequestMsg, err
+	// Assert Nonce exists and is not expired
+	nonceCreationTime, ok := r.Nonces.Load(string(*nonceAttr))
+	if !ok || time.Since(nonceCreationTime.(time.Time)) >= nonceLifetime {
+		r.Nonces.Delete(nonceAttr)
+		return respondWithNonce(stun.CodeStaleNonce)
+	}
+
+	if err := realmAttr.GetFrom(m); err != nil {
+		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
+	} else if err := usernameAttr.GetFrom(m); err != nil {
+		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
 	ourKey, ok := r.AuthHandler(usernameAttr.String(), usernameAttr.String(), r.SrcAddr)
 	if !ok {
-		return nil, badRequestMsg, fmt.Errorf("no user exists for %s", usernameAttr.String())
+		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("no user exists for %s", usernameAttr.String()), badRequestMsg...)
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(m); err != nil {
-		return nil, badRequestMsg, err
+		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	return stun.MessageIntegrity(ourKey), nil, nil
+	return stun.MessageIntegrity(ourKey), true, nil
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {

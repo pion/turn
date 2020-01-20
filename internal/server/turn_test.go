@@ -2,6 +2,7 @@ package server
 
 import (
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -76,6 +77,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		staticKey := []byte("ABC")
 		r := Request{
 			AllocationManager: allocationManager,
+			Nonces:            &sync.Map{},
 			Conn:              l,
 			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 			Log:               logger,
@@ -83,6 +85,7 @@ func TestAllocationLifeTime(t *testing.T) {
 				return staticKey, true
 			},
 		}
+		r.Nonces.Store(string(staticKey), time.Now())
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
 

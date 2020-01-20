@@ -19,17 +19,8 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, rtrnMsg, err := authenticateRequest(r, m, stun.MethodAllocate)
-
-	// In some cases authenticateRequest may wish to send a message back to the user
-	if rtrnMsg != nil {
-		if sendErr := buildAndSend(r.Conn, r.SrcAddr, rtrnMsg...); sendErr != nil {
-			return sendErr
-		}
-	}
-
-	// If we send an message or had on error return
-	if rtrnMsg != nil || err != nil {
+	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodAllocate)
+	if !hasAuth {
 		return err
 	}
 
@@ -177,8 +168,8 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 func handleRefreshRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("received RefreshRequest from %s", r.SrcAddr.String())
 
-	messageIntegrity, _, err := authenticateRequest(r, m, stun.MethodRefresh)
-	if err != nil {
+	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
+	if !hasAuth {
 		return err
 	}
 
@@ -220,8 +211,8 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
 	}
 
-	messageIntegrity, _, err := authenticateRequest(r, m, stun.MethodChannelBind)
-	if err != nil {
+	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodCreatePermission)
+	if !hasAuth {
 		return err
 	}
 
@@ -303,9 +294,9 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
-	messageIntegrity, _, err := authenticateRequest(r, m, stun.MethodChannelBind)
-	if err != nil {
-		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
+	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodChannelBind)
+	if !hasAuth {
+		return err
 	}
 
 	var channel proto.ChannelNumber
