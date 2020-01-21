@@ -22,7 +22,6 @@ func TestServer(t *testing.T) {
 	defer report()
 
 	loggerFactory := logging.NewDefaultLoggerFactory()
-	log := loggerFactory.NewLogger("test")
 
 	credMap := map[string][]byte{
 		"user": GenerateAuthKey("user", "pion.ly", "pass"),
@@ -30,9 +29,7 @@ func TestServer(t *testing.T) {
 
 	t.Run("simple", func(t *testing.T) {
 		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
-		if err != nil {
-			t.Fatalf("Failed to create TURN server listener: %s", err)
-		}
+		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
 			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
@@ -50,7 +47,6 @@ func TestServer(t *testing.T) {
 					},
 				},
 			},
-
 			Realm:         "pion.ly",
 			LoggerFactory: loggerFactory,
 		})
@@ -58,11 +54,6 @@ func TestServer(t *testing.T) {
 
 		assert.Equal(t, proto.DefaultLifetime, server.channelBindTimeout, "should match")
 
-		// make sure the server is listening before running
-		// the client.
-		time.Sleep(100 * time.Microsecond)
-
-		log.Debug("creating a client.")
 		conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 		assert.NoError(t, err)
 
