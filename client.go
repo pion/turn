@@ -69,7 +69,12 @@ type Client struct {
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
 func NewClient(config *ClientConfig) (*Client, error) {
-	log := config.LoggerFactory.NewLogger("turnc")
+	loggerFactory := config.LoggerFactory
+	if loggerFactory == nil {
+		loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+
+	log := loggerFactory.NewLogger("turnc")
 
 	if config.Conn == nil {
 		return nil, fmt.Errorf("conn cannot not be nil")

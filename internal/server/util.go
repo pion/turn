@@ -110,7 +110,7 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	ourKey, ok := r.AuthHandler(usernameAttr.String(), usernameAttr.String(), r.SrcAddr)
+	ourKey, ok := r.AuthHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr)
 	if !ok {
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("no user exists for %s", usernameAttr.String()), badRequestMsg...)
 	}

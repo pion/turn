@@ -17,6 +17,7 @@ import (
 const (
 	maxReadQueueSize    = 1024
 	permRefreshInterval = 120 * time.Second
+	maxRetryAttempts    = 3
 )
 
 const (
@@ -157,6 +158,7 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 // see SetDeadline and SetWriteDeadline.
 // On packet-oriented connections, write timeouts are rare.
 func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	var err error
 	_, ok := addr.(*net.UDPAddr)
 	if !ok {
 		return 0, fmt.Errorf("addr is not a net.UDPAddr")
@@ -176,26 +178,31 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	// all the data transmission. This is done assuming that the request
 	// will be mostly likely successful and we can tolerate some loss of
 	// UDP packet (or reorder), inorder to minimize the latency in most cases.
-	err := func() error {
+	createPermission := func() error {
 		perm.mutex.Lock()
 		defer perm.mutex.Unlock()
 
 		if perm.state() == permStateIdle {
 			// punch a hole! (this would block a bit..)
-			if err := c.createPermissions(addr); err != nil {
+			if err = c.createPermissions(addr); err != nil {
 				c.permMap.delete(addr)
 				return err
 			}
 			perm.setState(permStatePermitted)
 		}
 		return nil
-	}()
+	}
+
+	for i := 0; i < maxRetryAttempts; i++ {
+		if err = createPermission(); err != errTryAgain {
+			break
+		}
+	}
 	if err != nil {
 		return 0, err
 	}
 
 	// bind channel
-
 	b, ok := c.bindingMgr.findByAddr(addr)
 	if !ok {
 		b = c.bindingMgr.create(addr)
@@ -386,7 +393,7 @@ func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
 			if code.Code == stun.CodeStaleNonce {
-				c.setNonceFromMsg(msg)
+				c.setNonceFromMsg(res)
 				return errTryAgain
 			}
 			err = fmt.Errorf("%s (error %s)", res.Type, code)
@@ -555,7 +562,7 @@ func (c *UDPConn) onRefreshTimers(id int) {
 		lifetime := c.lifetime()
 		// limit the max retries on errTryAgain to 3
 		// when stale nonce returns, sencond retry should succeed
-		for i := 0; i < 3; i++ {
+		for i := 0; i < maxRetryAttempts; i++ {
 			err = c.refreshAllocation(lifetime, false)
 			if err != errTryAgain {
 				break
@@ -566,7 +573,7 @@ func (c *UDPConn) onRefreshTimers(id int) {
 		}
 	case timerIDRefreshPerms:
 		var err error
-		for i := 0; i < 3; i++ {
+		for i := 0; i < maxRetryAttempts; i++ {
 			err = c.refreshPermissions()
 			if err != errTryAgain {
 				break
