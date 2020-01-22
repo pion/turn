@@ -33,38 +33,40 @@ const (
 
 // ClientConfig is a bag of config parameters for Client.
 type ClientConfig struct {
-	STUNServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
-	TURNServerAddr string // TURN server addrees (e.g. "turn.abc.com:3478")
-	Username       string
-	Password       string
-	Realm          string
-	Software       string
-	RTO            time.Duration
-	Conn           net.PacketConn // Listening socket (net.PacketConn)
-	LoggerFactory  logging.LoggerFactory
-	Net            *vnet.Net
+	STUNServerAddr    string // STUN server address (e.g. "stun.abc.com:3478")
+	TURNServerAddr    string // TURN server addrees (e.g. "turn.abc.com:3478")
+	Username          string
+	Password          string
+	Realm             string
+	Software          string
+	RTO               time.Duration
+	Conn              net.PacketConn // Listening socket (net.PacketConn)
+	LoggerFactory     logging.LoggerFactory
+	Net               *vnet.Net
+	TransportProtocol proto.Protocol
 }
 
 // Client is a STUN server client
 type Client struct {
-	conn          net.PacketConn         // read-only
-	stunServ      net.Addr               // read-only
-	turnServ      net.Addr               // read-only
-	stunServStr   string                 // read-only, used for dmuxing
-	turnServStr   string                 // read-only, used for dmuxing
-	username      stun.Username          // read-only
-	password      string                 // read-only
-	realm         stun.Realm             // read-only
-	integrity     stun.MessageIntegrity  // read-only
-	software      stun.Software          // read-only
-	trMap         *client.TransactionMap // thread-safe
-	rto           time.Duration          // read-only
-	relayedConn   *client.UDPConn        // protected by mutex ***
-	allocTryLock  client.TryLock         // thread-safe
-	listenTryLock client.TryLock         // thread-safe
-	net           *vnet.Net              // read-only
-	mutex         sync.RWMutex           // thread-safe
-	log           logging.LeveledLogger  // read-only
+	conn              net.PacketConn         // read-only
+	stunServ          net.Addr               // read-only
+	turnServ          net.Addr               // read-only
+	stunServStr       string                 // read-only, used for dmuxing
+	turnServStr       string                 // read-only, used for dmuxing
+	username          stun.Username          // read-only
+	password          string                 // read-only
+	realm             stun.Realm             // read-only
+	integrity         stun.MessageIntegrity  // read-only
+	software          stun.Software          // read-only
+	trMap             *client.TransactionMap // thread-safe
+	rto               time.Duration          // read-only
+	relayedConn       *client.UDPConn        // protected by mutex ***
+	allocTryLock      client.TryLock         // thread-safe
+	listenTryLock     client.TryLock         // thread-safe
+	net               *vnet.Net              // read-only
+	mutex             sync.RWMutex           // thread-safe
+	log               logging.LeveledLogger  // read-only
+	transportProtocol proto.Protocol
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
@@ -91,7 +93,11 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	var err error
 	if len(config.STUNServerAddr) > 0 {
 		log.Debugf("resolving %s", config.STUNServerAddr)
-		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
+		if config.TransportProtocol == proto.ProtoUDP {
+			stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
+		} else {
+			stunServ, err = net.ResolveTCPAddr("tcp4", config.STUNServerAddr)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +106,11 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 	if len(config.TURNServerAddr) > 0 {
 		log.Debugf("resolving %s", config.TURNServerAddr)
-		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
+		if config.TransportProtocol == proto.ProtoUDP {
+			turnServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
+		} else {
+			turnServ, err = net.ResolveTCPAddr("tcp4", config.STUNServerAddr)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -112,6 +122,12 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	if config.RTO > 0 {
 		rto = config.RTO
 	}
+	//
+	//// Default to UDP transport... //TODO Remote the need for this.
+	//if config.TransportProtocol == 0 {
+	//	log.Debug("HERE")
+	//	config.TransportProtocol = proto.ProtoUDP
+	//}
 
 	c := &Client{
 		conn:        config.Conn,
@@ -127,6 +143,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		trMap:       client.NewTransactionMap(),
 		rto:         rto,
 		log:         log,
+		transportProtocol: config.TransportProtocol,
 	}
 
 	return c, nil
@@ -215,11 +232,46 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 		return nil, err
 	}
 
-	//return fmt.Sprintf("pkt_size=%d src_addr=%s refl_addr=%s:%d", size, addr, reflAddr.IP, reflAddr.Port), nil
-	return &net.UDPAddr{
-		IP:   reflAddr.IP,
-		Port: reflAddr.Port,
-	}, nil
+	if c.transportProtocol == proto.ProtoTCP {
+		return &net.TCPAddr{
+			IP:   reflAddr.IP,
+			Port: reflAddr.Port,
+		}, nil
+	} else {
+		return &net.UDPAddr{
+			IP:   reflAddr.IP,
+			Port: reflAddr.Port,
+		}, nil
+	}
+}
+
+// SendBindingRequestTo sends a new STUN request to the given transport address
+func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (string, error) { //TODO move this to a TCP Client interface?
+	msg, err := stun.Build(
+		stun.NewType(stun.MethodConnect, stun.ClassRequest),
+		proto.PeerAddress{IP: peer.IP, Port: peer.Port},
+		&c.integrity,
+	)
+
+	for _, v := range msg.Attributes {
+		fmt.Printf("%s\n",v)
+	}
+
+	if err != nil {
+		return "", err
+	}
+	trRes, err := c.PerformTransaction(msg, to, false)
+	if err != nil {
+		return "", err
+	}
+
+	//var reflAddr stun.XORMappedAddress
+	//if err := reflAddr.GetFrom(trRes.Msg); err != nil {
+	//	return "", err
+	//}
+
+
+	return string(trRes.Msg.Raw), err
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
@@ -228,6 +280,14 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 		return nil, fmt.Errorf("STUN server address is not set for the client")
 	}
 	return c.SendBindingRequestTo(c.stunServ)
+}
+
+// SendBindingRequest sends a new STUN request to the STUN server
+func (c *Client) SendConnectRequest(peer net.TCPAddr) (string, error) {
+	if c.stunServ == nil {
+		return "", fmt.Errorf("STUN server address is not set for the client")
+	}
+	return c.SendConnectRequestTo(c.stunServ, peer)
 }
 
 // Allocate sends a TURN allocation request to the given transport address
@@ -245,7 +305,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransport{Protocol: proto.ProtoUDP},
+		proto.RequestedTransport{Protocol: c.transportProtocol},
 		stun.Fingerprint,
 	)
 	if err != nil {
@@ -275,7 +335,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	msg, err = stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransport{Protocol: proto.ProtoUDP},
+		proto.RequestedTransport{Protocol: c.transportProtocol},
 		&c.username,
 		&c.realm,
 		&nonce,
@@ -305,7 +365,8 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	if err := relayed.GetFrom(res); err != nil {
 		return nil, err
 	}
-	relayedAddr := &net.UDPAddr{
+
+	relayedAddr := &net.TCPAddr{ //Make this based on transport protocol
 		IP:   relayed.IP,
 		Port: relayed.Port,
 	}

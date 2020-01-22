@@ -3,6 +3,7 @@
 package turn
 
 import (
+	"github.com/pion/turn/v2/internal/proto"
 	"net"
 	"testing"
 	"time"
@@ -36,6 +37,7 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 		Conn:           conn,
 		Net:            vnet.NewNet(nil),
 		LoggerFactory:  loggerFactory,
+		TransportProtocol: proto.ProtoUDP,
 	})
 	assert.NoError(t, err)
 	assert.NoError(t, c.Listen())
