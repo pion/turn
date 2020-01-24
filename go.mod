@@ -8,3 +8,5 @@ require (
 	github.com/pion/transport v0.8.10
 	github.com/stretchr/testify v1.4.0
 )
+
+replace github.com/pion/stun v0.3.3 => ../stun

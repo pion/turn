@@ -246,16 +246,37 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 }
 
 // SendBindingRequestTo sends a new STUN request to the given transport address
-func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (string, error) { //TODO move this to a TCP Client interface?
+func (c *Client) SendConnectionBindRequestTo(to net.Addr, peer net.TCPAddr) (string, error) { //TODO move this to a TCP Client interface?
 	msg, err := stun.Build(
-		stun.NewType(stun.MethodConnect, stun.ClassRequest),
+		stun.TransactionID,
+		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
 		proto.PeerAddress{IP: peer.IP, Port: peer.Port},
-		&c.integrity,
 	)
 
-	for _, v := range msg.Attributes {
-		fmt.Printf("%s\n",v)
+	if err != nil {
+		return "", err
 	}
+	trRes, err := c.PerformTransaction(msg, to, false)
+	if err != nil {
+		return "", err
+	}
+
+	//var reflAddr stun.XORMappedAddress
+	//if err := reflAddr.GetFrom(trRes.Msg); err != nil {
+	//	return "", err
+	//}
+
+
+	return string(trRes.Msg.Raw), err
+}
+
+// SendBindingRequestTo sends a new STUN request to the given transport address
+func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (string, error) { //TODO move this to a TCP Client interface?
+	msg, err := stun.Build(
+		stun.TransactionID,
+		stun.NewType(stun.MethodConnect, stun.ClassRequest),
+		proto.PeerAddress{IP: peer.IP, Port: peer.Port},
+	)
 
 	if err != nil {
 		return "", err
@@ -290,6 +311,14 @@ func (c *Client) SendConnectRequest(peer net.TCPAddr) (string, error) {
 	return c.SendConnectRequestTo(c.stunServ, peer)
 }
 
+// SendBindingRequest sends a new STUN request to the STUN server
+func (c *Client) SendConnectionBindRequest(peer net.TCPAddr) (string, error) {
+	if c.stunServ == nil {
+		return "", fmt.Errorf("STUN server address is not set for the client")
+	}
+	return c.SendConnectionBindRequestTo(c.stunServ, peer)
+}
+
 // Allocate sends a TURN allocation request to the given transport address
 func (c *Client) Allocate() (net.PacketConn, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
@@ -320,45 +349,45 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	res := trRes.Msg
 
 	// Anonymous allocate failed, trying to authenticate.
-	var nonce stun.Nonce
-	if err = nonce.GetFrom(res); err != nil {
-		return nil, err
-	}
-	if err = c.realm.GetFrom(res); err != nil {
-		return nil, err
-	}
-	c.realm = append([]byte(nil), c.realm...)
-	c.integrity = stun.NewLongTermIntegrity(
-		c.username.String(), c.realm.String(), c.password,
-	)
-	// Trying to authorize.
-	msg, err = stun.Build(
-		stun.TransactionID,
-		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransport{Protocol: c.transportProtocol},
-		&c.username,
-		&c.realm,
-		&nonce,
-		&c.integrity,
-		stun.Fingerprint,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	trRes, err = c.PerformTransaction(msg, c.turnServ, false)
-	if err != nil {
-		return nil, err
-	}
-	res = trRes.Msg
-
-	if res.Type.Class == stun.ClassErrorResponse {
-		var code stun.ErrorCodeAttribute
-		if err = code.GetFrom(res); err == nil {
-			return nil, fmt.Errorf("%s (error %s)", res.Type, code)
-		}
-		return nil, fmt.Errorf("%s", res.Type)
-	}
+	//var nonce stun.Nonce
+	//if err = nonce.GetFrom(res); err != nil {
+	//	return nil, err
+	//}
+	//if err = c.realm.GetFrom(res); err != nil {
+	//	return nil, err
+	//}
+	//c.realm = append([]byte(nil), c.realm...)
+	//c.integrity = stun.NewLongTermIntegrity(
+	//	c.username.String(), c.realm.String(), c.password,
+	//)
+	//// Trying to authorize.
+	//msg, err = stun.Build(
+	//	stun.TransactionID,
+	//	stun.NewType(stun.MethodAllocate, stun.ClassRequest),
+	//	proto.RequestedTransport{Protocol: c.transportProtocol},
+	//	&c.username,
+	//	&c.realm,
+	//	&nonce,
+	//	&c.integrity,
+	//	stun.Fingerprint,
+	//)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//trRes, err = c.PerformTransaction(msg, c.turnServ, false)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//res = trRes.Msg
+	//
+	//if res.Type.Class == stun.ClassErrorResponse {
+	//	var code stun.ErrorCodeAttribute
+	//	if err = code.GetFrom(res); err == nil {
+	//		return nil, fmt.Errorf("%s (error %s)", res.Type, code)
+	//	}
+	//	return nil, fmt.Errorf("%s", res.Type)
+	//}
 
 	// Getting relayed addresses from response.
 	var relayed proto.RelayedAddress
@@ -381,7 +410,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		Observer:    c,
 		RelayedAddr: relayedAddr,
 		Integrity:   c.integrity,
-		Nonce:       nonce,
+		//Nonce:       nonce,
 		Lifetime:    lifetime.Duration,
 		Log:         c.log,
 	})
