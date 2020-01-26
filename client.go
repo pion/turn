@@ -64,6 +64,7 @@ type Client struct {
 	listenTryLock client.TryLock         // thread-safe
 	net           *vnet.Net              // read-only
 	mutex         sync.RWMutex           // thread-safe
+	mutexTrMap    sync.Mutex             // thread-safe
 	log           logging.LeveledLogger  // read-only
 }
 
@@ -189,6 +190,9 @@ func (c *Client) Listen() error {
 
 // Close closes this client
 func (c *Client) Close() {
+	c.mutexTrMap.Lock()
+	defer c.mutexTrMap.Unlock()
+
 	c.trMap.CloseAndDeleteAll()
 }
 
@@ -462,8 +466,11 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	// - stun.ClassErrorResponse
 
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
+
+	c.mutexTrMap.Lock()
 	tr, ok := c.trMap.Find(trKey)
 	if !ok {
+		c.mutexTrMap.Unlock()
 		// silently discard
 		c.log.Debugf("no transaction for %s", msg.String())
 		return nil
@@ -472,6 +479,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	// End the transaction
 	tr.StopRtxTimer()
 	c.trMap.Delete(trKey)
+	c.mutexTrMap.Unlock()
 
 	if !tr.WriteResult(client.TransactionResult{
 		Msg:     msg,
@@ -511,6 +519,9 @@ func (c *Client) handleChannelData(data []byte) error {
 }
 
 func (c *Client) onRtxTimeout(trKey string, nRtx int) {
+	c.mutexTrMap.Lock()
+	defer c.mutexTrMap.Unlock()
+
 	tr, ok := c.trMap.Find(trKey)
 	if !ok {
 		return // already gone
