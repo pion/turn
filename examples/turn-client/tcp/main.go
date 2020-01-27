@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/pion/turn/v2/internal/proto"
 	"log"
 	"net"
 	"strings"
@@ -13,23 +14,29 @@ import (
 )
 
 func main() {
-	host := flag.String("host", "", "TURN Server name.")
-	port := flag.Int("port", 3478, "Listening port.")
+	turnHost := flag.String("turnHost", "", "TURN Server name.")
+	turnPort := flag.Int("turnPort", 3478, "Listening turnPort.")
 	user := flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
 	realm := flag.String("realm", "pion.ly", "Realm (defaults to \"pion.ly\")")
 	ping := flag.Bool("ping", false, "Run ping test")
+	peerHost := flag.String("peerHost", "", "Peer Host")
+	peerPort := flag.Int("peerPort", 8080, "Peer Port.")
 	flag.Parse()
 
-	if len(*host) == 0 {
-		log.Fatalf("'host' is required")
+	if len(*turnHost) == 0 {
+		log.Fatalf("'turnHost' is required")
 	}
 
 	if len(*user) == 0 {
 		log.Fatalf("'user' is required")
 	}
 
+	if len(*peerHost) == 0 {
+		log.Fatalf("'peerHost' is required")
+	}
+
 	// Dial TURN Server
-	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
+	turnServerAddr := fmt.Sprintf("%s:%d", *turnHost, *turnPort)
 	conn, err := net.Dial("tcp", turnServerAddr)
 	if err != nil {
 		panic(err)
@@ -47,6 +54,7 @@ func main() {
 		Password:       cred[1],
 		Realm:          *realm,
 		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+		TransportProtocol: proto.ProtoTCP,
 	}
 
 	client, err := turn.NewClient(cfg)
@@ -77,6 +85,24 @@ func main() {
 	// The relayConn's local address is actually the transport
 	// address assigned on the TURN server.
 	log.Printf("relayed-address=%s", relayConn.LocalAddr().String())
+	log.Printf("relayed-protocol=%s", relayConn.LocalAddr().Network())
+
+	peerAddress, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", *peerHost, *peerPort))
+	if err != nil {
+		panic(err)
+	}
+
+	connectionId, err := client.SendConnectRequest(*peerAddress)
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("connectionId=%s", connectionId)
+
+	//dataConnection, err := client.SendConnectionBindRequest(*peerAddress)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//log.Printf("dataConnection=%s", dataConnection)
 
 	// If you provided `-ping`, perform a ping test agaist the
 	// relayConn we have just allocated.
@@ -84,6 +110,10 @@ func main() {
 		err = doPingTest(client, relayConn)
 		if err != nil {
 			panic(err)
+		}
+	} else {
+		for i := 0; i < 60 ; i++  {
+			time.Sleep(1 *time.Second)
 		}
 	}
 }
