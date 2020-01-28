@@ -36,8 +36,14 @@ func main() {
 	}
 
 	// Dial TURN Server
-	turnServerAddr := fmt.Sprintf("%s:%d", *turnHost, *turnPort)
-	conn, err := net.Dial("tcp", turnServerAddr)
+	turnServerString := fmt.Sprintf("%s:%d", *turnHost, *turnPort)
+
+	coturnAddr, err := net.ResolveTCPAddr("tcp4", turnServerString)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := net.DialTCP("tcp",nil, coturnAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -47,8 +53,8 @@ func main() {
 	// Start a new TURN Client and wrap our net.Conn in a STUNConn
 	// This allows us to simulate datagram based communication over a net.Conn
 	cfg := &turn.ClientConfig{
-		STUNServerAddr: turnServerAddr,
-		TURNServerAddr: turnServerAddr,
+		STUNServerAddr: turnServerString,
+		TURNServerAddr: turnServerString,
 		Conn:           turn.NewSTUNConn(conn),
 		Username:       cred[0],
 		Password:       cred[1],
@@ -82,8 +88,8 @@ func main() {
 		}
 	}()
 
-	// The relayConn's local address is actually the transport
-	// address assigned on the TURN server.
+	//// The relayConn's local address is actually the transport
+	//// address assigned on the TURN server.
 	log.Printf("relayed-address=%s", relayConn.LocalAddr().String())
 	log.Printf("relayed-protocol=%s", relayConn.LocalAddr().Network())
 
@@ -96,23 +102,23 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("connectionId=%s", connectionId)
+	log.Printf("connectionId=%d", connectionId)
 
-	//dataConnection, err := client.SendConnectionBindRequest(*peerAddress)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//log.Printf("dataConnection=%s", dataConnection)
+	dataConnection, err := client.SendConnectionBindRequest(connectionId)
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("dataConnection=%s", dataConnection)
 
 	// If you provided `-ping`, perform a ping test agaist the
 	// relayConn we have just allocated.
 	if *ping {
-		err = doPingTest(client, relayConn)
-		if err != nil {
-			panic(err)
-		}
+		//err = doPingTest(client, relayConn)
+		//if err != nil {
+		//	panic(err)
+		//}
 	} else {
-		for i := 0; i < 60 ; i++  {
+		for i := 0; i < 120 ; i++  {
 			time.Sleep(1 *time.Second)
 		}
 	}

@@ -246,32 +246,25 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 }
 
 // SendBindingRequestTo sends a new STUN request to the given transport address
-func (c *Client) SendConnectionBindRequestTo(to net.Addr, peer net.TCPAddr) (string, error) { //TODO move this to a TCP Client interface?
+func (c *Client) SendConnectionBindRequestTo(to net.Addr, connectionId *proto.ConnectionId) (*net.Conn, error) { //TODO move this to a TCP Client interface?
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
-		proto.PeerAddress{IP: peer.IP, Port: peer.Port},
+		connectionId,
 	)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	trRes, err := c.PerformTransaction(msg, to, false)
+	_, err = c.PerformTransaction(msg, to, false)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	//var reflAddr stun.XORMappedAddress
-	//if err := reflAddr.GetFrom(trRes.Msg); err != nil {
-	//	return "", err
-	//}
-
-
-	return string(trRes.Msg.Raw), err
+	return nil, err
 }
 
 // SendBindingRequestTo sends a new STUN request to the given transport address
-func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (string, error) { //TODO move this to a TCP Client interface?
+func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (*proto.ConnectionId, error) { //TODO move this to a TCP Client interface?
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnect, stun.ClassRequest),
@@ -279,20 +272,19 @@ func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (string, er
 	)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	trRes, err := c.PerformTransaction(msg, to, false)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	//var reflAddr stun.XORMappedAddress
-	//if err := reflAddr.GetFrom(trRes.Msg); err != nil {
-	//	return "", err
-	//}
+	var connectionId *proto.ConnectionId
+	if err := connectionId.GetFrom(trRes.Msg); err != nil {
+		return nil, err
+	}
 
-
-	return string(trRes.Msg.Raw), err
+	return connectionId, err
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
@@ -304,19 +296,19 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
-func (c *Client) SendConnectRequest(peer net.TCPAddr) (string, error) {
+func (c *Client) SendConnectRequest(peer net.TCPAddr) (*proto.ConnectionId, error) {
 	if c.stunServ == nil {
-		return "", fmt.Errorf("STUN server address is not set for the client")
+		return nil, fmt.Errorf("STUN server address is not set for the client")
 	}
 	return c.SendConnectRequestTo(c.stunServ, peer)
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
-func (c *Client) SendConnectionBindRequest(peer net.TCPAddr) (string, error) {
+func (c *Client) SendConnectionBindRequest(connectionId *proto.ConnectionId) (*net.Conn, error) {
 	if c.stunServ == nil {
-		return "", fmt.Errorf("STUN server address is not set for the client")
+		return nil, fmt.Errorf("STUN server address is not set for the client")
 	}
-	return c.SendConnectionBindRequestTo(c.stunServ, peer)
+	return c.SendConnectionBindRequestTo(c.stunServ, connectionId)
 }
 
 // Allocate sends a TURN allocation request to the given transport address
