@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"github.com/pion/turn/v2/internal/proto"
@@ -13,53 +14,115 @@ import (
 	"github.com/pion/turn/v2"
 )
 
+var (
+	turnHost = flag.String("turnHost", "", "TURN Server name.")
+	turnPort = flag.Int("turnPort", 3478, "Listening turnPort.")
+	user = flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
+	realm = flag.String("realm", "pion.ly", "Realm (defaults to \"pion.ly\")")
+	ping = flag.Bool("ping", false, "Run ping test")
+	peerHost = flag.String("peerHost", "", "Peer Host")
+	peerPort = flag.Int("peerPort", 8080, "Peer Port.")
+)
+
 func main() {
-	turnHost := flag.String("turnHost", "", "TURN Server name.")
-	turnPort := flag.Int("turnPort", 3478, "Listening turnPort.")
-	user := flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
-	realm := flag.String("realm", "pion.ly", "Realm (defaults to \"pion.ly\")")
-	ping := flag.Bool("ping", false, "Run ping test")
-	peerHost := flag.String("peerHost", "", "Peer Host")
-	peerPort := flag.Int("peerPort", 8080, "Peer Port.")
 	flag.Parse()
+	ValidateFlags(turnHost, user, peerHost)
 
-	if len(*turnHost) == 0 {
-		log.Fatalf("'turnHost' is required")
+	peerAddress, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", *peerHost, *peerPort))
+	if err != nil {
+		panic(err)
 	}
 
-	if len(*user) == 0 {
-		log.Fatalf("'user' is required")
-	}
-
-	if len(*peerHost) == 0 {
-		log.Fatalf("'peerHost' is required")
-	}
-
-	// Dial TURN Server
-	turnServerString := fmt.Sprintf("%s:%d", *turnHost, *turnPort)
-
-	coturnAddr, err := net.ResolveTCPAddr("tcp4", turnServerString)
+	localControlAddr, err := net.ResolveTCPAddr("tcp4", ":8081")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	conn, err := net.DialTCP("tcp",nil, coturnAddr)
+	localDataAddr, err := net.ResolveTCPAddr("tcp4", ":8888")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	turnServerString := fmt.Sprintf("%s:%d", *turnHost, *turnPort)
+	turnServerAddr, err := net.ResolveTCPAddr("tcp4", turnServerString)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	controlClient := CreateClient(
+		localControlAddr,
+		turnServerAddr,
+		user,
+		realm,
+	)
+	defer controlClient.Close()
+
+	err = controlClient.Listen()
+	if err != nil {
+		panic(err)
+	}
+
+	relayConn := AllocateRequest(controlClient)
+	defer HandleRelayConnClose(relayConn)
+
+	CreatePermissionRequest(controlClient, peerAddress)
+	connectionId := WaitForConnection(relayConn)
+
+	dataClient := CreateClient(
+		localDataAddr,
+		turnServerAddr,
+		user,
+		realm,
+	)
+
+	err = dataClient.Listen()
+	if err != nil {
+		panic(err)
+	}
+
+	ConnectionBindRequest(dataClient, proto.ConnectionId(connectionId))
+
+	for {
+		bytesWritten, err := dataClient.WriteTo([]byte("Hello from Client"), localDataAddr)
+		if err != nil {
+			log.Fatal("Could not write to connection.")
+		}
+
+		if bytesWritten == 0 {
+			log.Fatal("No bytes written.")
+		}
+		time.Sleep(1*time.Second)
+	}
+}
+
+func WaitForConnection(relayConn net.PacketConn) uint32 {
+	buf := make([]byte, 1500)
+	n, _, readerErr := relayConn.ReadFrom(buf)
+	if readerErr != nil {
+		panic(readerErr)
+	}
+
+	fmt.Print("\nConnectionID:", binary.BigEndian.Uint32(buf[:n]))
+
+	return binary.BigEndian.Uint32(buf[:n])
+}
+
+func CreateClient(localAddr, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
+
+	conn, err := net.DialTCP("tcp", localAddr, turnServerAddr)
 	if err != nil {
 		panic(err)
 	}
 
 	cred := strings.Split(*user, "=")
-
-	// Start a new TURN Client and wrap our net.Conn in a STUNConn
-	// This allows us to simulate datagram based communication over a net.Conn
 	cfg := &turn.ClientConfig{
-		STUNServerAddr: turnServerString,
-		TURNServerAddr: turnServerString,
-		Conn:           turn.NewSTUNConn(conn),
-		Username:       cred[0],
-		Password:       cred[1],
-		Realm:          *realm,
-		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+		STUNServerAddr:    turnServerAddr.String(),
+		TURNServerAddr:    turnServerAddr.String(),
+		Conn:              turn.NewSTUNConn(conn),
+		Username:          cred[0],
+		Password:          cred[1],
+		Realm:             *realm,
+		LoggerFactory:     logging.NewDefaultLoggerFactory(),
 		TransportProtocol: proto.ProtoTCP,
 	}
 
@@ -67,61 +130,57 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer client.Close()
+	return client
+}
 
-	// Start listening on the conn provided.
-	err = client.Listen()
+func ValidateFlags(turnHost *string, user *string, peerHost *string) {
+	if len(*turnHost) == 0 {
+		log.Fatalf("'turnHost' is required")
+	}
+	if len(*user) == 0 {
+		log.Fatalf("'user' is required")
+	}
+	if len(*peerHost) == 0 {
+		log.Fatalf("'peerHost' is required")
+	}
+}
+
+func HandleRelayConnClose(relayConn net.PacketConn) {
+	if closeErr := relayConn.Close(); closeErr != nil {
+		panic(closeErr)
+	}
+}
+
+func ConnectionBindRequest(client *turn.Client, connectionId proto.ConnectionId) {
+	err := client.SendConnectionBindRequest(connectionId)
 	if err != nil {
 		panic(err)
 	}
+}
 
-	// Allocate a relay socket on the TURN server. On success, it
-	// will return a net.PacketConn which represents the remote
-	// socket.
-	relayConn, err := client.Allocate()
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if closeErr := relayConn.Close(); closeErr != nil {
-			panic(closeErr)
-		}
-	}()
-
-	//// The relayConn's local address is actually the transport
-	//// address assigned on the TURN server.
-	log.Printf("relayed-address=%s", relayConn.LocalAddr().String())
-	log.Printf("relayed-protocol=%s", relayConn.LocalAddr().Network())
-
-	peerAddress, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", *peerHost, *peerPort))
-	if err != nil {
-		panic(err)
-	}
-
+func ConnectRequest(client *turn.Client, peerAddress *net.TCPAddr) proto.ConnectionId {
 	connectionId, err := client.SendConnectRequest(*peerAddress)
 	if err != nil {
 		panic(err)
 	}
 	log.Printf("connectionId=%d", connectionId)
+	return connectionId
+}
 
-	dataConnection, err := client.SendConnectionBindRequest(connectionId)
+func CreatePermissionRequest(client *turn.Client, peerAddress *net.TCPAddr)  {
+	err := client.SendCreatePermissionRequest(peerAddress)
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("dataConnection=%s", dataConnection)
+}
 
-	// If you provided `-ping`, perform a ping test agaist the
-	// relayConn we have just allocated.
-	if *ping {
-		//err = doPingTest(client, relayConn)
-		//if err != nil {
-		//	panic(err)
-		//}
-	} else {
-		for i := 0; i < 120 ; i++  {
-			time.Sleep(1 *time.Second)
-		}
+func AllocateRequest(client *turn.Client) net.PacketConn {
+	relayConn, err := client.Allocate()
+	if err != nil {
+		panic(err)
 	}
+	log.Printf("RELAY-ADDRESS=%s", relayConn.LocalAddr().String())
+	return relayConn
 }
 
 func doPingTest(client *turn.Client, relayConn net.PacketConn) error {

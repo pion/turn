@@ -130,19 +130,19 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	//}
 
 	c := &Client{
-		conn:        config.Conn,
-		stunServ:    stunServ,
-		turnServ:    turnServ,
-		stunServStr: stunServStr,
-		turnServStr: turnServStr,
-		username:    stun.NewUsername(config.Username),
-		password:    config.Password,
-		realm:       stun.NewRealm(config.Realm),
-		software:    stun.NewSoftware(config.Software),
-		net:         config.Net,
-		trMap:       client.NewTransactionMap(),
-		rto:         rto,
-		log:         log,
+		conn:              config.Conn,
+		stunServ:          stunServ,
+		turnServ:          turnServ,
+		stunServStr:       stunServStr,
+		turnServStr:       turnServStr,
+		username:          stun.NewUsername(config.Username),
+		password:          config.Password,
+		realm:             stun.NewRealm(config.Realm),
+		software:          stun.NewSoftware(config.Software),
+		net:               config.Net,
+		trMap:             client.NewTransactionMap(),
+		rto:               rto,
+		log:               log,
 		transportProtocol: config.TransportProtocol,
 	}
 
@@ -187,13 +187,13 @@ func (c *Client) Listen() error {
 		for {
 			n, from, err := c.conn.ReadFrom(buf)
 			if err != nil {
-				c.log.Debugf("exiting read loop: %s", err.Error())
+				fmt.Print("exiting read loop: %s", err.Error())
 				break
 			}
 
 			_, err = c.HandleInbound(buf[:n], from)
 			if err != nil {
-				c.log.Debugf("exiting read loop: %s", err.Error())
+				fmt.Print("exiting read loop: %s", err.Error())
 				break
 			}
 		}
@@ -245,26 +245,85 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 	}
 }
 
-// SendBindingRequestTo sends a new STUN request to the given transport address
-func (c *Client) SendConnectionBindRequestTo(to net.Addr, connectionId *proto.ConnectionId) (*net.Conn, error) { //TODO move this to a TCP Client interface?
-	msg, err := stun.Build(
-		stun.TransactionID,
-		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
-		connectionId,
-	)
+func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
+	var peerAddr proto.PeerAddress
+	switch a := addr.(type) {
+	case *net.UDPAddr:
+		peerAddr.IP = a.IP
+		peerAddr.Port = a.Port
+	case *net.TCPAddr:
+		peerAddr.IP = a.IP
+		peerAddr.Port = a.Port
+	}
 
-	if err != nil {
-		return nil, err
+	return peerAddr
+}
+
+func (c *Client) SendCreatePermissionRequest(addrs ...net.Addr) error {
+	setters := []stun.Setter{
+		stun.TransactionID,
+		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
 	}
-	_, err = c.PerformTransaction(msg, to, false)
-	if err != nil {
-		return nil, err
+
+	for _, addr := range addrs {
+		setters = append(setters, addr2PeerAddress(addr))
 	}
-	return nil, err
+
+	setters = append(setters,
+		c.Username(),
+		c.Realm(),
+		c.integrity,
+		stun.Fingerprint)
+
+	msg, err := stun.Build(setters...)
+	if err != nil {
+		return err
+	}
+
+	trRes, err := c.PerformTransaction(msg, c.TURNServerAddr(), false)
+	if err != nil {
+		return err
+	}
+
+	res := trRes.Msg
+
+	if res.Type.Class == stun.ClassErrorResponse {
+		var code stun.ErrorCodeAttribute
+		if err = code.GetFrom(res); err == nil {
+			if code.Code == stun.CodeStaleNonce {
+				//c.setNonceFromMsg(res)
+				//return errTryAgain
+			}
+			err = fmt.Errorf("%s (error %s)", res.Type, code)
+		} else {
+			err = fmt.Errorf("%s", res.Type)
+		}
+		return err
+	}
+
+	return nil
 }
 
 // SendBindingRequestTo sends a new STUN request to the given transport address
-func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (*proto.ConnectionId, error) { //TODO move this to a TCP Client interface?
+func (c *Client) SendConnectionBindRequestTo(to net.Addr, connectionId proto.ConnectionId) error { //TODO move this to a TCP Client interface?
+	msg, err := stun.Build(
+		stun.TransactionID,
+		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
+		proto.ConnectionId(connectionId),
+	)
+
+	if err != nil {
+		return err
+	}
+	_, err = c.PerformTransaction(msg, to, false)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+// SendBindingRequestTo sends a new STUN request to the given transport address
+func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (proto.ConnectionId, error) { //TODO move this to a TCP Client interface?
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnect, stun.ClassRequest),
@@ -272,16 +331,16 @@ func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (*proto.Con
 	)
 
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	trRes, err := c.PerformTransaction(msg, to, false)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	var connectionId *proto.ConnectionId
+	var connectionId proto.ConnectionId
 	if err := connectionId.GetFrom(trRes.Msg); err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	return connectionId, err
@@ -296,17 +355,17 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
-func (c *Client) SendConnectRequest(peer net.TCPAddr) (*proto.ConnectionId, error) {
+func (c *Client) SendConnectRequest(peer net.TCPAddr) (proto.ConnectionId, error) {
 	if c.stunServ == nil {
-		return nil, fmt.Errorf("STUN server address is not set for the client")
+		return 0, fmt.Errorf("STUN server address is not set for the client")
 	}
 	return c.SendConnectRequestTo(c.stunServ, peer)
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
-func (c *Client) SendConnectionBindRequest(connectionId *proto.ConnectionId) (*net.Conn, error) {
+func (c *Client) SendConnectionBindRequest(connectionId proto.ConnectionId) (error) {
 	if c.stunServ == nil {
-		return nil, fmt.Errorf("STUN server address is not set for the client")
+		return fmt.Errorf("STUN server address is not set for the client")
 	}
 	return c.SendConnectionBindRequestTo(c.stunServ, connectionId)
 }
@@ -403,8 +462,8 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		RelayedAddr: relayedAddr,
 		Integrity:   c.integrity,
 		//Nonce:       nonce,
-		Lifetime:    lifetime.Duration,
-		Log:         c.log,
+		Lifetime: lifetime.Duration,
+		Log:      c.log,
 	})
 
 	c.setRelayedUDPConn(relayedConn)
@@ -479,16 +538,19 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	//  - Malformed packet (parse error)
 	//  - STUN message was a request
 	//  - Non-STUN message from the STUN server
-
 	switch {
 	case stun.IsMessage(data):
+		fmt.Print("STUN DATA")
 		return true, c.handleSTUNMessage(data, from)
 	case proto.IsChannelData(data):
+		fmt.Print("CHANNEL DATA")
 		return true, c.handleChannelData(data)
 	case len(c.stunServStr) != 0 && from.String() == c.stunServStr:
+		fmt.Print("FROM STUN BUT NOT STUN DATA")
 		// received from STUN server but it is not a STUN message
 		return true, fmt.Errorf("non-STUN message from STUN server")
 	default:
+		fmt.Print("NO IDEA")
 		// assume, this is an application data
 		c.log.Tracef("non-STUN/TURN packect, unhandled")
 	}
@@ -505,12 +567,19 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
 	}
 
+	fmt.Printf("\n---%s-%s---\n", msg.Type.Method, c.conn.LocalAddr().String())
+	fmt.Printf("\n---%s-%s---\n", msg.Type.Class, c.conn.LocalAddr().String())
+
+	for _,v := range msg.Attributes {
+		fmt.Printf("%s\n", v)
+	}
+
 	if msg.Type.Class == stun.ClassRequest {
 		return fmt.Errorf("unexpected STUN request message: %s", msg.String())
 	}
 
 	if msg.Type.Class == stun.ClassIndication {
-		if msg.Type.Method == stun.MethodData {
+		if msg.Type.Method == stun.MethodData || msg.Type.Method == stun.MethodConnectionAttempt {
 			var peerAddr proto.PeerAddress
 			if err := peerAddr.GetFrom(msg); err != nil {
 				return err
@@ -518,11 +587,6 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 			from = &net.UDPAddr{
 				IP:   peerAddr.IP,
 				Port: peerAddr.Port,
-			}
-
-			var data proto.Data
-			if err := data.GetFrom(msg); err != nil {
-				return err
 			}
 
 			c.log.Debugf("data indication received from %s", from.String())
@@ -533,7 +597,24 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				return nil // silently discard
 			}
 
-			relayedConn.HandleInbound(data, from)
+			if msg.Type.Method == stun.MethodData {
+				var data proto.Data
+				if err := data.GetFrom(msg); err != nil {
+					return err
+				}
+				relayedConn.HandleInbound(data, from)
+			}
+
+			if msg.Type.Method == stun.MethodConnectionAttempt {
+				var connectionId proto.ConnectionId
+				if err := connectionId.GetFrom(msg); err != nil {
+					return err
+				}
+				relayedConn.HandleInbound(connectionId.ToByteArray(), from)
+			}
+
+
+
 		}
 		return nil
 	}

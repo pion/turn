@@ -13,7 +13,8 @@ type ConnectionId uint32
 
 // AddTo adds CONNECTION-ID to message.
 func (c ConnectionId) AddTo(m *stun.Message) error {
-	v := make([]byte, lifetimeSize)
+	v := make([]byte, 4)
+	binary.BigEndian.PutUint32(v, uint32(c))
 	m.Add(stun.AttrConnectionID, v)
 	return nil
 }
@@ -26,4 +27,10 @@ func (c *ConnectionId) GetFrom(m *stun.Message) error {
 	}
 	*c = ConnectionId(binary.BigEndian.Uint32(v))
 	return nil
+}
+
+func (c ConnectionId) ToByteArray() []byte {
+	v := make([]byte, 4)
+	binary.BigEndian.PutUint32(v, uint32(c))
+	return v
 }
