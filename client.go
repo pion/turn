@@ -174,6 +174,11 @@ func (c *Client) WriteTo(data []byte, to net.Addr) (int, error) {
 	return c.conn.WriteTo(data, to)
 }
 
+// ReadFrom reads data to the specified destination using the base socket.
+func (c *Client) ReadFrom(data []byte) (int, net.Addr, error) {
+	return c.conn.ReadFrom(data)
+}
+
 // Listen will have this client start listening on the conn provided via the config.
 // This is optional. If not used, you will need to call HandleInbound method
 // to supply incoming data, instead.
@@ -540,17 +545,13 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	//  - Non-STUN message from the STUN server
 	switch {
 	case stun.IsMessage(data):
-		fmt.Print("STUN DATA")
 		return true, c.handleSTUNMessage(data, from)
 	case proto.IsChannelData(data):
-		fmt.Print("CHANNEL DATA")
 		return true, c.handleChannelData(data)
 	case len(c.stunServStr) != 0 && from.String() == c.stunServStr:
-		fmt.Print("FROM STUN BUT NOT STUN DATA")
 		// received from STUN server but it is not a STUN message
 		return true, fmt.Errorf("non-STUN message from STUN server")
 	default:
-		fmt.Print("NO IDEA")
 		// assume, this is an application data
 		c.log.Tracef("non-STUN/TURN packect, unhandled")
 	}
@@ -567,12 +568,12 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
 	}
 
-	fmt.Printf("\n---%s-%s---\n", msg.Type.Method, c.conn.LocalAddr().String())
-	fmt.Printf("\n---%s-%s---\n", msg.Type.Class, c.conn.LocalAddr().String())
-
-	for _,v := range msg.Attributes {
-		fmt.Printf("%s\n", v)
-	}
+	//fmt.Printf("\n---%s-%s---\n", msg.Type.Method, c.conn.LocalAddr().String())
+	//fmt.Printf("\n---%s-%s---\n", msg.Type.Class, c.conn.LocalAddr().String())
+	//
+	//for _,v := range msg.Attributes {
+	//	fmt.Printf("%s\n", v)
+	//}
 
 	if msg.Type.Class == stun.ClassRequest {
 		return fmt.Errorf("unexpected STUN request message: %s", msg.String())
@@ -605,6 +606,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				relayedConn.HandleInbound(data, from)
 			}
 
+			//TODO handle this better.
 			if msg.Type.Method == stun.MethodConnectionAttempt {
 				var connectionId proto.ConnectionId
 				if err := connectionId.GetFrom(msg); err != nil {
@@ -612,9 +614,6 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				}
 				relayedConn.HandleInbound(connectionId.ToByteArray(), from)
 			}
-
-
-
 		}
 		return nil
 	}

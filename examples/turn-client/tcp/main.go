@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/pion/turn/v2/internal/proto"
 	"log"
+	"math"
 	"net"
 	"strings"
 	"time"
@@ -19,7 +20,6 @@ var (
 	turnPort = flag.Int("turnPort", 3478, "Listening turnPort.")
 	user = flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
 	realm = flag.String("realm", "pion.ly", "Realm (defaults to \"pion.ly\")")
-	ping = flag.Bool("ping", false, "Run ping test")
 	peerHost = flag.String("peerHost", "", "Peer Host")
 	peerPort = flag.Int("peerPort", 8080, "Peer Port.")
 )
@@ -30,16 +30,6 @@ func main() {
 
 	peerAddress, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", *peerHost, *peerPort))
 	if err != nil {
-		panic(err)
-	}
-
-	localControlAddr, err := net.ResolveTCPAddr("tcp4", ":8081")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	localDataAddr, err := net.ResolveTCPAddr("tcp4", ":8888")
-	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -49,18 +39,21 @@ func main() {
 		log.Fatal(err)
 	}
 
+	controlLocalTransportAddr, err := net.ResolveTCPAddr("tcp4", ":8081")
+	if err != nil {
+		log.Fatal(err)
+	}
+	controlConnection, err := net.DialTCP("tcp", controlLocalTransportAddr, turnServerAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
 	controlClient := CreateClient(
-		localControlAddr,
+		controlConnection,
 		turnServerAddr,
 		user,
 		realm,
 	)
 	defer controlClient.Close()
-
-	err = controlClient.Listen()
-	if err != nil {
-		panic(err)
-	}
 
 	relayConn := AllocateRequest(controlClient)
 	defer HandleRelayConnClose(relayConn)
@@ -68,22 +61,51 @@ func main() {
 	CreatePermissionRequest(controlClient, peerAddress)
 	connectionId := WaitForConnection(relayConn)
 
+	dataLocalTransportAddr, err := net.ResolveTCPAddr("tcp4", ":8888")
+	if err != nil {
+		log.Fatal(err)
+	}
+	dataConnection, err := net.DialTCP("tcp", dataLocalTransportAddr, turnServerAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
 	dataClient := CreateClient(
-		localDataAddr,
+		dataConnection,
 		turnServerAddr,
 		user,
 		realm,
 	)
 
-	err = dataClient.Listen()
-	if err != nil {
-		panic(err)
-	}
+	outputChan := make(chan string)
+	go ReadFromDataConnection(dataConnection, outputChan)
 
 	ConnectionBindRequest(dataClient, proto.ConnectionId(connectionId))
 
+	go WriteToDataConnection(dataClient, dataLocalTransportAddr, outputChan)
+
+	for message := range outputChan {
+		fmt.Printf("%s\n", message)
+	}
+}
+
+func ReadFromDataConnection(conn *net.TCPConn, outputChan chan string) {
+	buf := make([]byte, math.MaxUint16)
 	for {
-		bytesWritten, err := dataClient.WriteTo([]byte("Hello from Client"), localDataAddr)
+		n, err := conn.Read(buf)
+		if err != nil {
+			continue
+		}
+		if len(buf[:n]) > 0 {
+			outputChan <- fmt.Sprintf("Message from Peer: %s", string(buf[:n]))
+		}
+	}
+}
+
+func WriteToDataConnection(client *turn.Client, localDataAddr *net.TCPAddr, outputChan chan string) {
+	for {
+		time.Sleep(2 * time.Second)
+
+		bytesWritten, err := client.WriteTo([]byte("Hello from Client"), localDataAddr)
 		if err != nil {
 			log.Fatal("Could not write to connection.")
 		}
@@ -91,7 +113,6 @@ func main() {
 		if bytesWritten == 0 {
 			log.Fatal("No bytes written.")
 		}
-		time.Sleep(1*time.Second)
 	}
 }
 
@@ -102,18 +123,12 @@ func WaitForConnection(relayConn net.PacketConn) uint32 {
 		panic(readerErr)
 	}
 
-	fmt.Print("\nConnectionID:", binary.BigEndian.Uint32(buf[:n]))
+	log.Println("Connection Received ConnectionID:", binary.BigEndian.Uint32(buf[:n]))
 
 	return binary.BigEndian.Uint32(buf[:n])
 }
 
-func CreateClient(localAddr, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
-
-	conn, err := net.DialTCP("tcp", localAddr, turnServerAddr)
-	if err != nil {
-		panic(err)
-	}
-
+func CreateClient(conn net.Conn, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
 	cred := strings.Split(*user, "=")
 	cfg := &turn.ClientConfig{
 		STUNServerAddr:    turnServerAddr.String(),
@@ -128,8 +143,14 @@ func CreateClient(localAddr, turnServerAddr *net.TCPAddr, user, realm *string) *
 
 	client, err := turn.NewClient(cfg)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+
+	err = client.Listen()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return client
 }
 
@@ -154,14 +175,14 @@ func HandleRelayConnClose(relayConn net.PacketConn) {
 func ConnectionBindRequest(client *turn.Client, connectionId proto.ConnectionId) {
 	err := client.SendConnectionBindRequest(connectionId)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
 func ConnectRequest(client *turn.Client, peerAddress *net.TCPAddr) proto.ConnectionId {
 	connectionId, err := client.SendConnectRequest(*peerAddress)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	log.Printf("connectionId=%d", connectionId)
 	return connectionId
@@ -170,93 +191,15 @@ func ConnectRequest(client *turn.Client, peerAddress *net.TCPAddr) proto.Connect
 func CreatePermissionRequest(client *turn.Client, peerAddress *net.TCPAddr)  {
 	err := client.SendCreatePermissionRequest(peerAddress)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
 func AllocateRequest(client *turn.Client) net.PacketConn {
 	relayConn, err := client.Allocate()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	log.Printf("RELAY-ADDRESS=%s", relayConn.LocalAddr().String())
 	return relayConn
-}
-
-func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
-	// Send BindingRequest to learn our external IP
-	mappedAddr, err := client.SendBindingRequest()
-	if err != nil {
-		return err
-	}
-
-	// Set up pinger socket (pingerConn)
-	pingerConn, err := net.ListenPacket("udp4", "0.0.0.0:0")
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if closeErr := pingerConn.Close(); closeErr != nil {
-			panic(closeErr)
-		}
-	}()
-
-	// Punch a UDP hole for the relayConn by sending a data to the mappedAddr.
-	// This will trigger a TURN client to generate a permission request to the
-	// TURN server. After this, packets from the IP address will be accepted by
-	// the TURN server.
-	_, err = relayConn.WriteTo([]byte("Hello"), mappedAddr)
-	if err != nil {
-		return err
-	}
-
-	// Start read-loop on pingerConn
-	go func() {
-		buf := make([]byte, 1500)
-		for {
-			n, from, pingerErr := pingerConn.ReadFrom(buf)
-			if pingerErr != nil {
-				break
-			}
-
-			msg := string(buf[:n])
-			if sentAt, pingerErr := time.Parse(time.RFC3339Nano, msg); pingerErr == nil {
-				rtt := time.Since(sentAt)
-				log.Printf("%d bytes from from %s time=%d ms\n", n, from.String(), int(rtt.Seconds()*1000))
-			}
-		}
-	}()
-
-	// Start read-loop on relayConn
-	go func() {
-		buf := make([]byte, 1500)
-		for {
-			n, from, readerErr := relayConn.ReadFrom(buf)
-			if readerErr != nil {
-				break
-			}
-
-			// Echo back
-			if _, readerErr = relayConn.WriteTo(buf[:n], from); readerErr != nil {
-				break
-			}
-		}
-	}()
-
-	time.Sleep(500 * time.Millisecond)
-
-	// Send 10 packets from relayConn to the echo server
-	for i := 0; i < 10; i++ {
-		msg := time.Now().Format(time.RFC3339Nano)
-		_, err = pingerConn.WriteTo([]byte(msg), relayConn.LocalAddr())
-		if err != nil {
-			return err
-		}
-
-		// For simplicity, this example does not wait for the pong (reply).
-		// Instead, sleep 1 second.
-		time.Sleep(time.Second)
-	}
-
-	return nil
 }
