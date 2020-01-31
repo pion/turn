@@ -91,6 +91,7 @@ func main() {
 func ReadFromDataConnection(conn *net.TCPConn, outputChan chan string) {
 	buf := make([]byte, math.MaxUint16)
 	for {
+		conn.SetDeadline(time.Now().Add(5 * time.Second))
 		n, err := conn.Read(buf)
 		if err != nil {
 			continue
