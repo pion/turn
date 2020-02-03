@@ -3,6 +3,7 @@ package turn
 import (
 	b64 "encoding/base64"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"sync"
@@ -320,7 +321,7 @@ func (c *Client) SendConnectionBindRequestTo(to net.Addr, connectionId proto.Con
 	if err != nil {
 		return err
 	}
-	_, err = c.PerformTransaction(msg, to, false)
+	_, err = c.PerformTransaction(msg, to, true)
 	if err != nil {
 		return err
 	}
@@ -512,6 +513,42 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait boo
 	return res, nil
 }
 
+//// PerformTransaction performs STUN transaction
+//func (c *Client) PerformTransaction2(msg *stun.Message, to net.Addr, dontWait bool) (error) {
+//	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
+//
+//	raw := make([]byte, len(msg.Raw))
+//	copy(raw, msg.Raw)
+//
+//	tr := client.NewTransaction(&client.TransactionConfig{
+//		Key:      trKey,
+//		Raw:      raw,
+//		To:       to,
+//		Interval: c.rto,
+//	})
+//
+//	c.trMap.Insert(trKey, tr)
+//
+//	c.log.Tracef("start %s transaction %s to %s", msg.Type, trKey, tr.To.String())
+//	_, err := c.conn.WriteTo(tr.Raw, to)
+//	if err != nil {
+//		return client.TransactionResult{}, err
+//	}
+//
+//	tr.StartRtxTimer(c.onRtxTimeout)
+//
+//	// If dontWait is true, get the transaction going and return immediately
+//	if dontWait {
+//		return client.TransactionResult{}, nil
+//	}
+//
+//	res := tr.WaitForResult()
+//	if res.Err != nil {
+//		return res, res.Err
+//	}
+//	return res, nil
+//}
+
 // OnDeallocated is called when deallocation of relay address has been complete.
 // (Called by UDPConn)
 func (c *Client) OnDeallocated(relayedAddr net.Addr) {
@@ -567,9 +604,9 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	if err := msg.Decode(); err != nil {
 		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
 	}
-
-	//fmt.Printf("\n---%s-%s---\n", msg.Type.Method, c.conn.LocalAddr().String())
-	//fmt.Printf("\n---%s-%s---\n", msg.Type.Class, c.conn.LocalAddr().String())
+	//
+	log.Println(msg.Type.Method)
+	log.Println(msg.Type.Class)
 	//
 	//for _,v := range msg.Attributes {
 	//	fmt.Printf("%s\n", v)

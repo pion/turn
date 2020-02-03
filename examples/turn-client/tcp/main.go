@@ -4,11 +4,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/pion/stun"
 	"github.com/pion/turn/v2/internal/proto"
 	"log"
 	"math"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pion/logging"
@@ -16,12 +18,12 @@ import (
 )
 
 var (
-	turnHost = flag.String("turnHost", "", "TURN Server name.")
-	turnPort = flag.Int("turnPort", 3478, "Listening turnPort.")
-	user = flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
-	realm = flag.String("realm", "pion.ly", "Realm (defaults to \"pion.ly\")")
-	peerHost = flag.String("peerHost", "", "Peer Host")
-	peerPort = flag.Int("peerPort", 8080, "Peer Port.")
+	turnHost = 	flag.String("turnHost", "", "TURN Server name.")
+	turnPort = 	flag.Int("turnPort", 3478, "Listening turnPort.")
+	user = 		flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
+	realm = 	flag.String("realm", "", "Realm")
+	peerHost = 	flag.String("peerHost", "", "Peer Host")
+	peerPort = 	flag.Int("peerPort", 8080, "Peer Port.")
 )
 
 func main() {
@@ -47,12 +49,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	packetControlConn := turn.NewSTUNConn(controlConnection)
+
 	controlClient := CreateClient(
-		controlConnection,
+		packetControlConn,
 		turnServerAddr,
 		user,
 		realm,
 	)
+
+	err = controlClient.Listen()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	defer controlClient.Close()
 
 	relayConn := AllocateRequest(controlClient)
@@ -69,42 +80,53 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	packetDataConn := turn.NewSTUNConn(dataConnection)
+
 	dataClient := CreateClient(
-		dataConnection,
+		packetDataConn,
 		turnServerAddr,
 		user,
 		realm,
 	)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	outputChan := make(chan string)
+
 	go ReadFromDataConnection(dataConnection, outputChan)
 
 	ConnectionBindRequest(dataClient, proto.ConnectionId(connectionId))
 
-	go WriteToDataConnection(dataClient, dataLocalTransportAddr, outputChan)
+	go WriteToDataConnection(dataClient, dataLocalTransportAddr)
 
 	for message := range outputChan {
-		fmt.Printf("%s\n", message)
+		log.Printf("%s\n", message)
 	}
 }
 
 func ReadFromDataConnection(conn *net.TCPConn, outputChan chan string) {
 	buf := make([]byte, math.MaxUint16)
 	for {
-		conn.SetDeadline(time.Now().Add(5 * time.Second))
 		n, err := conn.Read(buf)
 		if err != nil {
 			continue
 		}
+
+		if stun.IsMessage(buf[:n]) {
+			continue;
+		}
+
 		if len(buf[:n]) > 0 {
 			outputChan <- fmt.Sprintf("Message from Peer: %s", string(buf[:n]))
 		}
 	}
 }
 
-func WriteToDataConnection(client *turn.Client, localDataAddr *net.TCPAddr, outputChan chan string) {
+func WriteToDataConnection(client *turn.Client, localDataAddr *net.TCPAddr) {
 	for {
-		time.Sleep(2 * time.Second)
+		time.Sleep(5 * time.Second)
 
 		bytesWritten, err := client.WriteTo([]byte("Hello from Client"), localDataAddr)
 		if err != nil {
@@ -129,12 +151,12 @@ func WaitForConnection(relayConn net.PacketConn) uint32 {
 	return binary.BigEndian.Uint32(buf[:n])
 }
 
-func CreateClient(conn net.Conn, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
+func CreateClient(conn net.PacketConn, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
 	cred := strings.Split(*user, "=")
 	cfg := &turn.ClientConfig{
 		STUNServerAddr:    turnServerAddr.String(),
 		TURNServerAddr:    turnServerAddr.String(),
-		Conn:              turn.NewSTUNConn(conn),
+		Conn:              conn,
 		Username:          cred[0],
 		Password:          cred[1],
 		Realm:             *realm,
@@ -143,11 +165,6 @@ func CreateClient(conn net.Conn, turnServerAddr *net.TCPAddr, user, realm *strin
 	}
 
 	client, err := turn.NewClient(cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = client.Listen()
 	if err != nil {
 		log.Fatal(err)
 	}
