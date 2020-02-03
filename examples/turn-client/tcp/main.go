@@ -10,7 +10,6 @@ import (
 	"math"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pion/logging"
@@ -30,13 +29,7 @@ func main() {
 	flag.Parse()
 	ValidateFlags(turnHost, user, peerHost)
 
-	peerAddress, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", *peerHost, *peerPort))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	turnServerString := fmt.Sprintf("%s:%d", *turnHost, *turnPort)
-	turnServerAddr, err := net.ResolveTCPAddr("tcp4", turnServerString)
+	turnServerAddr, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", *turnHost, *turnPort))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,27 +42,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	packetControlConn := turn.NewSTUNConn(controlConnection)
-
 	controlClient := CreateClient(
-		packetControlConn,
+		controlConnection,
 		turnServerAddr,
 		user,
 		realm,
 	)
-
 	err = controlClient.Listen()
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer controlClient.Close()
 
 	relayConn := AllocateRequest(controlClient)
 	defer HandleRelayConnClose(relayConn)
 
-	CreatePermissionRequest(controlClient, peerAddress)
+	CreatePermissionRequest(controlClient, *peerHost, *peerPort)
 	connectionId := WaitForConnection(relayConn)
 
 	dataLocalTransportAddr, err := net.ResolveTCPAddr("tcp4", ":8888")
@@ -80,33 +68,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	packetDataConn := turn.NewSTUNConn(dataConnection)
-
 	dataClient := CreateClient(
-		packetDataConn,
+		dataConnection,
 		turnServerAddr,
 		user,
 		realm,
 	)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	outputChan := make(chan string)
-
-	go ReadFromDataConnection(dataConnection, outputChan)
-
 	ConnectionBindRequest(dataClient, proto.ConnectionId(connectionId))
 
+	go ReadFromDataConnection(dataConnection)
 	go WriteToDataConnection(dataClient, dataLocalTransportAddr)
-
-	for message := range outputChan {
-		log.Printf("%s\n", message)
-	}
 }
 
-func ReadFromDataConnection(conn *net.TCPConn, outputChan chan string) {
+func ReadFromDataConnection(conn *net.TCPConn) {
 	buf := make([]byte, math.MaxUint16)
 	for {
 		n, err := conn.Read(buf)
@@ -119,7 +94,7 @@ func ReadFromDataConnection(conn *net.TCPConn, outputChan chan string) {
 		}
 
 		if len(buf[:n]) > 0 {
-			outputChan <- fmt.Sprintf("Message from Peer: %s", string(buf[:n]))
+			log.Printf("%s\n", string(buf[:n]))
 		}
 	}
 }
@@ -151,12 +126,12 @@ func WaitForConnection(relayConn net.PacketConn) uint32 {
 	return binary.BigEndian.Uint32(buf[:n])
 }
 
-func CreateClient(conn net.PacketConn, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
+func CreateClient(conn *net.TCPConn, turnServerAddr *net.TCPAddr, user, realm *string) *turn.Client {
 	cred := strings.Split(*user, "=")
 	cfg := &turn.ClientConfig{
 		STUNServerAddr:    turnServerAddr.String(),
 		TURNServerAddr:    turnServerAddr.String(),
-		Conn:              conn,
+		Conn:              turn.NewSTUNConn(conn),
 		Username:          cred[0],
 		Password:          cred[1],
 		Realm:             *realm,
@@ -206,8 +181,13 @@ func ConnectRequest(client *turn.Client, peerAddress *net.TCPAddr) proto.Connect
 	return connectionId
 }
 
-func CreatePermissionRequest(client *turn.Client, peerAddress *net.TCPAddr)  {
-	err := client.SendCreatePermissionRequest(peerAddress)
+func CreatePermissionRequest(client *turn.Client, peerHost string, peerPort int)  {
+	peerAddress, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", peerHost, peerPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = client.SendCreatePermissionRequest(peerAddress)
 	if err != nil {
 		log.Fatal(err)
 	}
