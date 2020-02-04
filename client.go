@@ -3,7 +3,6 @@ package turn
 import (
 	b64 "encoding/base64"
 	"fmt"
-	"log"
 	"math"
 	"net"
 	"sync"
@@ -604,20 +603,13 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	if err := msg.Decode(); err != nil {
 		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
 	}
-	//
-	log.Println(msg.Type.Method)
-	log.Println(msg.Type.Class)
-	//
-	//for _,v := range msg.Attributes {
-	//	fmt.Printf("%s\n", v)
-	//}
 
 	if msg.Type.Class == stun.ClassRequest {
 		return fmt.Errorf("unexpected STUN request message: %s", msg.String())
 	}
 
 	if msg.Type.Class == stun.ClassIndication {
-		if msg.Type.Method == stun.MethodData || msg.Type.Method == stun.MethodConnectionAttempt {
+		if msg.Type.Method == stun.MethodData {
 			var peerAddr proto.PeerAddress
 			if err := peerAddr.GetFrom(msg); err != nil {
 				return err
@@ -641,15 +633,6 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 					return err
 				}
 				relayedConn.HandleInbound(data, from)
-			}
-
-			//TODO handle this better.
-			if msg.Type.Method == stun.MethodConnectionAttempt {
-				var connectionId proto.ConnectionId
-				if err := connectionId.GetFrom(msg); err != nil {
-					return err
-				}
-				relayedConn.HandleInbound(connectionId.ToByteArray(), from)
 			}
 		}
 		return nil
@@ -704,7 +687,6 @@ func (c *Client) handleChannelData(data []byte) error {
 	}
 
 	c.log.Tracef("channel data received from %s (ch=%d)", addr.String(), int(chData.Number))
-
 	relayedConn.HandleInbound(chData.Data, addr)
 	return nil
 }
