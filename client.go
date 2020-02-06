@@ -314,7 +314,7 @@ func (c *Client) SendConnectionBindRequestTo(to net.Addr, connectionId proto.Con
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
-		proto.ConnectionId(connectionId),
+		connectionId,
 	)
 
 	if err != nil {
@@ -338,7 +338,7 @@ func (c *Client) SendConnectRequestTo(to net.Addr, peer net.TCPAddr) (proto.Conn
 	if err != nil {
 		return 0, err
 	}
-	trRes, err := c.PerformTransaction(msg, to, false)
+	trRes, err := c.PerformTransaction(msg, to, true)
 	if err != nil {
 		return 0, err
 	}
@@ -498,12 +498,12 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait boo
 		return client.TransactionResult{}, err
 	}
 
-	tr.StartRtxTimer(c.onRtxTimeout)
-
 	// If dontWait is true, get the transaction going and return immediately
 	if dontWait {
 		return client.TransactionResult{}, nil
 	}
+
+	tr.StartRtxTimer(c.onRtxTimeout)
 
 	res := tr.WaitForResult()
 	if res.Err != nil {
@@ -511,42 +511,6 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait boo
 	}
 	return res, nil
 }
-
-//// PerformTransaction performs STUN transaction
-//func (c *Client) PerformTransaction2(msg *stun.Message, to net.Addr, dontWait bool) (error) {
-//	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
-//
-//	raw := make([]byte, len(msg.Raw))
-//	copy(raw, msg.Raw)
-//
-//	tr := client.NewTransaction(&client.TransactionConfig{
-//		Key:      trKey,
-//		Raw:      raw,
-//		To:       to,
-//		Interval: c.rto,
-//	})
-//
-//	c.trMap.Insert(trKey, tr)
-//
-//	c.log.Tracef("start %s transaction %s to %s", msg.Type, trKey, tr.To.String())
-//	_, err := c.conn.WriteTo(tr.Raw, to)
-//	if err != nil {
-//		return client.TransactionResult{}, err
-//	}
-//
-//	tr.StartRtxTimer(c.onRtxTimeout)
-//
-//	// If dontWait is true, get the transaction going and return immediately
-//	if dontWait {
-//		return client.TransactionResult{}, nil
-//	}
-//
-//	res := tr.WaitForResult()
-//	if res.Err != nil {
-//		return res, res.Err
-//	}
-//	return res, nil
-//}
 
 // OnDeallocated is called when deallocation of relay address has been complete.
 // (Called by UDPConn)
