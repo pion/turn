@@ -335,17 +335,19 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 }
 
 // PerformTransaction performs STUN transaction
-func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (client.TransactionResult, error) {
+func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult,
+	error) {
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
 
 	raw := make([]byte, len(msg.Raw))
 	copy(raw, msg.Raw)
 
 	tr := client.NewTransaction(&client.TransactionConfig{
-		Key:      trKey,
-		Raw:      raw,
-		To:       to,
-		Interval: c.rto,
+		Key:          trKey,
+		Raw:          raw,
+		To:           to,
+		Interval:     c.rto,
+		IgnoreResult: ignoreResult,
 	})
 
 	c.trMap.Insert(trKey, tr)
@@ -359,7 +361,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, dontWait boo
 	tr.StartRtxTimer(c.onRtxTimeout)
 
 	// If dontWait is true, get the transaction going and return immediately
-	if dontWait {
+	if ignoreResult {
 		return client.TransactionResult{}, nil
 	}
 

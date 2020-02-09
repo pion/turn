@@ -83,6 +83,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Hugo Arregui](https://github.com/hugoArregui)
 * [Aaron France](https://github.com/AeroNotix)
 * [Atsushi Watanabe](https://github.com/at-wat)
+* [Tom Clift](https://github.com/tclift)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
