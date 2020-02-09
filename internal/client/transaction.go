@@ -21,12 +21,13 @@ type TransactionResult struct {
 	Err     error
 }
 
-// TransactionConfig is a set of confi params used by NewTransaction
+// TransactionConfig is a set of config params used by NewTransaction
 type TransactionConfig struct {
-	Key      string
-	Raw      []byte
-	To       net.Addr
-	Interval time.Duration
+	Key          string
+	Raw          []byte
+	To           net.Addr
+	Interval     time.Duration
+	IgnoreResult bool // true to throw away the result of this transaction (it will not be readable using WaitForResult)
 }
 
 // Transaction represents a transaction
@@ -36,19 +37,24 @@ type Transaction struct {
 	To       net.Addr               // read-only
 	nRtx     int                    // modified only by the timer thread
 	interval time.Duration          // modified only by the timer thread
-	timer    *time.Timer            // therad-safe, set only by the creator, and stopper
+	timer    *time.Timer            // thread-safe, set only by the creator, and stopper
 	resultCh chan TransactionResult // thread-safe
 	mutex    sync.RWMutex
 }
 
 // NewTransaction creates a new instance of Transaction
 func NewTransaction(config *TransactionConfig) *Transaction {
+	var resultCh chan TransactionResult
+	if !config.IgnoreResult {
+		resultCh = make(chan TransactionResult)
+	}
+
 	return &Transaction{
-		Key:      config.Key,                   // read-only
-		Raw:      config.Raw,                   // read-only
-		To:       config.To,                    // read-only
-		interval: config.Interval,              // modified only by the timer thread
-		resultCh: make(chan TransactionResult), // thread-safe
+		Key:      config.Key,      // read-only
+		Raw:      config.Raw,      // read-only
+		To:       config.To,       // read-only
+		interval: config.Interval, // modified only by the timer thread
+		resultCh: resultCh,        // thread-safe
 	}
 }
 
@@ -79,16 +85,23 @@ func (t *Transaction) StopRtxTimer() {
 
 // WriteResult writes the result to the result channel
 func (t *Transaction) WriteResult(res TransactionResult) bool {
-	select {
-	case t.resultCh <- res:
-		return true
-	default:
+	if t.resultCh == nil {
+		return false
 	}
-	return false
+
+	t.resultCh <- res
+
+	return true
 }
 
 // WaitForResult waits for the transaction result
 func (t *Transaction) WaitForResult() TransactionResult {
+	if t.resultCh == nil {
+		return TransactionResult{
+			Err: fmt.Errorf("WaitForResult called on non-result transaction"),
+		}
+	}
+
 	result, ok := <-t.resultCh
 	if !ok {
 		result.Err = fmt.Errorf("transaction closed")
@@ -98,7 +111,9 @@ func (t *Transaction) WaitForResult() TransactionResult {
 
 // Close closes the transaction
 func (t *Transaction) Close() {
-	close(t.resultCh)
+	if t.resultCh != nil {
+		close(t.resultCh)
+	}
 }
 
 // Retries returns the number of retransmission it has made
