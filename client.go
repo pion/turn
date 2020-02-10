@@ -12,7 +12,7 @@ import (
 	"github.com/pion/stun"
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/v2/internal/client"
-	"github.com/pion/turn/v2/internal/proto"
+	"github.com/pion/turn/v2/proto"
 )
 
 const (

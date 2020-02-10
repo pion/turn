@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/pion/stun"
-	"github.com/pion/turn/v2/internal/proto"
+	"github.com/pion/turn/v2/proto"
 )
 
 var errInvalidTURNFrame = errors.New("data is not a valid TURN frame, no STUN or ChannelData found")
