@@ -338,7 +338,7 @@ func (c *Client) SendConnectRequestTo(to net.Addr, peer *net.TCPAddr) (proto.Con
 	if err != nil {
 		return 0, err
 	}
-	trRes, err := c.PerformTransaction(msg, to, true)
+	trRes, err := c.PerformTransaction(msg, to, false)
 	if err != nil {
 		return 0, err
 	}
@@ -368,7 +368,7 @@ func (c *Client) SendConnectRequest(peer *net.TCPAddr) (proto.ConnectionId, erro
 }
 
 // SendBindingRequest sends a new STUN request to the STUN server
-func (c *Client) SendConnectionBindRequest(connectionId proto.ConnectionId) (error) {
+func (c *Client) SendConnectionBindRequest(connectionId proto.ConnectionId) error {
 	if c.stunServ == nil {
 		return fmt.Errorf("STUN server address is not set for the client")
 	}
