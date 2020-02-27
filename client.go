@@ -338,7 +338,7 @@ func (c *Client) SendConnectRequestTo(to net.Addr, peer *net.TCPAddr) (proto.Con
 	if err != nil {
 		return 0, err
 	}
-	trRes, err := c.PerformTransaction(msg, to, false)
+	trRes, err := c.PerformTransaction(msg, to, true)
 	if err != nil {
 		return 0, err
 	}
