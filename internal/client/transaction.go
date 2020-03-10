@@ -64,12 +64,15 @@ func (t *Transaction) StartRtxTimer(onTimeout func(trKey string, nRtx int)) {
 	defer t.mutex.Unlock()
 
 	t.timer = time.AfterFunc(t.interval, func() {
+		t.mutex.Lock()
 		t.nRtx++
+		nRtx := t.nRtx
 		t.interval *= 2
 		if t.interval > maxRtxInterval {
 			t.interval = maxRtxInterval
 		}
-		onTimeout(t.Key, t.nRtx)
+		t.mutex.Unlock()
+		onTimeout(t.Key, nRtx)
 	})
 }
 

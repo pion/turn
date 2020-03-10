@@ -84,6 +84,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Aaron France](https://github.com/AeroNotix)
 * [Atsushi Watanabe](https://github.com/at-wat)
 * [Tom Clift](https://github.com/tclift)
+* [lllf](https://github.com/LittleLightLittleFire)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
