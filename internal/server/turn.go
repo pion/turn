@@ -244,7 +244,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		respClass = stun.ClassErrorResponse
 	}
 
-	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, respClass), []stun.Setter{messageIntegrity}...)...)
+	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodCreatePermission, respClass), []stun.Setter{messageIntegrity}...)...)
 }
 
 func handleSendIndication(r Request, m *stun.Message) error {
