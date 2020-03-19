@@ -85,6 +85,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Atsushi Watanabe](https://github.com/at-wat)
 * [Tom Clift](https://github.com/tclift)
 * [lllf](https://github.com/LittleLightLittleFire)
+* nindolabs (Marouane)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
