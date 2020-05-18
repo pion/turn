@@ -19,7 +19,7 @@
 </p>
 <br>
 
-Pion TURN is a Go toolkit for build TURN servers and clients. We wrote it to solve problems we had when building RTC projects.
+Pion TURN is a Go toolkit for building TURN servers and clients. We wrote it to solve problems we had when building RTC projects.
 
 * **Deployable** - Use modern tooling of the Go ecosystem. Stop generating config files.
 * **Embeddable** - Include `pion/turn` in your existing applications. No need to manage another service.
@@ -86,6 +86,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Tom Clift](https://github.com/tclift)
 * [lllf](https://github.com/LittleLightLittleFire)
 * nindolabs (Marouane)
+* [Onwuka Gideon](https://github.com/dongido001)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
