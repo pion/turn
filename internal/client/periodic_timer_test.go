@@ -1,6 +1,7 @@
 package client
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,9 +11,9 @@ import (
 func TestPriodicTimer(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		timerID := 3
-		var nCbs int
+		var nCbs uint64
 		rt := NewPeriodicTimer(timerID, func(id int) {
-			nCbs++
+			atomic.AddUint64(&nCbs, 1)
 			assert.Equal(t, timerID, id)
 		}, 50*time.Millisecond)
 
@@ -30,7 +31,7 @@ func TestPriodicTimer(t *testing.T) {
 		time.Sleep(120 * time.Millisecond)
 		rt.Stop()
 		assert.False(t, rt.IsRunning(), "should not be running")
-		assert.Equal(t, 4, nCbs, "should be called 4 times (actual: %d)", nCbs)
+		assert.Equal(t, 4, int(atomic.LoadUint64(&nCbs)), "should be called 4 times (actual: %d)", atomic.LoadUint64(&nCbs))
 	})
 
 	t.Run("stop inside handler", func(t *testing.T) {
