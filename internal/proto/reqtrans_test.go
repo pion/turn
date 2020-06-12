@@ -16,6 +16,12 @@ func TestRequestedTransport(t *testing.T) {
 				"protocol: UDP",
 			)
 		}
+		r.Protocol = 6
+		if r.String() != "protocol: TCP" {
+			t.Errorf("bad string %q, expected %q", r,
+				"protocol: TCP",
+			)
+		}
 		r.Protocol = 254
 		if r.String() != "protocol: 254" {
 			if r.String() != "protocol: UDP" {
