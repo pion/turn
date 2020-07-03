@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pion/stun"
@@ -20,6 +22,7 @@ var errIncompleteTURNFrame = errors.New("data contains incomplete STUN or TURN f
 // packetizing the stream
 type STUNConn struct {
 	nextConn net.Conn
+	l        sync.RWMutex
 	buff     []byte
 }
 
@@ -49,7 +52,6 @@ func consumeSingleTURNFrame(p []byte) (int, error) {
 		if paddingOverflow := (datagramSize + channelDataPadding) % channelDataPadding; paddingOverflow != 0 {
 			datagramSize = (datagramSize + channelDataPadding) - paddingOverflow
 		}
-
 		datagramSize += channelDataHeaderSize
 	} else {
 		return 0, errInvalidTURNFrame
@@ -65,23 +67,30 @@ func consumeSingleTURNFrame(p []byte) (int, error) {
 // ReadFrom implements ReadFrom from net.PacketConn
 func (s *STUNConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	// First pass any buffered data from previous reads
+	s.l.Lock() // Not using defer because this function is recursive
 	n, err = consumeSingleTURNFrame(s.buff)
 	if err == errInvalidTURNFrame {
+		fmt.Println(s)
+		s.l.Unlock()
 		return 0, nil, err
 	} else if err == nil {
 		copy(p, s.buff[:n])
 		s.buff = s.buff[n:]
-
+		s.l.Unlock()
 		return n, s.nextConn.RemoteAddr(), nil
 	}
 
 	// Then read from the nextConn, appending to our buff
 	n, err = s.nextConn.Read(p)
 	if err != nil {
+
+		s.l.Unlock()
 		return 0, nil, err
 	}
 
-	s.buff = append(s.buff, append([]byte{}, p[:n]...)...)
+	s.buff = append(s.buff, p[:n]...)
+
+	s.l.Unlock()
 	return s.ReadFrom(p)
 }
 
@@ -123,6 +132,7 @@ func NewSTUNConn(nextConn net.Conn) *STUNConn {
 // Conn a wrapped net.Conn.
 // the STUNConn should not be used after a call to Conn
 func (s *STUNConn) Conn() net.Conn {
+	s.l.Lock() // force no more reads to race
 	return &wrappedConn{
 		s.nextConn,
 		io.MultiReader(bytes.NewReader(s.buff), s.nextConn),

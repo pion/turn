@@ -26,25 +26,10 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		return err
 	}
 
-	fiveTuple := &allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	}
-	requestedPort := 0
-	reservationToken := ""
-
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 	insufficentCapacityMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeInsufficientCapacity})
 
-	// 2. The server checks if the 5-tuple is currently in use by an
-	//    existing allocation.  If yes, the server rejects the request with
-	//    a 437 (Allocation Mismatch) error.
-	if alloc := r.AllocationManager.GetAllocation(fiveTuple); alloc != nil {
-		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
-		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("relay already allocated for 5-TUPLE"), msg...)
-	}
-
+	// we need REQUESTED-TRANSPORT before we can check the five-tuple
 	// 3. The server checks if the request contains a REQUESTED-TRANSPORT
 	//    attribute.  If the REQUESTED-TRANSPORT attribute is not included
 	//    or is malformed, the server rejects the request with a 400 (Bad
@@ -67,6 +52,27 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	} else if requestedTransport.Protocol != proto.ProtoUDP && requestedTransport.Protocol != proto.ProtoTCP {
 		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeUnsupportedTransProto})
 		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("RequestedTransport must be UDP or TCP"), msg...)
+	}
+
+	allocationProto := allocation.UDP
+	if requestedTransport.Protocol == proto.ProtoTCP {
+		allocationProto = allocation.TCP
+	}
+
+	fiveTuple := &allocation.FiveTuple{
+		SrcAddr:  r.SrcAddr,
+		DstAddr:  r.Conn.LocalAddr(),
+		Protocol: allocationProto,
+	}
+	requestedPort := 0
+	reservationToken := ""
+
+	// 2. The server checks if the 5-tuple is currently in use by an
+	//    existing allocation.  If yes, the server rejects the request with
+	//    a 437 (Allocation Mismatch) error.
+	if alloc := r.AllocationManager.GetAllocation(fiveTuple); alloc != nil {
+		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
+		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("relay already allocated for 5-TUPLE"), msg...)
 	}
 
 	// 4. The request may contain a DONT-FRAGMENT attribute.  If it does,
@@ -220,7 +226,13 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 		a := r.AllocationManager.GetAllocation(fiveTuple)
 
 		if a == nil {
-			return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+			fiveTuple.Protocol = allocation.TCP
+
+			// retry with TCP
+			a = r.AllocationManager.GetAllocation(fiveTuple)
+			if a == nil {
+				return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+			}
 		}
 		a.Refresh(lifetimeDuration)
 	} else {
@@ -238,13 +250,20 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("received CreatePermission from %s", r.SrcAddr.String())
 
-	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
+	fiveTuple := &allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
 		DstAddr:  r.Conn.LocalAddr(),
 		Protocol: allocation.UDP,
-	})
+	}
+
+	a := r.AllocationManager.GetAllocation(fiveTuple)
 	if a == nil {
-		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		// retry with TCP
+		fiveTuple.Protocol = allocation.TCP
+		a = r.AllocationManager.GetAllocation(fiveTuple)
+		if a == nil {
+			return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		}
 	}
 
 	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodCreatePermission)
@@ -366,6 +385,12 @@ func handleConnectRequest(r Request, m *stun.Message) error {
 
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodConnectionBind, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
+	// TODO: check if auth necessary?
+	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
+	if !hasAuth {
+		return err
+	}
+
 	// If the request is received on a TCP connection for which no
 	// allocation exists, the server MUST return a 437 (Allocation Mismatch)
 	// error.
@@ -423,7 +448,7 @@ func handleConnectRequest(r Request, m *stun.Message) error {
 	// The server MUST include the CONNECTION-ID attribute in the Connect
 	// success response.  The attribute's value MUST uniquely identify the
 	// peer data connection.
-	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse), ConnectionID(cid))...)
+	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse), ConnectionID(cid), messageIntegrity)...)
 }
 
 // // https://tools.ietf.org/html/rfc6062#section-5.4
@@ -435,14 +460,12 @@ func handleConnectionBindRequest(r Request, m *stun.Message) error {
 	// TODO: check if auth necessary?
 	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
 	if !hasAuth {
-
 		return err
 	}
 
 	// If the client connection transport is not TCP or TLS, the server MUST
 	// return a 400 (Bad Request) error.
-	type conner interface{ Conn() net.Conn }
-	stunconn, ok := r.Conn.(conner)
+	stunconn, ok := r.Conn.(interface{ Conn() net.Conn })
 	if !ok {
 		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("must use TCP transport"), badRequestMsg...)
 	}
@@ -491,7 +514,7 @@ func handleConnectionBindRequest(r Request, m *stun.Message) error {
 		peerConn.Close()
 	}()
 
-	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodConnectionBind, stun.ClassSuccessResponse), []stun.Setter{messageIntegrity}...)...)
+	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodConnectionBind, stun.ClassSuccessResponse), messageIntegrity)...)
 }
 
 func handleChannelData(r Request, c *proto.ChannelData) error {

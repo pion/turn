@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/turn/v2/internal/ipnet"
 	"github.com/pion/turn/v2/internal/proto"
+	"golang.org/x/sys/unix"
 )
 
 // Allocation is tied to a FiveTuple and relays traffic
@@ -52,6 +54,8 @@ func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.
 		TurnSocket:  turnSocket,
 		fiveTuple:   fiveTuple,
 		permissions: make(map[string]*Permission, 64),
+		connsaddr:   make(map[string]net.Conn),
+		connscid:    make(map[uint32]net.Conn),
 		closed:      make(chan interface{}),
 		log:         log,
 	}
@@ -215,17 +219,19 @@ func (a *Allocation) connect(cid uint32, dst string) error {
 	a.connscid[cid] = nil
 	a.connsLock.Unlock()
 
-	// TODO: switch to vnet
-	la, ok := a.RelayAddr.(*net.TCPAddr)
-	if !ok {
-		return fmt.Errorf("RelayAddr not TCPAddr")
-	}
-	ra, err := net.ResolveTCPAddr("tcp", dst)
-	if err != nil {
-		return err
+	// TODO: switch to vnet / make multiplatform
+	dialer := &net.Dialer{
+		LocalAddr: a.RelayAddr,
+		Control: func(network, address string, c syscall.RawConn) error {
+			var err error
+			c.Control(func(fd uintptr) {
+				err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR|unix.SO_REUSEPORT, 1)
+			})
+			return err
+		},
 	}
 
-	conn, err := net.DialTCP("tcp", la, ra)
+	conn, err := dialer.Dial("tcp", dst)
 	if err != nil {
 		return err
 	}

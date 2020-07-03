@@ -51,6 +51,8 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 	return &Manager{
 		log:                config.LeveledLogger,
 		allocations:        make(map[string]*Allocation, 64),
+		waitingconns:       make(map[uint32]*Allocation),
+		runningconns:       make(map[uint32]*Allocation),
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 	}, nil

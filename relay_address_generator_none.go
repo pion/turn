@@ -1,10 +1,13 @@
 package turn
 
 import (
+	"context"
 	"net"
 	"strconv"
+	"syscall"
 
 	"github.com/pion/transport/vnet"
+	"golang.org/x/sys/unix"
 )
 
 // RelayAddressGeneratorNone returns the listener with no modifications
@@ -41,8 +44,17 @@ func (r *RelayAddressGeneratorNone) AllocatePacketConn(network string, requested
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
 func (r *RelayAddressGeneratorNone) AllocateConn(network string, requestedPort int) (net.Listener, net.Addr, error) {
-	// TODO: switch to vnet
-	listener, err := net.Listen(network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort)))
+	// TODO: switch to vnet, make multiplatform
+	lc := &net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			var err error
+			c.Control(func(fd uintptr) {
+				err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR|unix.SO_REUSEPORT, 1)
+			})
+			return err
+		},
+	}
+	listener, err := lc.Listen(context.Background(), network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort)))
 	if err != nil {
 		return nil, nil, err
 	}
