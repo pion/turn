@@ -20,6 +20,12 @@ func (a *Addr) FromUDPAddr(n *net.UDPAddr) {
 	a.Port = n.Port
 }
 
+// FromTCPAddr sets addr to TCPAddr.
+func (a *Addr) FromTCPAddr(n *net.TCPAddr) {
+	a.IP = n.IP
+	a.Port = n.Port
+}
+
 // Equal returns true if b == a.
 func (a Addr) Equal(b Addr) bool {
 	if a.Port != b.Port {

@@ -58,8 +58,8 @@ func NewServer(config ServerConfig) (*Server, error) {
 		go func(p PacketConnConfig) {
 			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 				AllocatePacketConn: p.RelayAddressGenerator.AllocatePacketConn,
-				AllocateConn:       p.RelayAddressGenerator.AllocateConn,
-				LeveledLogger:      s.log,
+				// AllocateConn: not set, not allowed from packet conns
+				LeveledLogger: s.log,
 			})
 			if err != nil {
 				s.log.Errorf("exit read loop on error: %s", err.Error())

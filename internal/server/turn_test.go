@@ -69,7 +69,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 				return conn, conn.LocalAddr(), nil
 			},
-			AllocateConn: func(network string, requestedPort int) (net.Conn, net.Addr, error) {
+			AllocateConn: func(network string, requestedPort int) (net.Listener, net.Addr, error) {
 				return nil, nil, nil
 			},
 			LeveledLogger: logger,

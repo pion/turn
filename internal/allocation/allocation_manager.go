@@ -2,6 +2,7 @@ package allocation
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
@@ -13,7 +14,7 @@ import (
 type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocateConn       func(network string, requestedPort int) (net.Listener, net.Addr, error)
 }
 
 type reservation struct {
@@ -28,9 +29,11 @@ type Manager struct {
 
 	allocations  map[string]*Allocation
 	reservations []*reservation
+	waitingconns map[uint32]*Allocation
+	runningconns map[uint32]*Allocation
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	allocateConn       func(network string, requestedPort int) (net.Listener, net.Addr, error)
 }
 
 // NewManager creates a new instance of Manager.
@@ -38,8 +41,9 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 	switch {
 	case config.AllocatePacketConn == nil:
 		return nil, fmt.Errorf("AllocatePacketConn must be set")
-	case config.AllocateConn == nil:
-		return nil, fmt.Errorf("AllocateConn must be set")
+	// TCP allocations are not allowed from UDP connections
+	// case config.AllocateConn == nil:
+	// 	return nil, fmt.Errorf("AllocateConn must be set")
 	case config.LeveledLogger == nil:
 		return nil, fmt.Errorf("LeveledLogger must be set")
 	}
@@ -92,25 +96,49 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	}
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
-	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
-	if err != nil {
-		return nil, err
+	switch fiveTuple.Protocol {
+	case UDP:
+		conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
+		if err != nil {
+			return nil, err
+		}
+
+		a.RelaySocket = conn
+		a.RelayAddr = relayAddr
+
+		m.log.Debugf("listening on relay addr: %s", a.RelayAddr.String())
+
+		a.lifetimeTimer = time.AfterFunc(lifetime, func() {
+			m.DeleteAllocation(a.fiveTuple)
+		})
+
+		m.lock.Lock()
+		m.allocations[fiveTuple.Fingerprint()] = a
+		m.lock.Unlock()
+
+		go a.packetHandler(m)
+	case TCP:
+		listener, relayAddr, err := m.allocateConn("tcp4", requestedPort)
+		if err != nil {
+			return nil, err
+		}
+
+		a.RelayListener = listener
+		a.RelayAddr = relayAddr
+
+		m.log.Debugf("listening on relay addr: %s", a.RelayAddr.String())
+
+		a.lifetimeTimer = time.AfterFunc(lifetime, func() {
+			m.DeleteAllocation(a.fiveTuple)
+		})
+
+		m.lock.Lock()
+		m.allocations[fiveTuple.Fingerprint()] = a
+		m.lock.Unlock()
+
+		go a.listenHandler(m)
 	}
 
-	a.RelaySocket = conn
-	a.RelayAddr = relayAddr
-
-	m.log.Debugf("listening on relay addr: %s", a.RelayAddr.String())
-
-	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
-		m.DeleteAllocation(a.fiveTuple)
-	})
-
-	m.lock.Lock()
-	m.allocations[fiveTuple.Fingerprint()] = a
-	m.lock.Unlock()
-
-	go a.packetHandler(m)
 	return a, nil
 }
 
@@ -183,4 +211,65 @@ func (m *Manager) GetRandomEvenPort() (int, error) {
 	}
 
 	return udpAddr.Port, nil
+}
+
+func (m *Manager) BindConnection(cid uint32) net.Conn {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	a := m.waitingconns[cid]
+	delete(m.waitingconns, cid)
+	if a == nil {
+		return nil
+	}
+	m.runningconns[cid] = a
+	return a.GetConnectionByID(cid)
+}
+
+func (m *Manager) Connect(a *Allocation, dst string) (uint32, error) {
+	cid := m.newCID(a)
+
+	err := a.connect(cid, dst)
+	if err != nil {
+		return 0, err
+	}
+
+	// If no ConnectionBind request associated with this peer data
+	// connection is received after 30 seconds, the peer data connection
+	// MUST be closed.
+	go m.removeAfter30(cid, dst)
+
+	return cid, nil
+}
+
+func (m *Manager) removeAfter30(cid uint32, dst string) {
+	<-time.After(30 * time.Second)
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	a, ok := m.waitingconns[cid]
+	if !ok {
+		return
+	}
+	delete(m.waitingconns, cid)
+	a.removeConnection(cid, dst)
+}
+
+func (m *Manager) newCID(a *Allocation) uint32 {
+	m.lock.Lock()
+	var cid uint32
+	for {
+		cid = rand.Uint32()
+		if cid == 0 {
+			continue
+		} else if _, ok := m.waitingconns[cid]; ok {
+			continue
+		} else if _, ok := m.runningconns[cid]; ok {
+			continue
+		} else {
+			break
+		}
+	}
+	m.waitingconns[cid] = a
+	m.lock.Unlock()
+
+	return cid
 }

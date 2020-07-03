@@ -1,8 +1,10 @@
 package turn
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"time"
 
@@ -116,4 +118,22 @@ func (s *STUNConn) SetWriteDeadline(t time.Time) error {
 // NewSTUNConn creates a STUNConn
 func NewSTUNConn(nextConn net.Conn) *STUNConn {
 	return &STUNConn{nextConn: nextConn}
+}
+
+// Conn a wrapped net.Conn.
+// the STUNConn should not be used after a call to Conn
+func (s *STUNConn) Conn() net.Conn {
+	return &wrappedConn{
+		s.nextConn,
+		io.MultiReader(bytes.NewReader(s.buff), s.nextConn),
+	}
+}
+
+type wrappedConn struct {
+	net.Conn
+	r io.Reader
+}
+
+func (w *wrappedConn) Read(p []byte) (n int, err error) {
+	return w.r.Read(p)
 }

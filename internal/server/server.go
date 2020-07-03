@@ -99,6 +99,10 @@ func getMessageHandler(class stun.MessageClass, method stun.Method) (func(r Requ
 			return handleChannelBindRequest, nil
 		case stun.MethodBinding:
 			return handleBindingRequest, nil
+		case stun.MethodConnect:
+			return handleConnectRequest, nil
+		case stun.MethodConnectionBind:
+			return handleConnectionBindRequest, nil
 		default:
 			return nil, fmt.Errorf("unexpected method: %s", method)
 		}

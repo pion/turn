@@ -50,7 +50,8 @@ type ClientConfig struct {
 	LoggerFactory  logging.LoggerFactory
 	Net            *vnet.Net
 
-	TransportProtocol proto.Protocol // Protocol to peer, UDP: 17 (default) or TCP: 6
+	TransportProtocol        proto.Protocol     // Protocol to peer, UDP: 17 (default) or TCP: 6
+	ConnectionAttemptHandler func(ConnectionID) // Incoming TCP connections
 }
 
 // Client is a STUN server client
@@ -77,6 +78,7 @@ type Client struct {
 
 	transportProtocol proto.Protocol
 	nonce             stun.Nonce
+	caHandler         func(ConnectionID)
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
@@ -118,8 +120,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 				return nil, err
 			}
 		case ProtoTCP:
-			// TODO: add tcp support to vnet
-			// stunServ, err = config.Net.ResolveTCPAddr("tcp4", config.STUNServerAddr)
+			// TODO: switch to vnet
 			stunServ, err = net.ResolveTCPAddr("tcp4", config.STUNServerAddr)
 			if err != nil {
 				return nil, err
@@ -137,8 +138,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 				return nil, err
 			}
 		case ProtoTCP:
-			// TODO: add tcp support to vnet
-			// turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
+			// TODO: switch to vnet
 			turnServ, err = net.ResolveTCPAddr("tcp4", config.TURNServerAddr)
 			if err != nil {
 				return nil, err
@@ -168,6 +168,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		rto:               rto,
 		log:               log,
 		transportProtocol: config.TransportProtocol,
+		caHandler:         config.ConnectionAttemptHandler,
 	}
 
 	return c, nil
@@ -343,7 +344,6 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, fmt.Errorf("%s", res.Type)
 	}
 
-	// TODO: switch for TCP?
 	// Getting relayed addresses from response.
 	var relayed proto.RelayedAddress
 	if err := relayed.GetFrom(res); err != nil {
@@ -360,7 +360,6 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, err
 	}
 
-	// TODO: switch for TCP?
 	relayedConn = client.NewUDPConn(&client.UDPConnConfig{
 		Observer:    c,
 		RelayedAddr: relayedAddr,
@@ -475,7 +474,8 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	}
 
 	if msg.Type.Class == stun.ClassIndication {
-		if msg.Type.Method == stun.MethodData {
+		switch msg.Type.Method {
+		case stun.MethodData:
 			var peerAddr proto.PeerAddress
 			if err := peerAddr.GetFrom(msg); err != nil {
 				return err
@@ -499,6 +499,15 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 			}
 
 			relayedConn.HandleInbound(data, from)
+		case stun.MethodConnectionAttempt:
+			var cid ConnectionID
+			if err := cid.GetFrom(msg); err != nil {
+				return err
+			}
+
+			if c.caHandler != nil {
+				c.caHandler(cid)
+			}
 		}
 		return nil
 	}
@@ -640,7 +649,6 @@ func (c *Client) Connect(peer *net.TCPAddr) (ConnectionID, error) {
 		return 0, fmt.Errorf("%s", res.Type)
 	}
 
-	// TODO: extract connection ID res
 	var cid ConnectionID
 	err = cid.GetFrom(res)
 	if err != nil {
@@ -672,6 +680,8 @@ func (c *Client) ConnectionBind(dataConn net.Conn, cid ConnectionID) error {
 		return err
 	}
 
+	// read exactly one STUN message,
+	// any data after belongs to the user
 	b := make([]byte, stunHeaderSize)
 	n, err := dataConn.Read(b)
 	if n != stunHeaderSize {

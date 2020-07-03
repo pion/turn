@@ -2,6 +2,7 @@
 package allocation
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"sync"
@@ -16,13 +17,18 @@ import (
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
 type Allocation struct {
-	RelayAddr           net.Addr
-	Protocol            Protocol
-	TurnSocket          net.PacketConn
-	RelaySocket         net.PacketConn
-	fiveTuple           *FiveTuple
-	permissionsLock     sync.RWMutex
-	permissions         map[string]*Permission
+	RelayAddr       net.Addr
+	Protocol        Protocol
+	TurnSocket      net.PacketConn
+	RelaySocket     net.PacketConn
+	RelayListener   net.Listener
+	fiveTuple       *FiveTuple
+	permissionsLock sync.RWMutex
+	permissions     map[string]*Permission
+	connsLock       sync.RWMutex
+	connsaddr       map[string]net.Conn
+	connscid        map[uint32]net.Conn
+
 	channelBindingsLock sync.RWMutex
 	channelBindings     []*ChannelBind
 	lifetimeTimer       *time.Timer
@@ -34,7 +40,7 @@ func addr2IPFingerprint(addr net.Addr) string {
 	switch a := addr.(type) {
 	case *net.UDPAddr:
 		return a.IP.String()
-	case *net.TCPAddr: // Do we really need this case?
+	case *net.TCPAddr:
 		return a.IP.String()
 	}
 	return "" // shoud never happen
@@ -191,6 +197,56 @@ func (a *Allocation) Close() error {
 	return a.RelaySocket.Close()
 }
 
+func (a *Allocation) GetConnectionByAddr(dst string) net.Conn {
+	a.connsLock.RLock()
+	defer a.connsLock.RUnlock()
+	return a.connsaddr[dst]
+}
+
+func (a *Allocation) GetConnectionByID(cid uint32) net.Conn {
+	a.connsLock.RLock()
+	defer a.connsLock.RUnlock()
+	return a.connscid[cid]
+}
+
+func (a *Allocation) connect(cid uint32, dst string) error {
+	a.connsLock.Lock()
+	a.connsaddr[dst] = nil
+	a.connscid[cid] = nil
+	a.connsLock.Unlock()
+
+	// TODO: switch to vnet
+	la, ok := a.RelayAddr.(*net.TCPAddr)
+	if !ok {
+		return fmt.Errorf("RelayAddr not TCPAddr")
+	}
+	ra, err := net.ResolveTCPAddr("tcp", dst)
+	if err != nil {
+		return err
+	}
+
+	conn, err := net.DialTCP("tcp", la, ra)
+	if err != nil {
+		return err
+	}
+
+	a.connsLock.Lock()
+	a.connsaddr[dst] = conn
+	a.connscid[cid] = conn
+	a.connsLock.Unlock()
+
+	return nil
+}
+
+func (a *Allocation) removeConnection(cid uint32, dst string) {
+	a.connsLock.Lock()
+	c := a.connscid[cid]
+	delete(a.connsaddr, dst)
+	delete(a.connscid, cid)
+	a.connsLock.Unlock()
+	c.Close()
+}
+
 //  https://tools.ietf.org/html/rfc5766#section-10.3
 //  When the server receives a UDP datagram at a currently allocated
 //  relayed transport address, the server looks up the allocation
@@ -257,4 +313,90 @@ func (a *Allocation) packetHandler(m *Manager) {
 			a.log.Infof("No Permission or Channel exists for %v on allocation %v", srcAddr, a.RelayAddr.String())
 		}
 	}
+}
+
+// // https://tools.ietf.org/html/rfc6062#section-5.3
+func (a *Allocation) listenHandler(m *Manager) {
+	for {
+		// The server MUST accept the connection.  If it is not successful,
+		// nothing is sent to the client over the control connection.
+		conn, err := a.RelayListener.Accept()
+		if err != nil {
+			m.DeleteAllocation(a.fiveTuple)
+			return
+		}
+
+		a.log.Debugf("relay listener %s received connection from %s",
+			a.RelayListener.Addr().String(),
+			conn.RemoteAddr().String())
+
+		// If the connection is successfully accepted, it is now called a peer
+		// data connection.  The server MUST buffer any data received from the
+		// peer.  The server adjusts its advertised TCP receive window to
+		// reflect the amount of empty buffer space.
+		//
+		// If no permission for this peer has been installed for this
+		// allocation, the server MUST close the connection with the peer
+		// immediately after it has been accepted.
+		//
+		// really?
+		a.AddPermission(NewPermission(conn.RemoteAddr(), a.log))
+		// p := a.GetPermission(conn.RemoteAddr())
+
+		// Otherwise, the server sends a ConnectionAttempt indication to the
+		// client over the control connection.  The indication MUST include an
+		// XOR-PEER-ADDRESS attribute containing the peer's transport address,
+		// as well as a CONNECTION-ID attribute uniquely identifying the peer
+		// data connection.
+		cid := m.newCID(a)
+
+		a.connsLock.Lock()
+		a.connsaddr[conn.RemoteAddr().String()] = conn
+		a.connscid[cid] = conn
+		a.connsLock.Unlock()
+
+		// send indication
+		msg, err := buildMsg(cid, conn.RemoteAddr().String())
+		if err != nil {
+			a.log.Debugf("relay listener %s build message %v",
+				a.RelayListener.Addr().String(),
+				err,
+			)
+		}
+		a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr)
+
+		// If no ConnectionBind request associated with this peer data
+		// connection is received after 30 seconds, the peer data connection
+		// MUST be closed.
+		go m.removeAfter30(cid, conn.RemoteAddr().String())
+	}
+}
+
+func buildMsg(cid uint32, addr string) (*stun.Message, error) {
+	ta, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := stun.Build(
+		stun.TransactionID,
+		stun.NewType(stun.MethodConnectionAttempt, stun.ClassIndication),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = stun.XORMappedAddress{
+		IP:   ta.IP,
+		Port: ta.Port,
+	}.AddToAs(msg, stun.AttrXORPeerAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, cid)
+	msg.Add(stun.AttrConnectionID, b)
+
+	return msg, nil
 }

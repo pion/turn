@@ -22,17 +22,22 @@ func AddrIPPort(a net.Addr) (net.IP, int, error) {
 }
 
 // AddrEqual asserts that two net.Addrs are equal
-// Currently only supprots UDP but will be extended in the future to support others
+// Currently only supprots UDP and TCP
 func AddrEqual(a, b net.Addr) bool {
-	aUDP, ok := a.(*net.UDPAddr)
-	if !ok {
+	switch a := a.(type) {
+	case *net.UDPAddr:
+		bUDP, ok := b.(*net.UDPAddr)
+		if !ok {
+			return false
+		}
+		return a.IP.Equal(bUDP.IP) && a.Port == bUDP.Port
+	case *net.TCPAddr:
+		bTCP, ok := b.(*net.TCPAddr)
+		if !ok {
+			return false
+		}
+		return a.IP.Equal(bTCP.IP) && a.Port == bTCP.Port
+	default:
 		return false
 	}
-
-	bUDP, ok := b.(*net.UDPAddr)
-	if !ok {
-		return false
-	}
-
-	return aUDP.IP.Equal(bUDP.IP) && aUDP.Port == bUDP.Port
 }

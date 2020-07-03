@@ -21,7 +21,7 @@ type RelayAddressGenerator interface {
 	AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 
 	// Allocate a Conn (TCP) RelayAddress
-	AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocateConn(network string, requestedPort int) (net.Listener, net.Addr, error)
 }
 
 // PacketConnConfig is a single net.PacketConn to listen/write on. This will be used for UDP listeners

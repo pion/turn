@@ -182,7 +182,7 @@ func newTestManager() (*Manager, error) {
 
 			return conn, conn.LocalAddr(), nil
 		},
-		AllocateConn: func(network string, requestedPort int) (net.Conn, net.Addr, error) { return nil, nil, nil },
+		AllocateConn: func(network string, requestedPort int) (net.Listener, net.Addr, error) { return nil, nil, nil },
 	}
 	return NewManager(config)
 }

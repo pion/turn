@@ -1,7 +1,6 @@
 package turn
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 
@@ -51,6 +50,16 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, request
 }
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
-func (r *RelayAddressGeneratorStatic) AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error) {
-	return nil, nil, fmt.Errorf("TODO")
+func (r *RelayAddressGeneratorStatic) AllocateConn(network string, requestedPort int) (net.Listener, net.Addr, error) {
+	// TODO: switch to vnet
+	listener, err := net.Listen(network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort)))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Replace actual listening IP with the user requested one of RelayAddressGeneratorStatic
+	relayAddr := listener.Addr().(*net.TCPAddr)
+	relayAddr.IP = r.RelayAddress
+
+	return listener, relayAddr, nil
 }

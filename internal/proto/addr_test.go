@@ -21,6 +21,21 @@ func TestAddr_FromUDPAddr(t *testing.T) {
 	}
 }
 
+func TestAddr_FromTCPAddr(t *testing.T) {
+	u := &net.TCPAddr{
+		IP:   net.IPv4(127, 0, 0, 1),
+		Port: 1234,
+	}
+	a := new(Addr)
+	a.FromTCPAddr(u)
+	if !u.IP.Equal(a.IP) || u.Port != a.Port || u.String() != a.String() {
+		t.Error("not equal")
+	}
+	if a.Network() != "turn" {
+		t.Error("unexpected network")
+	}
+}
+
 func TestAddr_EqualIP(t *testing.T) {
 	a := Addr{
 		IP:   net.IPv4(127, 0, 0, 1),
