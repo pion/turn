@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -70,7 +69,6 @@ func (s *STUNConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	s.l.Lock() // Not using defer because this function is recursive
 	n, err = consumeSingleTURNFrame(s.buff)
 	if err == errInvalidTURNFrame {
-		fmt.Println(s)
 		s.l.Unlock()
 		return 0, nil, err
 	} else if err == nil {
