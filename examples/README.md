@@ -20,16 +20,31 @@ This example logs all inbound/outbound STUN packets. This could be useful if you
 
 You could also intercept these reads/writes if you want to filter traffic going to/from specific peers.
 
+```sh
+$ cd log
+$ go mod download
+$ go build
+$ ./log -public-ip 127.0.0.1 -users username=password,foo=bar
+```
+
 #### simple
 This example is the most minimal invocation of a Pion TURN instance possible. It has no custom behavior, and could be a good starting place for running your own TURN server.
+
+```sh
+$ cd simple
+$ go mod download
+$ go build
+$ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
+```
 
 #### tcp
 This example demonstrates listening on TCP. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TCP and UDP.
 
 ```sh
-$ cd simple
+$ cd tcp
+$ go mod download
 $ go build
-$ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
+$ ./tcp -public-ip 127.0.0.1 -users username=password,foo=bar
 ```
 
 ## turn-client
