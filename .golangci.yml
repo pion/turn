@@ -5,16 +5,33 @@ linters-settings:
     locale: US
 
 linters:
-  enable-all: true
-  disable:
-    - lll
-    - funlen
-    - godox
-    - prealloc
+  enable:
+    - deadcode
+    - depguard
+    - dogsled
     - dupl
-
-issues:
-  exclude-use-default: false
+    - errcheck
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - ineffassign
+    - interfacer
+    - misspell
+    - nakedret
+    - prealloc
+    - scopelint
+    - structcheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
 
 run:
   skip-dirs-use-default: false
