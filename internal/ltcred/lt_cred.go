@@ -12,11 +12,14 @@ import (
 	"github.com/pion/turn/v2"
 )
 
-func longTermCredentials(username string, sharedSecret string) string {
+func longTermCredentials(username string, sharedSecret string) (string, error) {
 	mac := hmac.New(sha1.New, []byte(sharedSecret))
-	mac.Write([]byte(username))
+	_, err := mac.Write([]byte(username))
+	if err != nil {
+		return "", err // Not sure if this will ever happen
+	}
 	password := mac.Sum(nil)
-	return base64.StdEncoding.EncodeToString(password)
+	return base64.StdEncoding.EncodeToString(password), nil
 }
 
 // NewAuthHandler returns a turn.AuthAuthHandler used with Long Term (or Time Windowed) Credentials.
@@ -32,7 +35,11 @@ func NewAuthHandler(sharedSecret string, log *loglib.Logger) turn.AuthHandler {
 			log.Printf("Expired time-windowed username %q", username)
 			return nil, false
 		}
-		password := longTermCredentials(username, sharedSecret)
+		password, err := longTermCredentials(username, sharedSecret)
+		if err != nil {
+			log.Print(err)
+			return nil, false
+		}
 		return turn.GenerateAuthKey(username, realm, password), true
 	}
 }

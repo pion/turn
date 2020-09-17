@@ -9,7 +9,7 @@ func TestLtCredMech(t *testing.T) {
 	sharedSecret := "foobar"
 
 	expectedPassword := "Tpz/nKkyvX/vMSLKvL4sbtBt8Vs="
-	actualPassword := longTermCredentials(username, sharedSecret)
+	actualPassword, _ := longTermCredentials(username, sharedSecret)
 	if expectedPassword != actualPassword {
 		t.Errorf("Expected %q, got %q", expectedPassword, actualPassword)
 	}
