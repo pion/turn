@@ -12,6 +12,14 @@ import (
 	"github.com/pion/turn/v2"
 )
 
+// GenerateCredentials can be used to create credentials valid for [duration] time
+func GenerateCredentials(sharedSecret string, duration time.Duration) (string, string, error) {
+	t := time.Now().Add(duration).Unix()
+	username := strconv.FormatInt(t, 10)
+	password, err := longTermCredentials(username, sharedSecret)
+	return username, password, err
+}
+
 func longTermCredentials(username string, sharedSecret string) (string, error) {
 	mac := hmac.New(sha1.New, []byte(sharedSecret))
 	_, err := mac.Write([]byte(username))
