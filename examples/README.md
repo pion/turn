@@ -1,14 +1,22 @@
 # Examples
 
 ## turn-server
-The `turn-server` directory contains 4 examples that show common Pion TURN usages. All of these examples take the following arguments.
+The `turn-server` directory contains 5 examples that show common Pion TURN usages.
+
+All of these except `lt-creds` take the following arguments.
 
 * -users     : &lt;username&gt;=&lt;password&gt;[,&lt;username&gt;=&lt;password&gt;,...] pairs
 * -realm     : Realm name (defaults to "pion.ly")
 * -port      : Listening port (defaults to 3478)
 * -public-ip : IP that your TURN server is reachable on, for local development then can just be your local IP, avoid using `127.0.0.1` as some browsers discard from that IP.
 
-The four example servers are
+```sh
+$ cd simple
+$ go build
+$ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
+```
+
+The five example servers are
 
 #### add-software-attribute
 This examples adds the SOFTWARE attribute with the value "CustomTURNServer" to every outbound STUN packet. This could be useful if you want to add debug info to your outbound packets.
@@ -26,11 +34,13 @@ This example is the most minimal invocation of a Pion TURN instance possible. It
 #### tcp
 This example demonstrates listening on TCP. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TCP and UDP.
 
-```sh
-$ cd simple
-$ go build
-$ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
-```
+#### lt-creds
+
+This example shows how to use long term credentials. You can issue passwords that automatically expire, and you don't have the store them.
+
+The only downside is that you can't revoke a single username/password. You need to rotate the shared secret. Instead of `users` it has the follow arguments instead
+
+* -authSecret     : Shared secret for the Long Term Credential Mechanism
 
 ## turn-client
 The `turn-client` directory contains 2 examples that show common Pion TURN usages. All of these examples take the following arguments.
