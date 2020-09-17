@@ -35,7 +35,7 @@ func main() {
 		panic(err)
 	}
 
-	cred := strings.Split(*user, "=")
+	cred := strings.SplitN(*user, "=", 2)
 
 	// Start a new TURN Client and wrap our net.Conn in a STUNConn
 	// This allows us to simulate datagram based communication over a net.Conn

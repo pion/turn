@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("'user' is required")
 	}
 
-	cred := strings.Split(*user, "=")
+	cred := strings.SplitN(*user, "=", 2)
 
 	// TURN client won't create a local listening socket by itself.
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
