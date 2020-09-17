@@ -87,6 +87,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [lllf](https://github.com/LittleLightLittleFire)
 * nindolabs (Marouane)
 * [Onwuka Gideon](https://github.com/dongido001)
+* [Herman Banken](https://github.com/hermanbanken)
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
