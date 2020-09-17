@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"net"
 	"testing"
 
@@ -54,7 +53,7 @@ func TestUDPConn(t *testing.T) {
 	t.Run("bind()", func(t *testing.T) {
 		obs := &dummyUDPConnObserver{
 			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
-				return TransactionResult{}, fmt.Errorf("fake error")
+				return TransactionResult{}, errFakeErr
 			},
 		}
 

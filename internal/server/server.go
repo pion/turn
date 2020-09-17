@@ -1,4 +1,4 @@
-//Package server implements the private API to implement a TURN server
+// Package server implements the private API to implement a TURN server
 package server
 
 import (
@@ -46,12 +46,12 @@ func handleDataPacket(r Request) error {
 	r.Log.Debugf("received DataPacket from %s", r.SrcAddr.String())
 	c := proto.ChannelData{Raw: r.Buff}
 	if err := c.Decode(); err != nil {
-		return fmt.Errorf("failed to create channel data from packet: %v", err)
+		return fmt.Errorf("%w: %v", errFailedToCreateChannelData, err)
 	}
 
 	err := handleChannelData(r, &c)
 	if err != nil {
-		err = fmt.Errorf("unable to handle ChannelData from %v: %v", r.SrcAddr, err)
+		err = fmt.Errorf("%w from %v: %v", errUnableToHandleChannelData, r.SrcAddr, err)
 	}
 
 	return err
@@ -61,17 +61,17 @@ func handleTURNPacket(r Request) error {
 	r.Log.Debug("handleTURNPacket")
 	m := &stun.Message{Raw: append([]byte{}, r.Buff...)}
 	if err := m.Decode(); err != nil {
-		return fmt.Errorf("failed to create stun message from packet: %v", err)
+		return fmt.Errorf("%w: %v", errFailedToCreateSTUNPacket, err)
 	}
 
 	h, err := getMessageHandler(m.Type.Class, m.Type.Method)
 	if err != nil {
-		return fmt.Errorf("unhandled STUN packet %v-%v from %v: %v", m.Type.Method, m.Type.Class, r.SrcAddr, err)
+		return fmt.Errorf("%w %v-%v from %v: %v", errUnhandledSTUNPacket, m.Type.Method, m.Type.Class, r.SrcAddr, err)
 	}
 
 	err = h(r, m)
 	if err != nil {
-		return fmt.Errorf("failed to handle %v-%v from %v: %v", m.Type.Method, m.Type.Class, r.SrcAddr, err)
+		return fmt.Errorf("%w %v-%v from %v: %v", errFailedToHandle, m.Type.Method, m.Type.Class, r.SrcAddr, err)
 	}
 
 	return nil
@@ -84,7 +84,7 @@ func getMessageHandler(class stun.MessageClass, method stun.Method) (func(r Requ
 		case stun.MethodSend:
 			return handleSendIndication, nil
 		default:
-			return nil, fmt.Errorf("unexpected method: %s", method)
+			return nil, fmt.Errorf("%w: %s", errUnexpectedMethod, method)
 		}
 
 	case stun.ClassRequest:
@@ -100,10 +100,10 @@ func getMessageHandler(class stun.MessageClass, method stun.Method) (func(r Requ
 		case stun.MethodBinding:
 			return handleBindingRequest, nil
 		default:
-			return nil, fmt.Errorf("unexpected method: %s", method)
+			return nil, fmt.Errorf("%w: %s", errUnexpectedMethod, method)
 		}
 
 	default:
-		return nil, fmt.Errorf("unexpected class: %s", class)
+		return nil, fmt.Errorf("%w: %s", errUnexpectedClass, class)
 	}
 }

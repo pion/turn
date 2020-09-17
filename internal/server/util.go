@@ -1,9 +1,7 @@
 package server
 
 import (
-	// #nosec
-
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec,gci
 	"fmt"
 	"io"
 	"math/rand"
@@ -25,20 +23,19 @@ func randSeq(n int) string {
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[rand.Intn(len(letters))] //nolint:gosec
 	}
 	return string(b)
 }
 
-// TODO, include time info support stale nonces
 func buildNonce() (string, error) {
 	/* #nosec */
 	h := md5.New()
 	if _, err := io.WriteString(h, strconv.FormatInt(time.Now().Unix(), 10)); err != nil {
-		return "", fmt.Errorf("failed generate nonce: %v", err)
+		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err)
 	}
-	if _, err := io.WriteString(h, strconv.FormatInt(rand.Int63(), 10)); err != nil {
-		return "", fmt.Errorf("failed generate nonce: %v", err)
+	if _, err := io.WriteString(h, strconv.FormatInt(rand.Int63(), 10)); err != nil { //nolint:gosec
+		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
@@ -55,7 +52,7 @@ func buildAndSend(conn net.PacketConn, dst net.Addr, attrs ...stun.Setter) error
 // Send a STUN packet and return the original error to the caller
 func buildAndSendErr(conn net.PacketConn, dst net.Addr, err error, attrs ...stun.Setter) error {
 	if sendErr := buildAndSend(conn, dst, attrs...); sendErr != nil {
-		err = fmt.Errorf("failed to send error message %v %v", sendErr, err)
+		err = fmt.Errorf("%w %v %v", errFailedToSendError, sendErr, err)
 	}
 	return err
 }
@@ -73,7 +70,7 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 
 		// Nonce has already been taken
 		if _, keyCollision := r.Nonces.LoadOrStore(nonce, time.Now()); keyCollision {
-			return nil, false, fmt.Errorf("duplicated Nonce generated, discarding request")
+			return nil, false, errDuplicatedNonce
 		}
 
 		return nil, false, buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID,
@@ -112,7 +109,7 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 
 	ourKey, ok := r.AuthHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr)
 	if !ok {
-		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("no user exists for %s", usernameAttr.String()), badRequestMsg...)
+		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()), badRequestMsg...)
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(m); err != nil {

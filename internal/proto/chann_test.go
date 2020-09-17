@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/pion/stun"
@@ -87,7 +88,7 @@ func TestChannelNumber(t *testing.T) {
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				nHandle := new(ChannelNumber)
-				if err := nHandle.GetFrom(m); err != stun.ErrAttributeNotFound {
+				if err := nHandle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
 					t.Errorf("%v should be not found", err)
 				}
 				m.Add(stun.AttrChannelNumber, []byte{1, 2, 3})

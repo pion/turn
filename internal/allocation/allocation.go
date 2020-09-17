@@ -2,7 +2,6 @@
 package allocation
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -95,7 +94,7 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 	channelByNumber := a.GetChannelByNumber(c.Number)
 
 	if channelByNumber != a.GetChannelByAddr(c.Peer) {
-		return fmt.Errorf("you cannot use the same channel number with different peer")
+		return errSameChannelDifferentPeer
 	}
 
 	// Add or refresh this channel.

@@ -28,9 +28,7 @@ func TestChromeAllocRequest(t *testing.T) {
 	// All hex streams decoded to raw binary format and stored in data slice.
 	// Decoding packets to messages.
 	for i, packet := range data {
-		var (
-			m = new(stun.Message)
-		)
+		m := new(stun.Message)
 		if _, err := m.Write(packet); err != nil {
 			t.Errorf("Packet %d: %v", i, err)
 		}

@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"sync/atomic"
 )
 
@@ -14,7 +13,7 @@ type TryLock struct {
 // Otherwise, it returns false immedidately.
 func (c *TryLock) Lock() error {
 	if !atomic.CompareAndSwapInt32(&c.n, 0, 1) {
-		return fmt.Errorf("try-lock is already locked")
+		return errDoubleLock
 	}
 	return nil
 }

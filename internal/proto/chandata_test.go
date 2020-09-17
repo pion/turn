@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"io"
 	"testing"
 )
@@ -127,7 +128,7 @@ func TestChannelData_Decode(t *testing.T) {
 		m := &ChannelData{
 			Raw: tc.buf,
 		}
-		if err := m.Decode(); err != tc.err {
+		if err := m.Decode(); !errors.Is(err, tc.err) {
 			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.err, err)
 		}
 	}
@@ -231,9 +232,7 @@ func TestChromeChannelData(t *testing.T) {
 	// All hex streams decoded to raw binary format and stored in data slice.
 	// Decoding packets to messages.
 	for i, packet := range data {
-		var (
-			m = new(ChannelData)
-		)
+		m := new(ChannelData)
 		m.Raw = packet
 		if err := m.Decode(); err != nil {
 			t.Errorf("Packet %d: %v", i, err)

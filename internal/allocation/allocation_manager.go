@@ -37,11 +37,11 @@ type Manager struct {
 func NewManager(config ManagerConfig) (*Manager, error) {
 	switch {
 	case config.AllocatePacketConn == nil:
-		return nil, fmt.Errorf("AllocatePacketConn must be set")
+		return nil, errAllocatePacketConnMustBeSet
 	case config.AllocateConn == nil:
-		return nil, fmt.Errorf("AllocateConn must be set")
+		return nil, errAllocateConnMustBeSet
 	case config.LeveledLogger == nil:
-		return nil, fmt.Errorf("LeveledLogger must be set")
+		return nil, errLeveledLoggerMustBeSet
 	}
 
 	return &Manager{
@@ -76,19 +76,19 @@ func (m *Manager) Close() error {
 func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
-		return nil, fmt.Errorf("allocations must not be created with nil FivTuple")
+		return nil, errNilFiveTuple
 	case fiveTuple.SrcAddr == nil:
-		return nil, fmt.Errorf("allocations must not be created with nil FiveTuple.SrcAddr")
+		return nil, errNilFiveTupleSrcAddr
 	case fiveTuple.DstAddr == nil:
-		return nil, fmt.Errorf("allocations must not be created with nil FiveTuple.DstAddr")
+		return nil, errNilFiveTupleDstAddr
 	case turnSocket == nil:
-		return nil, fmt.Errorf("allocations must not be created with nil turnSocket")
+		return nil, errNilTurnSocket
 	case lifetime == 0:
-		return nil, fmt.Errorf("allocations must not be created with a lifetime of 0")
+		return nil, errLifetimeZero
 	}
 
 	if a := m.GetAllocation(fiveTuple); a != nil {
-		return nil, fmt.Errorf("allocation attempt created with duplicate FiveTuple %v", fiveTuple)
+		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
 	a := NewAllocation(turnSocket, fiveTuple, m.log)
 
@@ -175,7 +175,7 @@ func (m *Manager) GetRandomEvenPort() (int, error) {
 
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
-		return 0, fmt.Errorf("failed to cast net.Addr to *net.UDPAddr")
+		return 0, errFailedToCastUDPAddr
 	} else if err := conn.Close(); err != nil {
 		return 0, err
 	} else if udpAddr.Port%2 == 1 {

@@ -15,7 +15,7 @@ func TestLtCredMech(t *testing.T) {
 	username := "1599491771"
 	sharedSecret := "foobar"
 
-	expectedPassword := "Tpz/nKkyvX/vMSLKvL4sbtBt8Vs="
+	expectedPassword := "Tpz/nKkyvX/vMSLKvL4sbtBt8Vs=" //nolint:gosec
 	actualPassword, _ := longTermCredentials(username, sharedSecret)
 	if expectedPassword != actualPassword {
 		t.Errorf("Expected %q, got %q", expectedPassword, actualPassword)

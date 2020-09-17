@@ -12,6 +12,8 @@ type RequestedAddressFamily byte
 
 const requestedFamilySize = 4
 
+var errInvalidRequestedFamilyValue = errors.New("invalid value for requested family attribute")
+
 // GetFrom decodes REQUESTED-ADDRESS-FAMILY from message.
 func (f *RequestedAddressFamily) GetFrom(m *stun.Message) error {
 	v, err := m.Get(stun.AttrRequestedAddressFamily)
@@ -25,7 +27,7 @@ func (f *RequestedAddressFamily) GetFrom(m *stun.Message) error {
 	case byte(RequestedFamilyIPv4), byte(RequestedFamilyIPv6):
 		*f = RequestedAddressFamily(v[0])
 	default:
-		return errors.New("invalid value for requested family attribute")
+		return errInvalidRequestedFamilyValue
 	}
 	return nil
 }

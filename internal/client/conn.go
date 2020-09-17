@@ -2,6 +2,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -146,7 +147,7 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 				Op:   "read",
 				Net:  c.LocalAddr().Network(),
 				Addr: c.LocalAddr(),
-				Err:  fmt.Errorf("use of closed network connection"),
+				Err:  errClosed,
 			}
 		}
 	}
@@ -157,11 +158,11 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 // an Error with Timeout() == true after a fixed time limit;
 // see SetDeadline and SetWriteDeadline.
 // On packet-oriented connections, write timeouts are rare.
-func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: gocognit
 	var err error
 	_, ok := addr.(*net.UDPAddr)
 	if !ok {
-		return 0, fmt.Errorf("addr is not a net.UDPAddr")
+		return 0, errUDPAddrCast
 	}
 
 	// check if we have a permission for the destination IP addr
@@ -194,7 +195,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	}
 
 	for i := 0; i < maxRetryAttempts; i++ {
-		if err = createPermission(); err != errTryAgain {
+		if err = createPermission(); !errors.Is(err, errTryAgain) {
 			break
 		}
 	}
@@ -226,7 +227,6 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 						c.log.Warnf("bind() failed: %s", err2.Error())
 						b.setState(bindingStateFailed)
 						// keep going...
-						// TODO: consider try binding again after a while
 					} else {
 						b.setState(bindingStateReady)
 					}
@@ -268,7 +268,6 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 					c.log.Warnf("bind() for refresh failed: %s", err.Error())
 					b.setState(bindingStateFailed)
 					// keep going...
-					// TODO: consider try binding again after a while
 				} else {
 					b.setRefreshedAt(time.Now())
 					b.setState(bindingStateReady)
@@ -289,7 +288,7 @@ func (c *UDPConn) Close() error {
 
 	select {
 	case <-c.closeCh:
-		return fmt.Errorf("already closed")
+		return errAlreadyClosed
 	default:
 		close(c.closeCh)
 	}
@@ -396,11 +395,10 @@ func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
 				c.setNonceFromMsg(res)
 				return errTryAgain
 			}
-			err = fmt.Errorf("%s (error %s)", res.Type, code)
-		} else {
-			err = fmt.Errorf("%s", res.Type)
+			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
 		}
-		return err
+
+		return fmt.Errorf("%s", res.Type) //nolint:goerr113
 	}
 
 	return nil
@@ -452,13 +450,13 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 		stun.Fingerprint,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to build refresh request: %s", err.Error())
+		return fmt.Errorf("%w: %s", errFailedToBuildRefreshRequest, err.Error())
 	}
 
 	c.log.Debugf("send refresh request (dontWait=%v)", dontWait)
 	trRes, err := c.obs.PerformTransaction(msg, c.obs.TURNServerAddr(), dontWait)
 	if err != nil {
-		return fmt.Errorf("failed to refresh refresh: %s", err.Error())
+		return fmt.Errorf("%w: %s", errFailedToRefreshAllocation, err.Error())
 	}
 
 	if dontWait {
@@ -478,13 +476,13 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 			}
 			return err
 		}
-		return fmt.Errorf("%s", res.Type)
+		return fmt.Errorf("%s", res.Type) //nolint:goerr113
 	}
 
 	// Getting lifetime from response
 	var updatedLifetime proto.Lifetime
 	if err := updatedLifetime.GetFrom(res); err != nil {
-		return fmt.Errorf("failed to get lifetime from refresh response: %s", err.Error())
+		return fmt.Errorf("%w: %s", errFailedToGetLifetime, err.Error())
 	}
 
 	c.setLifetime(updatedLifetime.Duration)
@@ -499,7 +497,7 @@ func (c *UDPConn) refreshPermissions() error {
 		return nil
 	}
 	if err := c.createPermissions(addrs...); err != nil {
-		if err == errTryAgain {
+		if errors.Is(err, errTryAgain) {
 			return errTryAgain
 		}
 		c.log.Errorf("fail to refresh permissions: %s", err.Error())
@@ -536,7 +534,7 @@ func (c *UDPConn) bind(b *binding) error {
 	res := trRes.Msg
 
 	if res.Type != stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse) {
-		return fmt.Errorf("unexpected response type %s", res.Type)
+		return fmt.Errorf("unexpected response type %s", res.Type) //nolint:goerr113
 	}
 
 	c.log.Debugf("channel binding successful: %s %d", b.addr.String(), b.number)
@@ -564,7 +562,7 @@ func (c *UDPConn) onRefreshTimers(id int) {
 		// when stale nonce returns, sencond retry should succeed
 		for i := 0; i < maxRetryAttempts; i++ {
 			err = c.refreshAllocation(lifetime, false)
-			if err != errTryAgain {
+			if !errors.Is(err, errTryAgain) {
 				break
 			}
 		}
@@ -575,7 +573,7 @@ func (c *UDPConn) onRefreshTimers(id int) {
 		var err error
 		for i := 0; i < maxRetryAttempts; i++ {
 			err = c.refreshPermissions()
-			if err != errTryAgain {
+			if !errors.Is(err, errTryAgain) {
 				break
 			}
 		}

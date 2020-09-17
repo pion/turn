@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/pion/stun"
@@ -70,7 +71,7 @@ func TestRequestedAddressFamily(t *testing.T) {
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				var handle RequestedAddressFamily
-				if err := handle.GetFrom(m); err != stun.ErrAttributeNotFound {
+				if err := handle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
 					t.Errorf("%v should be not found", err)
 				}
 				m.Add(stun.AttrRequestedAddressFamily, []byte{1, 2, 3})

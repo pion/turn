@@ -1,8 +1,8 @@
 package turn
 
-import (
+import ( //nolint:gci
 	"crypto/hmac"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec,gci
 	"encoding/base64"
 	"net"
 	"strconv"

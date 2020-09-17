@@ -2,6 +2,7 @@ package proto
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/pion/stun"
@@ -78,7 +79,7 @@ func TestData(t *testing.T) {
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				var handle Data
-				if err := handle.GetFrom(m); err != stun.ErrAttributeNotFound {
+				if err := handle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
 					t.Errorf("%v should be not found", err)
 				}
 			})
