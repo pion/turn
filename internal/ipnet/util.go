@@ -2,9 +2,11 @@
 package ipnet
 
 import (
-	"fmt"
+	"errors"
 	"net"
 )
+
+var errFailedToCastAddr = errors.New("failed to cast net.Addr to *net.UDPAddr or *net.TCPAddr")
 
 // AddrIPPort extracts the IP and Port from a net.Addr
 func AddrIPPort(a net.Addr) (net.IP, int, error) {
@@ -18,7 +20,7 @@ func AddrIPPort(a net.Addr) (net.IP, int, error) {
 		return aTCP.IP, aTCP.Port, nil
 	}
 
-	return nil, 0, fmt.Errorf("failed to cast net.Addr to *net.UDPAddr or *net.TCPAddr")
+	return nil, 0, errFailedToCastAddr
 }
 
 // AddrEqual asserts that two net.Addrs are equal

@@ -40,7 +40,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    a 437 (Allocation Mismatch) error.
 	if alloc := r.AllocationManager.GetAllocation(fiveTuple); alloc != nil {
 		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
-		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("relay already allocated for 5-TUPLE"), msg...)
+		return buildAndSendErr(r.Conn, r.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
 	}
 
 	// 3. The server checks if the request contains a REQUESTED-TRANSPORT
@@ -54,7 +54,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	} else if requestedTransport.Protocol != proto.ProtoUDP {
 		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeUnsupportedTransProto})
-		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("RequestedTransport must be UDP"), msg...)
+		return buildAndSendErr(r.Conn, r.SrcAddr, errRequestedTransportMustBeUDP, msg...)
 	}
 
 	// 4. The request may contain a DONT-FRAGMENT attribute.  If it does,
@@ -64,7 +64,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    comprehension-required attribute.
 	if m.Contains(stun.AttrDontFragment) {
 		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeUnknownAttribute}, &stun.UnknownAttributes{stun.AttrDontFragment})
-		return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("no support for DONT-FRAGMENT"), msg...)
+		return buildAndSendErr(r.Conn, r.SrcAddr, errNoDontFragmentSupport, msg...)
 	}
 
 	// 5.  The server checks if the request contains a RESERVATION-TOKEN
@@ -79,7 +79,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	if err = reservationTokenAttr.GetFrom(m); err == nil {
 		var evenPort proto.EvenPort
 		if err = evenPort.GetFrom(m); err == nil {
-			return buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("Request must not contain RESERVATION-TOKEN and EVEN-PORT"), badRequestMsg...)
+			return buildAndSendErr(r.Conn, r.SrcAddr, errRequestWithReservationTokenAndEvenPort, badRequestMsg...)
 		}
 	}
 
@@ -184,7 +184,7 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 		a := r.AllocationManager.GetAllocation(fiveTuple)
 
 		if a == nil {
-			return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+			return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 		}
 		a.Refresh(lifetimeDuration)
 	} else {
@@ -208,7 +208,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		Protocol: allocation.UDP,
 	})
 	if a == nil {
-		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
 
 	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodCreatePermission)
@@ -255,7 +255,7 @@ func handleSendIndication(r Request, m *stun.Message) error {
 		Protocol: allocation.UDP,
 	})
 	if a == nil {
-		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
 
 	dataAttr := proto.Data{}
@@ -270,12 +270,12 @@ func handleSendIndication(r Request, m *stun.Message) error {
 
 	msgDst := &net.UDPAddr{IP: peerAddress.IP, Port: peerAddress.Port}
 	if perm := a.GetPermission(msgDst); perm == nil {
-		return fmt.Errorf("unable to handle send-indication, no permission added: %v", msgDst)
+		return fmt.Errorf("%w: %v", errNoPermission, msgDst)
 	}
 
 	l, err := a.RelaySocket.WriteTo(dataAttr, msgDst)
 	if l != len(dataAttr) {
-		return fmt.Errorf("packet write smaller than packet %d != %d (expected) err: %v", l, len(dataAttr), err)
+		return fmt.Errorf("%w %d != %d (expected) err: %v", errShortWrite, l, len(dataAttr), err)
 	}
 	return err
 }
@@ -289,7 +289,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 		Protocol: allocation.UDP,
 	})
 	if a == nil {
-		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
 
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
@@ -333,19 +333,19 @@ func handleChannelData(r Request, c *proto.ChannelData) error {
 		Protocol: allocation.UDP,
 	})
 	if a == nil {
-		return fmt.Errorf("no allocation found for %v:%v", r.SrcAddr, r.Conn.LocalAddr())
+		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
 
 	channel := a.GetChannelByNumber(c.Number)
 	if channel == nil {
-		return fmt.Errorf("no channel bind found for %x", uint16(c.Number))
+		return fmt.Errorf("%w %x", errNoSuchChannelBind, uint16(c.Number))
 	}
 
 	l, err := a.RelaySocket.WriteTo(c.Data, channel.Peer)
 	if err != nil {
-		return fmt.Errorf("failed writing to socket: %s", err.Error())
+		return fmt.Errorf("%w: %s", errFailedWriteSocket, err.Error())
 	} else if l != len(c.Data) {
-		return fmt.Errorf("packet write smaller than packet %d != %d (expected)", l, len(c.Data))
+		return fmt.Errorf("%w %d != %d (expected)", errShortWrite, l, len(c.Data))
 	}
 
 	return nil

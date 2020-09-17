@@ -18,7 +18,7 @@ import (
 const (
 	defaultRTO        = 200 * time.Millisecond
 	maxRtxCount       = 7              // total 7 requests (Rc)
-	maxDataBufferSize = math.MaxUint16 //message size limit for Chromium
+	maxDataBufferSize = math.MaxUint16 // message size limit for Chromium
 )
 
 //              interval [msec]
@@ -78,7 +78,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	log := loggerFactory.NewLogger("turnc")
 
 	if config.Conn == nil {
-		return nil, fmt.Errorf("conn cannot not be nil")
+		return nil, errNilConn
 	}
 
 	if config.Net == nil {
@@ -163,7 +163,7 @@ func (c *Client) WriteTo(data []byte, to net.Addr) (int, error) {
 // to supply incoming data, instead.
 func (c *Client) Listen() error {
 	if err := c.listenTryLock.Lock(); err != nil {
-		return fmt.Errorf("already listening: %s", err.Error())
+		return fmt.Errorf("%w: %s", errAlreadyListening, err.Error())
 	}
 
 	go func() {
@@ -219,7 +219,6 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 		return nil, err
 	}
 
-	//return fmt.Sprintf("pkt_size=%d src_addr=%s refl_addr=%s:%d", size, addr, reflAddr.IP, reflAddr.Port), nil
 	return &net.UDPAddr{
 		IP:   reflAddr.IP,
 		Port: reflAddr.Port,
@@ -229,7 +228,7 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 // SendBindingRequest sends a new STUN request to the STUN server
 func (c *Client) SendBindingRequest() (net.Addr, error) {
 	if c.stunServ == nil {
-		return nil, fmt.Errorf("STUN server address is not set for the client")
+		return nil, errSTUNServerAddressNotSet
 	}
 	return c.SendBindingRequestTo(c.stunServ)
 }
@@ -237,13 +236,13 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 // Allocate sends a TURN allocation request to the given transport address
 func (c *Client) Allocate() (net.PacketConn, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
-		return nil, fmt.Errorf("only one Allocate() caller is allowed: %s", err.Error())
+		return nil, fmt.Errorf("%w: %s", errOneAllocateOnly, err.Error())
 	}
 	defer c.allocTryLock.Unlock()
 
 	relayedConn := c.relayedUDPConn()
 	if relayedConn != nil {
-		return nil, fmt.Errorf("already allocated at %s", relayedConn.LocalAddr().String())
+		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, relayedConn.LocalAddr().String())
 	}
 
 	msg, err := stun.Build(
@@ -299,9 +298,9 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return nil, fmt.Errorf("%s (error %s)", res.Type, code)
+			return nil, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
 		}
-		return nil, fmt.Errorf("%s", res.Type)
+		return nil, fmt.Errorf("%s", res.Type) //nolint:goerr113
 	}
 
 	// Getting relayed addresses from response.
@@ -411,7 +410,7 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 		return true, c.handleChannelData(data)
 	case len(c.stunServStr) != 0 && from.String() == c.stunServStr:
 		// received from STUN server but it is not a STUN message
-		return true, fmt.Errorf("non-STUN message from STUN server")
+		return true, errNonSTUNMessage
 	default:
 		// assume, this is an application data
 		c.log.Tracef("non-STUN/TURN packect, unhandled")
@@ -426,11 +425,11 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 
 	msg := &stun.Message{Raw: raw}
 	if err := msg.Decode(); err != nil {
-		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
+		return fmt.Errorf("%w: %s", errFailedToDecodeSTUN, err.Error())
 	}
 
 	if msg.Type.Class == stun.ClassRequest {
-		return fmt.Errorf("unexpected STUN request message: %s", msg.String())
+		return fmt.Errorf("%w : %s", errUnexpectedSTUNRequestMessage, msg.String())
 	}
 
 	if msg.Type.Class == stun.ClassIndication {
@@ -511,7 +510,7 @@ func (c *Client) handleChannelData(data []byte) error {
 
 	addr, ok := relayedConn.FindAddrByChannelNumber(uint16(chData.Number))
 	if !ok {
-		return fmt.Errorf("binding with channel %d not found", int(chData.Number))
+		return fmt.Errorf("%w: %d", errChannelBindNotFound, int(chData.Number))
 	}
 
 	c.log.Tracef("channel data received from %s (ch=%d)", addr.String(), int(chData.Number))
@@ -533,7 +532,7 @@ func (c *Client) onRtxTimeout(trKey string, nRtx int) {
 		// all retransmisstions failed
 		c.trMap.Delete(trKey)
 		if !tr.WriteResult(client.TransactionResult{
-			Err: fmt.Errorf("all retransmissions for %s failed", trKey),
+			Err: fmt.Errorf("%w %s", errAllRetransmissionsFailed, trKey),
 		}) {
 			c.log.Debug("no listener for transaction")
 		}
@@ -546,7 +545,7 @@ func (c *Client) onRtxTimeout(trKey string, nRtx int) {
 	if err != nil {
 		c.trMap.Delete(trKey)
 		if !tr.WriteResult(client.TransactionResult{
-			Err: fmt.Errorf("failed to retransmit transaction %s", trKey),
+			Err: fmt.Errorf("%w %s", errFailedToRetransmitTransaction, trKey),
 		}) {
 			c.log.Debug("no listener for transaction")
 		}

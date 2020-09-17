@@ -127,9 +127,9 @@ func (s *Server) Close() error {
 		return nil
 	}
 
-	err := fmt.Errorf("Server failed to close")
+	err := errFailedToClose
 	for _, e := range errors {
-		err = fmt.Errorf("%s; Close error (%v) ", err.Error(), e)
+		err = fmt.Errorf("%s; Close error (%v) ", err.Error(), e) //nolint:goerr113
 	}
 
 	return err

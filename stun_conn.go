@@ -10,8 +10,10 @@ import (
 	"github.com/pion/turn/v2/internal/proto"
 )
 
-var errInvalidTURNFrame = errors.New("data is not a valid TURN frame, no STUN or ChannelData found")
-var errIncompleteTURNFrame = errors.New("data contains incomplete STUN or TURN frame")
+var (
+	errInvalidTURNFrame    = errors.New("data is not a valid TURN frame, no STUN or ChannelData found")
+	errIncompleteTURNFrame = errors.New("data contains incomplete STUN or TURN frame")
+)
 
 // STUNConn wraps a net.Conn and implements
 // net.PacketConn by being STUN aware and
@@ -64,7 +66,7 @@ func consumeSingleTURNFrame(p []byte) (int, error) {
 func (s *STUNConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	// First pass any buffered data from previous reads
 	n, err = consumeSingleTURNFrame(s.buff)
-	if err == errInvalidTURNFrame {
+	if errors.Is(err, errInvalidTURNFrame) {
 		return 0, nil, err
 	} else if err == nil {
 		copy(p, s.buff[:n])

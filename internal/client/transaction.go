@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -101,13 +100,13 @@ func (t *Transaction) WriteResult(res TransactionResult) bool {
 func (t *Transaction) WaitForResult() TransactionResult {
 	if t.resultCh == nil {
 		return TransactionResult{
-			Err: fmt.Errorf("WaitForResult called on non-result transaction"),
+			Err: errWaitForResultOnNonResultTransaction,
 		}
 	}
 
 	result, ok := <-t.resultCh
 	if !ok {
-		result.Err = fmt.Errorf("transaction closed")
+		result.Err = errTransactionClosed
 	}
 	return result
 }
@@ -126,8 +125,6 @@ func (t *Transaction) Retries() int {
 
 	return t.nRtx
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 // TransactionMap is a thread-safe transaction map
 type TransactionMap struct {

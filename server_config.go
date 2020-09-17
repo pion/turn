@@ -1,8 +1,7 @@
 package turn
 
 import (
-	// #nosec
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec,gci
 	"fmt"
 	"net"
 	"strings"

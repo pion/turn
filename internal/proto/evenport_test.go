@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/pion/stun"
@@ -65,7 +66,7 @@ func TestEvenPort(t *testing.T) {
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				var handle EvenPort
-				if err := handle.GetFrom(m); err != stun.ErrAttributeNotFound {
+				if err := handle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
 					t.Errorf("%v should be not found", err)
 				}
 				m.Add(stun.AttrEvenPort, []byte{1, 2, 3})

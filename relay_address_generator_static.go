@@ -1,7 +1,6 @@
 package turn
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 
@@ -52,5 +51,5 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, request
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
 func (r *RelayAddressGeneratorStatic) AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error) {
-	return nil, nil, fmt.Errorf("TODO")
+	return nil, nil, errTODO
 }

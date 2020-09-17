@@ -1,8 +1,8 @@
 package proto
 
 import (
+	"errors"
 	"testing"
-
 	"time"
 
 	"github.com/pion/stun"
@@ -89,7 +89,7 @@ func TestLifetime(t *testing.T) {
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				nHandle := new(Lifetime)
-				if err := nHandle.GetFrom(m); err != stun.ErrAttributeNotFound {
+				if err := nHandle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
 					t.Errorf("%v should be not found", err)
 				}
 				m.Add(stun.AttrLifetime, []byte{1, 2, 3})
