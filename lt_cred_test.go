@@ -1,7 +1,14 @@
+// +build !js
+
 package turn
 
 import (
+	"net"
 	"testing"
+	"time"
+
+	"github.com/pion/logging"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLtCredMech(t *testing.T) {
@@ -15,12 +22,50 @@ func TestLtCredMech(t *testing.T) {
 	}
 }
 
-// export SECRET=foobar
-// secret=$SECRET && \
-// time=$(date +%s) && \
-// expiry=8400 && \
-// username=$(( $time + $expiry )) &&\
-// echo username:$username && \
-// echo password : $(echo -n $username | openssl dgst -binary -sha1 -hmac $secret | openssl base64)
-// username : 1599491771
-// password : M+WLqSVjDc7kfj2U8ZUmk+hTQl8=
+func TestNewLongTermAuthHandler(t *testing.T) {
+	const sharedSecret = "HELLO_WORLD"
+
+	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: NewLongTermAuthHandler(sharedSecret, nil),
+		PacketConnConfigs: []PacketConnConfig{
+			{
+				PacketConn: serverListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm:         "pion.ly",
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	assert.NoError(t, err)
+
+	username, password, err := GenerateLongTermCredentials(sharedSecret, time.Minute)
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		STUNServerAddr: "0.0.0.0:3478",
+		TURNServerAddr: "0.0.0.0:3478",
+		Conn:           conn,
+		Username:       username,
+		Password:       password,
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	relayConn, err := client.Allocate()
+	assert.NoError(t, err)
+
+	client.Close()
+	assert.NoError(t, relayConn.Close())
+	assert.NoError(t, conn.Close())
+	assert.NoError(t, server.Close())
+}
