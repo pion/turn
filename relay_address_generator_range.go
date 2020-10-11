@@ -1,14 +1,14 @@
 package turn
 
 import (
-	"errors"
 	"fmt"
-	"github.com/pion/transport/vnet"
 	"math/rand"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pion/transport/vnet"
 )
 
 // RelayAddressGeneratorPortRange can be used to only allocate connections inside a defined port range.
@@ -51,9 +51,9 @@ func (r *RelayAddressGeneratorPortRange) Validate() error {
 
 	switch {
 	case r.MinPort == 0:
-		return errors.New("MinPort must not be 0")
+		return errMinPortNotZero
 	case r.MaxPort == 0:
-		return errors.New("MaxPort must not be 0")
+		return errMaxPortNotZero
 	case r.RelayAddress == nil:
 		return errRelayAddressInvalid
 	case r.Address == "":
@@ -83,7 +83,6 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 
 	for try := 0; try < r.MaxRetries; try++ {
 		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, r.randPort()))
-
 		if err != nil {
 			if strings.Contains(err.Error(), "address already in use") {
 				continue
@@ -96,10 +95,10 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 		return conn, relayAddr, nil
 	}
 
-	return nil, nil, errors.New("max retries exceeded")
+	return nil, nil, errMaxRetriesExceeded
 }
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
 func (r *RelayAddressGeneratorPortRange) AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error) {
-	return nil, nil, fmt.Errorf("TODO")
+	return nil, nil, errTODO
 }
