@@ -2,12 +2,10 @@ package turn
 
 import (
 	"fmt"
-	"math/rand"
 	"net"
 	"strings"
-	"sync"
-	"time"
 
+	"github.com/pion/randutil"
 	"github.com/pion/transport/vnet"
 )
 
@@ -26,8 +24,7 @@ type RelayAddressGeneratorPortRange struct {
 	MaxRetries int
 
 	// Rand the random source of numbers
-	Rand      *rand.Rand
-	randMutex sync.Mutex
+	Rand randutil.MathRandomGenerator
 
 	// Address is passed to Listen/ListenPacket when creating the Relay
 	Address string
@@ -42,7 +39,7 @@ func (r *RelayAddressGeneratorPortRange) Validate() error {
 	}
 
 	if r.Rand == nil {
-		r.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+		r.Rand = randutil.NewMathRandomGenerator()
 	}
 
 	if r.MaxRetries == 0 {
@@ -63,12 +60,6 @@ func (r *RelayAddressGeneratorPortRange) Validate() error {
 	}
 }
 
-func (r *RelayAddressGeneratorPortRange) randPort() uint16 {
-	r.randMutex.Lock()
-	defer r.randMutex.Unlock()
-	return r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort)))
-}
-
 // AllocatePacketConn generates a new PacketConn to receive traffic on and the IP/Port to populate the allocation response with
 func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
 	if requestedPort != 0 {
@@ -82,7 +73,8 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 	}
 
 	for try := 0; try < r.MaxRetries; try++ {
-		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, r.randPort()))
+		port := r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort)))
+		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, port))
 		if err != nil {
 			if strings.Contains(err.Error(), "address already in use") {
 				continue
