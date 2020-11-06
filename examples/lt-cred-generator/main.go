@@ -28,6 +28,10 @@ func main() {
 	}
 
 	u, p, _ := turn.GenerateLongTermCredentials(*authSecret, time.Minute)
-	os.Stdout.WriteString(fmt.Sprintf("%s=%s", u, p)) // for use with xargs
-	os.Stderr.WriteString("\n")                       // ignored by xargs
+	if _, err := os.Stdout.WriteString(fmt.Sprintf("%s=%s", u, p)); err != nil { // for use with xargs
+		panic(err)
+	}
+	if _, err := os.Stderr.WriteString("\n"); err != nil { // ignored by xargs
+		panic(err)
+	}
 }

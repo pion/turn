@@ -11,7 +11,7 @@ import ( //nolint:gci
 	"github.com/pion/logging"
 )
 
-// GenerateCredentials can be used to create credentials valid for [duration] time
+// GenerateLongTermCredentials can be used to create credentials valid for [duration] time
 func GenerateLongTermCredentials(sharedSecret string, duration time.Duration) (string, string, error) {
 	t := time.Now().Add(duration).Unix()
 	username := strconv.FormatInt(t, 10)
@@ -29,7 +29,7 @@ func longTermCredentials(username string, sharedSecret string) (string, error) {
 	return base64.StdEncoding.EncodeToString(password), nil
 }
 
-// NewAuthHandler returns a turn.AuthAuthHandler used with Long Term (or Time Windowed) Credentials.
+// NewLongTermAuthHandler returns a turn.AuthAuthHandler used with Long Term (or Time Windowed) Credentials.
 // https://tools.ietf.org/search/rfc5389#section-10.2
 func NewLongTermAuthHandler(sharedSecret string, l logging.LeveledLogger) AuthHandler {
 	if l == nil {
