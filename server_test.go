@@ -72,6 +72,47 @@ func TestServer(t *testing.T) {
 
 		assert.NoError(t, server.Close())
 	})
+
+	t.Run("default inboundMTU", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		assert.NoError(t, err)
+		server, err := NewServer(ServerConfig{
+			LoggerFactory: loggerFactory,
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "0.0.0.0",
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, server.inboundMTU, defaultInboundMTU)
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("Set inboundMTU", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		assert.NoError(t, err)
+		server, err := NewServer(ServerConfig{
+			InboundMTU:    2000,
+			LoggerFactory: loggerFactory,
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "0.0.0.0",
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, server.inboundMTU, 2000)
+		assert.NoError(t, server.Close())
+	})
 }
 
 type VNet struct {
@@ -277,7 +318,7 @@ func TestServerVNet(t *testing.T) {
 		assert.NoError(t, err)
 
 		go func() {
-			buf := make([]byte, 1500)
+			buf := make([]byte, 1600)
 			for {
 				n, from, err2 := echoConn.ReadFrom(buf)
 				if err2 != nil {
@@ -294,7 +335,7 @@ func TestServerVNet(t *testing.T) {
 			}
 		}()
 
-		buf := make([]byte, 1500)
+		buf := make([]byte, 1600)
 
 		for i := 0; i < 10; i++ {
 			log.Debug("sending \"Hello\"..")

@@ -210,7 +210,7 @@ func (a *Allocation) Close() error {
 //  transport address of the received UDP datagram.  The Data indication
 //  is then sent on the 5-tuple associated with the allocation.
 
-const rtpMTU = 1500
+const rtpMTU = 1600
 
 func (a *Allocation) packetHandler(m *Manager) {
 	buffer := make([]byte, rtpMTU)

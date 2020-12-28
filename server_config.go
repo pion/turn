@@ -93,6 +93,9 @@ type ServerConfig struct {
 
 	// ChannelBindTimeout sets the lifetime of channel binding. Defaults to 10 minutes.
 	ChannelBindTimeout time.Duration
+
+	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
+	InboundMTU int
 }
 
 func (s *ServerConfig) validate() error {

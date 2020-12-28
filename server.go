@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	inboundMTU = 1500
+	defaultInboundMTU = 1600
 )
 
 // Server is an instance of the Pion TURN Server
@@ -27,6 +27,8 @@ type Server struct {
 
 	packetConnConfigs []PacketConnConfig
 	listenerConfigs   []ListenerConfig
+
+	inboundMTU int
 }
 
 // NewServer creates the Pion TURN server
@@ -40,6 +42,11 @@ func NewServer(config ServerConfig) (*Server, error) {
 		loggerFactory = logging.NewDefaultLoggerFactory()
 	}
 
+	mtu := defaultInboundMTU
+	if config.InboundMTU != 0 {
+		mtu = config.InboundMTU
+	}
+
 	s := &Server{
 		log:                loggerFactory.NewLogger("turn"),
 		authHandler:        config.AuthHandler,
@@ -48,6 +55,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 		packetConnConfigs:  config.PacketConnConfigs,
 		listenerConfigs:    config.ListenerConfigs,
 		nonces:             &sync.Map{},
+		inboundMTU:         mtu,
 	}
 
 	if s.channelBindTimeout == 0 {
@@ -136,12 +144,15 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manager) {
-	buf := make([]byte, inboundMTU)
+	buf := make([]byte, s.inboundMTU)
 	for {
 		n, addr, err := p.ReadFrom(buf)
-		if err != nil {
+		switch {
+		case err != nil:
 			s.log.Debugf("exit read loop on error: %s", err.Error())
 			return
+		case n >= s.inboundMTU:
+			s.log.Debugf("Read bytes exceeded MTU, packet is possibly truncated")
 		}
 
 		if err := server.HandleRequest(server.Request{

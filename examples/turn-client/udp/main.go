@@ -121,7 +121,7 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
 
 	// Start read-loop on pingerConn
 	go func() {
-		buf := make([]byte, 1500)
+		buf := make([]byte, 1600)
 		for {
 			n, from, pingerErr := pingerConn.ReadFrom(buf)
 			if pingerErr != nil {
@@ -138,7 +138,7 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
 
 	// Start read-loop on relayConn
 	go func() {
-		buf := make([]byte, 1500)
+		buf := make([]byte, 1600)
 		for {
 			n, from, readerErr := relayConn.ReadFrom(buf)
 			if readerErr != nil {
