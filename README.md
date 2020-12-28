@@ -89,6 +89,8 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Onwuka Gideon](https://github.com/dongido001)
 * [Herman Banken](https://github.com/hermanbanken)
 * [Jannis Mattheis](https://github.com/jmattheis)
+* [andre da palma](https://github.com/andrefsp)
+
 
 ### License
 MIT License - see [LICENSE.md](LICENSE.md) for full text
