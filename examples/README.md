@@ -34,6 +34,9 @@ This example is the most minimal invocation of a Pion TURN instance possible. It
 #### tcp
 This example demonstrates listening on TCP. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TCP and UDP.
 
+#### tls
+This example demonstrates listening on TLS. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TLS and UDP.
+
 #### lt-creds
 
 This example shows how to use long term credentials. You can issue passwords that automatically expire, and you don't have the store them.
