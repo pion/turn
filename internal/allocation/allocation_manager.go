@@ -168,19 +168,23 @@ func (m *Manager) GetReservation(reservationToken string) (int, bool) {
 
 // GetRandomEvenPort returns a random un-allocated udp4 port
 func (m *Manager) GetRandomEvenPort() (int, error) {
-	conn, addr, err := m.allocatePacketConn("udp4", 0)
-	if err != nil {
-		return 0, err
-	}
+	for i := 0; i < 128; i++ {
+		conn, addr, err := m.allocatePacketConn("udp4", 0)
+		if err != nil {
+			return 0, err
+		}
+		udpAddr, ok := addr.(*net.UDPAddr)
+		err = conn.Close()
+		if err != nil {
+			return 0, err
+		}
 
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		return 0, errFailedToCastUDPAddr
-	} else if err := conn.Close(); err != nil {
-		return 0, err
-	} else if udpAddr.Port%2 == 1 {
-		return m.GetRandomEvenPort()
+		if !ok {
+			return 0, errFailedToCastUDPAddr
+		}
+		if udpAddr.Port%2 == 0 {
+			return udpAddr.Port, nil
+		}
 	}
-
-	return udpAddr.Port, nil
+	return 0, errFailedToAllocateEvenPort
 }
