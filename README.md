@@ -90,6 +90,7 @@ Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing pe
 * [Herman Banken](https://github.com/hermanbanken)
 * [Jannis Mattheis](https://github.com/jmattheis)
 * [andre da palma](https://github.com/andrefsp)
+* [Juliusz Chroboczek](https://github.com/jech)
 
 
 ### License

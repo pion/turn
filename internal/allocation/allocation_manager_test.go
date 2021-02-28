@@ -26,6 +26,7 @@ func TestManager(t *testing.T) {
 		{"DeleteAllocation", subTestDeleteAllocation},
 		{"AllocationTimeout", subTestAllocationTimeout},
 		{"Close", subTestManagerClose},
+		{"GetRandomEvenPort", subTestGetRandomEvenPort},
 	}
 
 	network := "udp4"
@@ -190,4 +191,14 @@ func newTestManager() (*Manager, error) {
 func isClose(conn io.Closer) bool {
 	closeErr := conn.Close()
 	return closeErr != nil && strings.Contains(closeErr.Error(), "use of closed network connection")
+}
+
+func subTestGetRandomEvenPort(t *testing.T, turnSocket net.PacketConn) {
+	m, err := newTestManager()
+	assert.NoError(t, err)
+
+	port, err := m.GetRandomEvenPort()
+	assert.NoError(t, err)
+	assert.True(t, port > 0)
+	assert.True(t, port%2 == 0)
 }
