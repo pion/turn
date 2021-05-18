@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 	"github.com/pion/transport/test"
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/v2/internal/proto"
@@ -32,7 +33,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			AuthHandler: func(username, realm string, srcAddr net.Addr, _ *stun.Message) (key []byte, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
@@ -197,7 +198,7 @@ func buildVNet() (*VNet, error) {
 	}
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(username, realm string, srcAddr net.Addr, _ *stun.Message) (key []byte, ok bool) {
 			if pw, ok := credMap[username]; ok {
 				return pw, true
 			}

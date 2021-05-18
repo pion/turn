@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 	"github.com/pion/transport/vnet"
 	"github.com/stretchr/testify/assert"
 )
@@ -138,7 +139,7 @@ func TestClientNonceExpiration(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(username, realm string, srcAddr net.Addr, _ *stun.Message) (key []byte, ok bool) {
 			return GenerateAuthKey(username, realm, "pass"), true
 		},
 		PacketConnConfigs: []PacketConnConfig{

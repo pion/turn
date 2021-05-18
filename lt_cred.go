@@ -9,6 +9,7 @@ import ( //nolint:gci
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 )
 
 // GenerateLongTermCredentials can be used to create credentials valid for [duration] time
@@ -35,7 +36,7 @@ func NewLongTermAuthHandler(sharedSecret string, l logging.LeveledLogger) AuthHa
 	if l == nil {
 		l = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
-	return func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+	return func(username, realm string, srcAddr net.Addr, _ *stun.Message) (key []byte, ok bool) {
 		l.Tracef("Authentication username=%q realm=%q srcAddr=%v\n", username, realm, srcAddr)
 		t, err := strconv.Atoi(username)
 		if err != nil {

@@ -62,6 +62,7 @@ func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageTy
 }
 
 func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) (stun.MessageIntegrity, bool, error) {
+
 	respondWithNonce := func(responseCode stun.ErrorCode) (stun.MessageIntegrity, bool, error) {
 		nonce, err := buildNonce()
 		if err != nil {
@@ -107,7 +108,7 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	ourKey, ok := r.AuthHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr)
+	ourKey, ok := r.AuthHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr, m)
 	if !ok {
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()), badRequestMsg...)
 	}

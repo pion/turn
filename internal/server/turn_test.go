@@ -83,7 +83,7 @@ func TestAllocationLifeTime(t *testing.T) {
 			Conn:              l,
 			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 			Log:               logger,
-			AuthHandler: func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			AuthHandler: func(username string, realm string, srcAddr net.Addr, _ *stun.Message) (key []byte, ok bool) {
 				return staticKey, true
 			},
 		}

@@ -71,7 +71,7 @@ func main() {
 		// Set AuthHandler callback
 		// This is called everytime a user tries to authenticate with the TURN server
 		// Return the key for that user, or false when no user is found
-		AuthHandler: func(username string, realm string, srcAddr net.Addr) ([]byte, bool) {
+		AuthHandler: func(username string, realm string, srcAddr net.Addr, msg *stun.Message) ([]byte, bool) {
 			if key, ok := usersMap[username]; ok {
 				return key, true
 			}

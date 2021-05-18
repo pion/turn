@@ -25,7 +25,7 @@ type Request struct {
 	Nonces            *sync.Map
 
 	// User Configuration
-	AuthHandler        func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
+	AuthHandler        func(username string, realm string, srcAddr net.Addr, m *stun.Message) (key []byte, ok bool)
 	Log                logging.LeveledLogger
 	Realm              string
 	ChannelBindTimeout time.Duration

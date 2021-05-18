@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -65,7 +66,7 @@ func (c *ListenerConfig) validate() error {
 }
 
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
-type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok bool)
+type AuthHandler func(username, realm string, srcAddr net.Addr, m *stun.Message) (key []byte, ok bool)
 
 // GenerateAuthKey is a convince function to easily generate keys in the format used by AuthHandler
 func GenerateAuthKey(username, realm, password string) []byte {
