@@ -64,7 +64,7 @@ Pion has an active community on the [Golang Slack](https://pion.ly/slack). Sign 
 We are always looking to support **your projects**. Please reach out if you have something to build!
 
 ### Contributing
-Check out the [CONTRIBUTING.md](CONTRIBUTING.md) to join the group of amazing people making this project possible:
+Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contributing)** to join the group of amazing people making this project possible:
 
 * [Michiel De Backker](https://github.com/backkem) - *Documentation*
 * [Ingmar Wittkau](https://github.com/iwittkau) - *STUN client*
