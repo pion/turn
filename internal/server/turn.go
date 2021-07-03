@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"inet.af/netaddr"
 	"net"
 
 	"github.com/pion/stun"
@@ -307,6 +309,20 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 	peerAddr := proto.PeerAddress{}
 	if err = peerAddr.GetFrom(m); err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
+	}
+
+	for _, rangeItem := range r.DeniedPeerRange {
+		ip, err := netaddr.ParseIP(peerAddr.IP.String())
+		if err != nil {
+			parseError := errors.New("error during parsing peer ip")
+			r.Log.Debugf("%v, peer ip=%v", parseError, ip)
+			return buildAndSendErr(r.Conn, r.SrcAddr, parseError, badRequestMsg...)
+		}
+		if rangeItem.Contains(ip) {
+			peerIsDeniedError := errors.New("peer ip is denied in config")
+			r.Log.Debugf("%v, peer ip=%v", peerIsDeniedError, ip)
+			return buildAndSendErr(r.Conn, r.SrcAddr, peerIsDeniedError, badRequestMsg...)
+		}
 	}
 
 	r.Log.Debugf("binding channel %d to %s",

@@ -8,4 +8,5 @@ require (
 	github.com/pion/stun v0.3.5
 	github.com/pion/transport v0.12.3
 	github.com/stretchr/testify v1.7.0
+	inet.af/netaddr v0.0.0-20210702162549-23690f5b6f44 // indirect
 )

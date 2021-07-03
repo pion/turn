@@ -3,6 +3,7 @@ package turn
 import (
 	"crypto/md5" //nolint:gosec,gci
 	"fmt"
+	"inet.af/netaddr"
 	"net"
 	"strings"
 	"time"
@@ -96,6 +97,9 @@ type ServerConfig struct {
 
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
+
+	// Denied peer range in order to prevent XOR-PEER-ADDRESS attacks
+	DeniedPeerRange   []netaddr.IPRange
 }
 
 func (s *ServerConfig) validate() error {

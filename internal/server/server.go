@@ -3,6 +3,7 @@ package server
 
 import (
 	"fmt"
+	"inet.af/netaddr"
 	"net"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type Request struct {
 	Log                logging.LeveledLogger
 	Realm              string
 	ChannelBindTimeout time.Duration
+	DeniedPeerRange    []netaddr.IPRange
 }
 
 // HandleRequest processes the give Request

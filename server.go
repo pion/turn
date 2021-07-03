@@ -3,6 +3,7 @@ package turn
 
 import (
 	"fmt"
+	"inet.af/netaddr"
 	"net"
 	"sync"
 	"time"
@@ -29,6 +30,8 @@ type Server struct {
 	listenerConfigs   []ListenerConfig
 
 	inboundMTU int
+
+	deniedPeerRange   []netaddr.IPRange
 }
 
 // NewServer creates the Pion TURN server
@@ -56,6 +59,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 		listenerConfigs:    config.ListenerConfigs,
 		nonces:             &sync.Map{},
 		inboundMTU:         mtu,
+		deniedPeerRange:    config.DeniedPeerRange,
 	}
 
 	if s.channelBindTimeout == 0 {
@@ -165,6 +169,7 @@ func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manage
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,
 			Nonces:             s.nonces,
+			DeniedPeerRange: 	s.deniedPeerRange,
 		}); err != nil {
 			s.log.Errorf("error when handling datagram: %v", err)
 		}
