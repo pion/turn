@@ -4,6 +4,7 @@ package turn
 import (
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,57 +63,74 @@ func NewServer(config ServerConfig) (*Server, error) {
 		s.channelBindTimeout = proto.DefaultLifetime
 	}
 
-	for i := range s.packetConnConfigs {
-		go func(p PacketConnConfig) {
-			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-				AllocatePacketConn: p.RelayAddressGenerator.AllocatePacketConn,
-				AllocateConn:       p.RelayAddressGenerator.AllocateConn,
-				LeveledLogger:      s.log,
-			})
-			if err != nil {
-				s.log.Errorf("exit read loop on error: %s", err.Error())
-				return
-			}
-			defer func() {
-				if err := allocationManager.Close(); err != nil {
-					s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
-				}
-			}()
-
-			s.readLoop(p.PacketConn, allocationManager)
-		}(s.packetConnConfigs[i])
+	for _, p := range s.packetConnConfigs {
+		go s.startPacketConn(p)
 	}
-
 	for _, listener := range s.listenerConfigs {
-		go func(l ListenerConfig) {
-			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-				AllocatePacketConn: l.RelayAddressGenerator.AllocatePacketConn,
-				AllocateConn:       l.RelayAddressGenerator.AllocateConn,
-				LeveledLogger:      s.log,
-			})
-			if err != nil {
-				s.log.Errorf("exit read loop on error: %s", err.Error())
-				return
-			}
-			defer func() {
-				if err := allocationManager.Close(); err != nil {
-					s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
-				}
-			}()
-
-			for {
-				conn, err := l.Listener.Accept()
-				if err != nil {
-					s.log.Debugf("exit accept loop on error: %s", err.Error())
-					return
-				}
-
-				go s.readLoop(NewSTUNConn(conn), allocationManager)
-			}
-		}(listener)
+		go s.startListener(listener)
 	}
 
 	return s, nil
+}
+
+func (s *Server) startPacketConn(p PacketConnConfig) {
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: p.RelayAddressGenerator.AllocatePacketConn,
+		AllocateConn:       p.RelayAddressGenerator.AllocateConn,
+		LeveledLogger:      s.log,
+	})
+	if err != nil {
+		s.log.Errorf("exit read loop on error: %s", err.Error())
+		return
+	}
+	defer func() {
+		if err := allocationManager.Close(); err != nil {
+			s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
+		}
+	}()
+
+	s.readLoop(p.PacketConn, allocationManager)
+}
+
+func (s *Server) startListener(l ListenerConfig) {
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: l.RelayAddressGenerator.AllocatePacketConn,
+		AllocateConn:       l.RelayAddressGenerator.AllocateConn,
+		LeveledLogger:      s.log,
+	})
+	if err != nil {
+		s.log.Errorf("exit read loop on error: %s", err.Error())
+		return
+	}
+	defer func() {
+		if err := allocationManager.Close(); err != nil {
+			s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
+		}
+	}()
+
+	for {
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			s.log.Debugf("exit accept loop on error: %s", err.Error())
+			return
+		}
+
+		go func() {
+			// We don't include this in readLoop because it's used by
+			// packetConConfigs above as well and we don't want to
+			// change the behavior of that.
+			defer func() {
+				err := conn.Close()
+				// Sadly, net.ErrNetClosed is very recent so we have to look for
+				// the string instead.
+				if err != nil && !strings.Contains(err.Error(), "closed network connection") {
+					s.log.Debugf("could not close accepted connection: %v", err.Error())
+				}
+			}()
+
+			s.readLoop(NewSTUNConn(conn), allocationManager)
+		}()
+	}
 }
 
 // Close stops the TURN Server. It cleans up any associated state and closes all connections it is managing
