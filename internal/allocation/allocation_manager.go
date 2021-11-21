@@ -59,6 +59,13 @@ func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	return m.allocations[fiveTuple.Fingerprint()]
 }
 
+// AllocationCount returns the number of existing allocations
+func (m *Manager) AllocationCount() int {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return len(m.allocations)
+}
+
 // Close closes the manager and closes all allocations it manages
 func (m *Manager) Close() error {
 	m.lock.Lock()

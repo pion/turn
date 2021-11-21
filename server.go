@@ -25,8 +25,9 @@ type Server struct {
 	channelBindTimeout time.Duration
 	nonces             *sync.Map
 
-	packetConnConfigs []PacketConnConfig
-	listenerConfigs   []ListenerConfig
+	packetConnConfigs  []PacketConnConfig
+	listenerConfigs    []ListenerConfig
+	allocationManagers []*allocation.Manager
 
 	inboundMTU int
 }
@@ -54,6 +55,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 		channelBindTimeout: config.ChannelBindTimeout,
 		packetConnConfigs:  config.PacketConnConfigs,
 		listenerConfigs:    config.ListenerConfigs,
+		allocationManagers: make([]*allocation.Manager, len(config.PacketConnConfigs)+len(config.ListenerConfigs)),
 		nonces:             &sync.Map{},
 		inboundMTU:         mtu,
 	}
@@ -63,7 +65,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	}
 
 	for i := range s.packetConnConfigs {
-		go func(p PacketConnConfig) {
+		go func(i int, p PacketConnConfig) {
 			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 				AllocatePacketConn: p.RelayAddressGenerator.AllocatePacketConn,
 				AllocateConn:       p.RelayAddressGenerator.AllocateConn,
@@ -73,6 +75,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 				s.log.Errorf("exit read loop on error: %s", err.Error())
 				return
 			}
+			s.allocationManagers[i] = allocationManager
 			defer func() {
 				if err := allocationManager.Close(); err != nil {
 					s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
@@ -80,11 +83,11 @@ func NewServer(config ServerConfig) (*Server, error) {
 			}()
 
 			s.readLoop(p.PacketConn, allocationManager)
-		}(s.packetConnConfigs[i])
+		}(i, s.packetConnConfigs[i])
 	}
 
-	for _, listener := range s.listenerConfigs {
-		go func(l ListenerConfig) {
+	for i, listener := range s.listenerConfigs {
+		go func(i int, l ListenerConfig) {
 			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 				AllocatePacketConn: l.RelayAddressGenerator.AllocatePacketConn,
 				AllocateConn:       l.RelayAddressGenerator.AllocateConn,
@@ -94,6 +97,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 				s.log.Errorf("exit read loop on error: %s", err.Error())
 				return
 			}
+			s.allocationManagers[i] = allocationManager
 			defer func() {
 				if err := allocationManager.Close(); err != nil {
 					s.log.Errorf("Failed to close AllocationManager: %s", err.Error())
@@ -109,10 +113,21 @@ func NewServer(config ServerConfig) (*Server, error) {
 
 				go s.readLoop(NewSTUNConn(conn), allocationManager)
 			}
-		}(listener)
+		}(i+len(s.packetConnConfigs), listener)
 	}
 
 	return s, nil
+}
+
+// AllocationCount returns the number of active allocations. It can be used to drain the server before closing
+func (s *Server) AllocationCount() int {
+	allocations := 0
+	for _, manager := range s.allocationManagers {
+		if manager != nil {
+			allocations += manager.AllocationCount()
+		}
+	}
+	return allocations
 }
 
 // Close stops the TURN Server. It cleans up any associated state and closes all connections it is managing

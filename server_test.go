@@ -317,6 +317,9 @@ func TestServerVNet(t *testing.T) {
 		echoConn, err := v.net1.ListenPacket("udp4", "1.2.3.5:5678")
 		assert.NoError(t, err)
 
+		// ensure allocation is counted
+		assert.Equal(t, 1, v.server.AllocationCount())
+
 		go func() {
 			buf := make([]byte, 1600)
 			for {
