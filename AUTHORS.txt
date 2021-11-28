@@ -8,6 +8,7 @@ Aleksandr Razumov <ar@gortc.io>
 andrefsp <andrefsp@gmail.com>
 Atsushi Watanabe <atsushi.w@ieee.org>
 backkem <mail@backkem.me>
+David Colburn <xero73@gmail.com>
 Herman Banken <hermanbanken@gmail.com>
 Hugo Arregui <hugo.arregui@gmail.com>
 Igor German <igor.german@synesis.ru>
