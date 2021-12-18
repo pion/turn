@@ -377,7 +377,8 @@ func TestConsumeSingleTURNFrame(t *testing.T) {
 		"stun message":                          {data: []byte{0x0, 0x16, 0x00, 0x02, 0x21, 0x12, 0xA4, 0x42, 0xf7, 0x43, 0x81, 0xa3, 0xc9, 0xcd, 0x88, 0x89, 0x70, 0x58, 0xac, 0x73, 0x0, 0x0}},
 	}
 
-	for name, c := range cases {
+	for name, cs := range cases {
+		c := cs
 		t.Run(name, func(t *testing.T) {
 			n, e := consumeSingleTURNFrame(c.data)
 			assert.Equal(t, c.err, e)
