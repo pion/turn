@@ -185,7 +185,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 
 		if perm.state() == permStateIdle {
 			// punch a hole! (this would block a bit..)
-			if err = c.createPermissions(addr); err != nil {
+			if err = c.CreatePermissions(addr); err != nil {
 				c.permMap.delete(addr)
 				return err
 			}
@@ -359,7 +359,9 @@ func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
 	return peerAddr
 }
 
-func (c *UDPConn) createPermissions(addrs ...net.Addr) error {
+// CreatePermissions Issues a CreatePermission request for the supplied addresses
+// as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
+func (c *UDPConn) CreatePermissions(addrs ...net.Addr) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
@@ -496,7 +498,7 @@ func (c *UDPConn) refreshPermissions() error {
 		c.log.Debug("no permission to refresh")
 		return nil
 	}
-	if err := c.createPermissions(addrs...); err != nil {
+	if err := c.CreatePermissions(addrs...); err != nil {
 		if errors.Is(err, errTryAgain) {
 			return errTryAgain
 		}
