@@ -333,6 +333,12 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	return relayedConn, nil
 }
 
+// CreatePermission Issues a CreatePermission request for the supplied addresses
+// as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
+func (c *Client) CreatePermission(addrs ...net.Addr) error {
+	return c.relayedUDPConn().CreatePermissions(addrs...)
+}
+
 // PerformTransaction performs STUN transaction
 func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult,
 	error) {
