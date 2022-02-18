@@ -176,13 +176,15 @@ func (a *Allocation) Refresh(lifetime time.Duration) {
 	}
 }
 
+// SetReponseCache cache allocation response for retransmit allocation request
 func (a *Allocation) SetResponseCache(transactionID [stun.TransactionIDSize]byte, attrs []stun.Setter) {
-	a.responseCache.CompareAndSwap(nil, &allocationResponse{
+	a.responseCache.Store(&allocationResponse{
 		transactionID: transactionID,
 		responseAttrs: attrs,
 	})
 }
 
+// GetResponseCache return response cache for retransmit allocation request
 func (a *Allocation) GetResponseCache() (id [stun.TransactionIDSize]byte, attrs []stun.Setter) {
 	if r := a.responseCache.Load(); r != nil {
 		res := r.(*allocationResponse)
