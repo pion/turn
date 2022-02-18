@@ -41,7 +41,6 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	if alloc := r.AllocationManager.GetAllocation(fiveTuple); alloc != nil {
 		id, attrs := alloc.GetResponseCache()
 		if id != m.TransactionID {
-			r.Log.Errorf("retry allocation with different id, prev %v, retry %v", id, m.TransactionID)
 			msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
 			return buildAndSendErr(r.Conn, r.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
 		}
