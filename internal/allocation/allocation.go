@@ -176,7 +176,7 @@ func (a *Allocation) Refresh(lifetime time.Duration) {
 	}
 }
 
-// SetReponseCache cache allocation response for retransmit allocation request
+// SetResponseCache cache allocation response for retransmit allocation request
 func (a *Allocation) SetResponseCache(transactionID [stun.TransactionIDSize]byte, attrs []stun.Setter) {
 	a.responseCache.Store(&allocationResponse{
 		transactionID: transactionID,
