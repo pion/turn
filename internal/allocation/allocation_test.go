@@ -1,3 +1,4 @@
+//go:build !js
 // +build !js
 
 package allocation
@@ -30,6 +31,7 @@ func TestAllocation(t *testing.T) {
 		{"Refresh", subTestAllocationRefresh},
 		{"Close", subTestAllocationClose},
 		{"packetHandler", subTestPacketHandler},
+		{"ResponseCache", subTestResponseCache},
 	}
 
 	for _, tc := range tt {
@@ -310,4 +312,19 @@ func subTestPacketHandler(t *testing.T) {
 	_ = clientListener.Close()
 	_ = peerListener1.Close()
 	_ = peerListener2.Close()
+}
+
+func subTestResponseCache(t *testing.T) {
+	a := NewAllocation(nil, nil, nil)
+	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
+	responseAttrs := []stun.Setter{
+		&proto.Lifetime{
+			Duration: proto.DefaultLifetime,
+		},
+	}
+	a.SetResponseCache(transactionID, responseAttrs)
+
+	cacheID, cacheAttr := a.GetResponseCache()
+	assert.Equal(t, transactionID, cacheID)
+	assert.Equal(t, responseAttrs, cacheAttr)
 }
