@@ -39,8 +39,15 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    existing allocation.  If yes, the server rejects the request with
 	//    a 437 (Allocation Mismatch) error.
 	if alloc := r.AllocationManager.GetAllocation(fiveTuple); alloc != nil {
-		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
-		return buildAndSendErr(r.Conn, r.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
+		id, attrs := alloc.GetResponseCache()
+		if id != m.TransactionID {
+			r.Log.Errorf("retry allocation with different id, prev %v, retry %v", id, m.TransactionID)
+			msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
+			return buildAndSendErr(r.Conn, r.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
+		}
+		// a retry allocation
+		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(attrs, messageIntegrity)...)
+		return buildAndSend(r.Conn, r.SrcAddr, msg...)
 	}
 
 	// 3. The server checks if the request contains a REQUESTED-TRANSPORT
@@ -162,6 +169,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	}
 
 	msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(responseAttrs, messageIntegrity)...)
+	a.SetResponseCache(m.TransactionID, responseAttrs)
 	return buildAndSend(r.Conn, r.SrcAddr, msg...)
 }
 
