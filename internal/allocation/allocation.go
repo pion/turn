@@ -4,6 +4,7 @@ package allocation
 import (
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/logging"
@@ -11,6 +12,11 @@ import (
 	"github.com/pion/turn/v2/internal/ipnet"
 	"github.com/pion/turn/v2/internal/proto"
 )
+
+type allocationResponse struct {
+	transactionID [stun.TransactionIDSize]byte
+	responseAttrs []stun.Setter
+}
 
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
@@ -27,6 +33,12 @@ type Allocation struct {
 	lifetimeTimer       *time.Timer
 	closed              chan interface{}
 	log                 logging.LeveledLogger
+
+	// some clients (firefox or others using resiprocate's nICE lib) may retry allocation
+	// with same 5 tuple when received 413, for compatible with these clients,
+	// cache for response lost and client retry to implement 'stateless stack approach'
+	// https://datatracker.ietf.org/doc/html/rfc5766#section-6.2
+	responseCache atomic.Value // *allocationResponse
 }
 
 func addr2IPFingerprint(addr net.Addr) string {
@@ -162,6 +174,21 @@ func (a *Allocation) Refresh(lifetime time.Duration) {
 	if !a.lifetimeTimer.Reset(lifetime) {
 		a.log.Errorf("Failed to reset allocation timer for %v", a.fiveTuple)
 	}
+}
+
+func (a *Allocation) SetResponseCache(transactionID [stun.TransactionIDSize]byte, attrs []stun.Setter) {
+	a.responseCache.CompareAndSwap(nil, &allocationResponse{
+		transactionID: transactionID,
+		responseAttrs: attrs,
+	})
+}
+
+func (a *Allocation) GetResponseCache() (id [stun.TransactionIDSize]byte, attrs []stun.Setter) {
+	if r := a.responseCache.Load(); r != nil {
+		res := r.(*allocationResponse)
+		id, attrs = res.transactionID, res.responseAttrs
+	}
+	return
 }
 
 // Close closes the allocation

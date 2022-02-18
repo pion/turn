@@ -29,6 +29,7 @@ Sean DuBois <seaduboi@amazon.com>
 Sean DuBois <sean@pion.ly>
 Sean DuBois <sean@siobud.com>
 songjiayang <songjiayang@jd.com>
+ted <ted@skydio.com>
 Tom Clift <tom@clift.id.au>
 Yusuke Nakamura <yusuke1994525@gmail.com>
 Yutaka Takeda <yt0916@gmail.com>
