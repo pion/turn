@@ -10,6 +10,7 @@ Atsushi Watanabe <atsushi.w@ieee.org>
 backkem <mail@backkem.me>
 cnderrauber <zengjie9004@gmail.com>
 David Colburn <xero73@gmail.com>
+David Zhao <david@davidzhao.com>
 Herman Banken <hermanbanken@gmail.com>
 Hugo Arregui <hugo.arregui@gmail.com>
 Igor German <igor.german@synesis.ru>

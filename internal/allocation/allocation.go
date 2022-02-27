@@ -13,6 +13,10 @@ import (
 	"github.com/pion/turn/v2/internal/proto"
 )
 
+const (
+	allocationDeadline = 30 * time.Second
+)
+
 type allocationResponse struct {
 	transactionID [stun.TransactionIDSize]byte
 	responseAttrs []stun.Setter
@@ -245,6 +249,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 	buffer := make([]byte, rtpMTU)
 
 	for {
+		_ = a.RelaySocket.SetReadDeadline(time.Now().Add(allocationDeadline))
 		n, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
 		if err != nil {
 			m.DeleteAllocation(a.fiveTuple)
