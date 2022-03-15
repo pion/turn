@@ -7,5 +7,5 @@ require (
 	github.com/pion/randutil v0.1.0
 	github.com/pion/stun v0.3.5
 	github.com/pion/transport v0.13.0
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 )
