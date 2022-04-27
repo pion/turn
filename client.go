@@ -341,7 +341,8 @@ func (c *Client) CreatePermission(addrs ...net.Addr) error {
 
 // PerformTransaction performs STUN transaction
 func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult,
-	error) {
+	error,
+) {
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
 
 	raw := make([]byte, len(msg.Raw))

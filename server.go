@@ -152,7 +152,7 @@ func (s *Server) Close() error {
 
 	err := errFailedToClose
 	for _, e := range errors {
-		err = fmt.Errorf("%s; Close error (%v) ", err.Error(), e) //nolint:goerr113
+		err = fmt.Errorf("%s; Close error (%w) ", err.Error(), e)
 	}
 
 	return err

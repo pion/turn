@@ -43,7 +43,11 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, request
 	}
 
 	// Replace actual listening IP with the user requested one of RelayAddressGeneratorStatic
-	relayAddr := conn.LocalAddr().(*net.UDPAddr)
+	relayAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return nil, nil, errNilConn
+	}
+
 	relayAddr.IP = r.RelayAddress
 
 	return conn, relayAddr, nil

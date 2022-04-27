@@ -66,7 +66,11 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 		if err != nil {
 			return nil, nil, err
 		}
-		relayAddr := conn.LocalAddr().(*net.UDPAddr)
+		relayAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+		if !ok {
+			return nil, nil, errNilConn
+		}
+
 		relayAddr.IP = r.RelayAddress
 		return conn, relayAddr, nil
 	}
@@ -78,7 +82,11 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 			continue
 		}
 
-		relayAddr := conn.LocalAddr().(*net.UDPAddr)
+		relayAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+		if !ok {
+			return nil, nil, errNilConn
+		}
+
 		relayAddr.IP = r.RelayAddress
 		return conn, relayAddr, nil
 	}

@@ -281,7 +281,8 @@ func TestServerVNet(t *testing.T) {
 		reflAddr, err := client.SendBindingRequest()
 		assert.NoError(t, err)
 		log.Debugf("mapped-address: %v", reflAddr.String())
-		udpAddr := reflAddr.(*net.UDPAddr)
+		udpAddr, ok := reflAddr.(*net.UDPAddr)
+		assert.True(t, ok)
 
 		// The mapped-address should have IP address that was assigned
 		// to the LAN router.
