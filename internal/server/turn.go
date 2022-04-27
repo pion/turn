@@ -97,7 +97,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    error.
 	var evenPort proto.EvenPort
 	if err = evenPort.GetFrom(m); err == nil {
-		randomPort := 0
+		var randomPort int
 		randomPort, err = r.AllocationManager.GetRandomEvenPort()
 		if err != nil {
 			return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficentCapacityMsg...)

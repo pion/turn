@@ -186,8 +186,7 @@ func (a *Allocation) SetResponseCache(transactionID [stun.TransactionIDSize]byte
 
 // GetResponseCache return response cache for retransmit allocation request
 func (a *Allocation) GetResponseCache() (id [stun.TransactionIDSize]byte, attrs []stun.Setter) {
-	if r := a.responseCache.Load(); r != nil {
-		res := r.(*allocationResponse)
+	if res, ok := a.responseCache.Load().(*allocationResponse); ok && res != nil {
 		id, attrs = res.transactionID, res.responseAttrs
 	}
 	return
@@ -267,13 +266,19 @@ func (a *Allocation) packetHandler(m *Manager) {
 				a.log.Errorf("Failed to send ChannelData from allocation %v %v", srcAddr, err)
 			}
 		} else if p := a.GetPermission(srcAddr); p != nil {
-			udpAddr := srcAddr.(*net.UDPAddr)
+			udpAddr, ok := srcAddr.(*net.UDPAddr)
+			if !ok {
+				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
+				return
+			}
+
 			peerAddressAttr := proto.PeerAddress{IP: udpAddr.IP, Port: udpAddr.Port}
 			dataAttr := proto.Data(buffer[:n])
 
 			msg, err := stun.Build(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication), peerAddressAttr, dataAttr)
 			if err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
+				return
 			}
 			a.log.Debugf("relaying message from %s to client at %s",
 				srcAddr.String(),
