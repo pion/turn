@@ -90,9 +90,9 @@ func TestUDPConn(t *testing.T) {
 		}
 
 		pm := newPermissionMap()
-		pm.insert(addr, &permission{
+		assert.True(t, pm.insert(addr, &permission{
 			st: permStatePermitted,
-		})
+		}))
 
 		bm := newBindingManager()
 		binding := bm.create(addr)
