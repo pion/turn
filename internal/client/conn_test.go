@@ -73,4 +73,40 @@ func TestUDPConn(t *testing.T) {
 		assert.Equal(t, 0, len(bm.chanMap), "should be 0")
 		assert.Equal(t, 0, len(bm.addrMap), "should be 0")
 	})
+
+	t.Run("WriteTo()", func(t *testing.T) {
+		obs := &dummyUDPConnObserver{
+			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+				return TransactionResult{}, errFake
+			},
+			_writeTo: func(data []byte, to net.Addr) (int, error) {
+				return len(data), nil
+			},
+		}
+
+		addr := &net.UDPAddr{
+			IP:   net.ParseIP("127.0.0.1"),
+			Port: 1234,
+		}
+
+		pm := newPermissionMap()
+		pm.insert(addr, &permission{
+			st: permStatePermitted,
+		})
+
+		bm := newBindingManager()
+		binding := bm.create(addr)
+		binding.setState(bindingStateReady)
+
+		conn := UDPConn{
+			obs:        obs,
+			permMap:    pm,
+			bindingMgr: bm,
+		}
+
+		buf := []byte("Hello")
+		n, err := conn.WriteTo(buf, addr)
+		assert.NoError(t, err, "should fail")
+		assert.Equal(t, len(buf), n)
+	})
 }

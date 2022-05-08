@@ -277,7 +277,11 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 	}()
 
 	// send via ChannelData
-	return c.sendChannelData(p, b.number)
+	_, err = c.sendChannelData(p, b.number)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // Close closes the connection.
@@ -551,7 +555,11 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 		Number: proto.ChannelNumber(chNum),
 	}
 	chData.Encode()
-	return c.obs.WriteTo(chData.Raw, c.obs.TURNServerAddr())
+	_, err := c.obs.WriteTo(chData.Raw, c.obs.TURNServerAddr())
+	if err != nil {
+		return 0, err
+	}
+	return len(data), nil
 }
 
 func (c *UDPConn) onRefreshTimers(id int) {
