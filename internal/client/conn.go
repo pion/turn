@@ -153,6 +153,21 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 }
 
+func (c *UDPConn) createPermission(perm *permission, addr net.Addr) error {
+	perm.mutex.Lock()
+	defer perm.mutex.Unlock()
+
+	if perm.state() == permStateIdle {
+		// punch a hole! (this would block a bit..)
+		if err := c.CreatePermissions(addr); err != nil {
+			c.permMap.delete(addr)
+			return err
+		}
+		perm.setState(permStatePermitted)
+	}
+	return nil
+}
+
 // WriteTo writes a packet with payload p to addr.
 // WriteTo can be made to time out and return
 // an Error with Timeout() == true after a fixed time limit;
@@ -172,30 +187,15 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 		c.permMap.insert(addr, perm)
 	}
 
-	// This func-block would block, per destination IP (, or perm), until
-	// the perm state becomes "requested". Purpose of this is to guarantee
-	// the order of packets (within the same perm).
-	// Note that CreatePermission transaction may not be complete before
-	// all the data transmission. This is done assuming that the request
-	// will be mostly likely successful and we can tolerate some loss of
-	// UDP packet (or reorder), inorder to minimize the latency in most cases.
-	createPermission := func() error {
-		perm.mutex.Lock()
-		defer perm.mutex.Unlock()
-
-		if perm.state() == permStateIdle {
-			// punch a hole! (this would block a bit..)
-			if err = c.CreatePermissions(addr); err != nil {
-				c.permMap.delete(addr)
-				return err
-			}
-			perm.setState(permStatePermitted)
-		}
-		return nil
-	}
-
 	for i := 0; i < maxRetryAttempts; i++ {
-		if err = createPermission(); !errors.Is(err, errTryAgain) {
+		// c.createPermission() would block, per destination IP (, or perm),
+		// until the perm state becomes "requested". Purpose of this is to
+		// guarantee the order of packets (within the same perm).
+		// Note that CreatePermission transaction may not be complete before
+		// all the data transmission. This is done assuming that the request
+		// will be most likely successful and we can tolerate some loss of
+		// UDP packet (or reorder), inorder to minimize the latency in most cases.
+		if err = c.createPermission(perm, addr); !errors.Is(err, errTryAgain) {
 			break
 		}
 	}
