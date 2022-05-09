@@ -36,7 +36,7 @@ func NewLongTermAuthHandler(sharedSecret string, l logging.LeveledLogger) AuthHa
 		l = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
 	return func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
-		l.Tracef("Authentication username=%q realm=%q srcAddr=%v\n", username, realm, srcAddr)
+		l.Tracef("Authentication username=%q realm=%q srcAddr=%v", username, realm, srcAddr)
 		t, err := strconv.Atoi(username)
 		if err != nil {
 			l.Errorf("Invalid time-windowed username %q", username)
