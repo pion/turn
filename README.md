@@ -13,8 +13,7 @@
   <a href="https://travis-ci.org/pion/turn"><img src="https://travis-ci.org/pion/turn.svg?branch=master" alt="Build Status"></a>
   <a href="https://pkg.go.dev/github.com/pion/turn/v2"><img src="https://godoc.org/github.com/pion/turn?status.svg" alt="GoDoc"></a>
   <a href="https://codecov.io/gh/pion/turn"><img src="https://codecov.io/gh/pion/turn/branch/master/graph/badge.svg" alt="Coverage Status"></a>
-  <a href="https://goreportcard.com/report/github.com/pion/turn"><img src="https://goreportcard.com/badge/github.com/pion/turn" alt="Go Report Card"></a>
-  <a href="https://www.codacy.com/app/pion/turn"><img src="https://api.codacy.com/project/badge/Grade/d53ec6c70576476cb16c140c2964afde" alt="Codacy Badge"></a>
+  <a href="https://goreportcard.com/report/github.com/pion/turn/v2"><img src="https://goreportcard.com/badge/github.com/pion/turn/v2" alt="Go Report Card"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 <br>
