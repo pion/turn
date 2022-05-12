@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/pion/stun"
-	"github.com/pion/turn/v2/internal/ipnet"
+	"github.com/kannonski/turn/v2/internal/ipnet"
 )
 
 func handleBindingRequest(r Request, m *stun.Message) error {

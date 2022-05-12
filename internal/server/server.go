@@ -9,8 +9,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
-	"github.com/pion/turn/v2/internal/allocation"
-	"github.com/pion/turn/v2/internal/proto"
+	"github.com/kannonski/turn/v2/internal/allocation"
+	"github.com/kannonski/turn/v2/internal/proto"
 )
 
 // Request contains all the state needed to process a single incoming datagram
