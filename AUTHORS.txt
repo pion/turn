@@ -25,6 +25,7 @@ Mészáros Mihály <bakfitty@gmail.com>
 nindolabs <6729798+nindolabs@users.noreply.github.com>
 Onwuka Gideon <dongidomed@gmail.com>
 Robert Eperjesi <eperjesi@uber.com>
+Sean DuBois <duboisea@twitch.tv>
 Sean DuBois <seaduboi@amazon.com>
 Sean DuBois <sean@pion.ly>
 Sean DuBois <sean@siobud.com>
