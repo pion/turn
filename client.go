@@ -43,6 +43,7 @@ type ClientConfig struct {
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
 	LoggerFactory  logging.LoggerFactory
 	Net            *vnet.Net
+	IPv6           bool
 }
 
 // Client is a STUN server client
@@ -88,11 +89,18 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 
 	var stunServ, turnServ net.Addr
-	var stunServStr, turnServStr string
+	var stunServStr, turnServStr, network string
 	var err error
+
+	if config.IPv6 {
+		network = "udp6"
+	} else {
+		network = "udp4"
+	}
+
 	if len(config.STUNServerAddr) > 0 {
 		log.Debugf("resolving %s", config.STUNServerAddr)
-		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
+		stunServ, err = config.Net.ResolveUDPAddr(network, config.STUNServerAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -101,7 +109,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 	if len(config.TURNServerAddr) > 0 {
 		log.Debugf("resolving %s", config.TURNServerAddr)
-		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
+		turnServ, err = config.Net.ResolveUDPAddr(network, config.TURNServerAddr)
 		if err != nil {
 			return nil, err
 		}
