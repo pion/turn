@@ -67,7 +67,7 @@ func (c *ListenerConfig) validate() error {
 // AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
 type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok bool)
 
-// GenerateAuthKey is a convince function to easily generate keys in the format used by AuthHandler
+// GenerateAuthKey is a convenience function to easily generate keys in the format used by AuthHandler
 func GenerateAuthKey(username, realm, password string) []byte {
 	// #nosec
 	h := md5.New()
