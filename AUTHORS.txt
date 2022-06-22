@@ -6,6 +6,7 @@
 Aaron France <aaron.l.france@gmail.com>
 Aleksandr Razumov <ar@gortc.io>
 andrefsp <andrefsp@gmail.com>
+Antonio Sorrentino <ansorrenltd@gmail.com>
 Atsushi Watanabe <atsushi.w@ieee.org>
 backkem <mail@backkem.me>
 cnderrauber <zengjie9004@gmail.com>
