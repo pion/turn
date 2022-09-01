@@ -1,10 +1,12 @@
 package turn
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 
-	"github.com/pion/transport/vnet"
+	"github.com/pion/transport"
+	"github.com/pion/transport/stdnet"
 )
 
 // RelayAddressGeneratorStatic can be used to return static IP address each time a relay is created.
@@ -16,13 +18,17 @@ type RelayAddressGeneratorStatic struct {
 	// Address is passed to Listen/ListenPacket when creating the Relay
 	Address string
 
-	Net *vnet.Net
+	Net transport.Net
 }
 
 // Validate is called on server startup and confirms the RelayAddressGenerator is properly configured
 func (r *RelayAddressGeneratorStatic) Validate() error {
 	if r.Net == nil {
-		r.Net = vnet.NewNet(nil)
+		var err error
+		r.Net, err = stdnet.NewNet()
+		if err != nil {
+			return fmt.Errorf("failed to create network: %w", err)
+		}
 	}
 
 	switch {

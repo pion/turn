@@ -293,18 +293,24 @@ func buildVNet() (*VNet, error) {
 		return nil, err
 	}
 
-	net0 := vnet.NewNet(&vnet.NetConfig{
+	net0, err := vnet.NewNet(&vnet.NetConfig{
 		StaticIP: "1.2.3.4", // will be assigned to eth0
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	err = wan.AddNet(net0)
 	if err != nil {
 		return nil, err
 	}
 
-	net1 := vnet.NewNet(&vnet.NetConfig{
+	net1, err := vnet.NewNet(&vnet.NetConfig{
 		StaticIP: "1.2.3.5", // will be assigned to eth0
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	err = wan.AddNet(net1)
 	if err != nil {
@@ -325,7 +331,10 @@ func buildVNet() (*VNet, error) {
 		return nil, err
 	}
 
-	netL0 := vnet.NewNet(&vnet.NetConfig{})
+	netL0, err := vnet.NewNet(&vnet.NetConfig{})
+	if err != nil {
+		return nil, err
+	}
 
 	if err = lan.AddNet(netL0); err != nil {
 		return nil, err

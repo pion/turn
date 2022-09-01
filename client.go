@@ -10,6 +10,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
+	"github.com/pion/transport"
+	"github.com/pion/transport/stdnet"
 	"github.com/pion/transport/vnet"
 	"github.com/pion/turn/v2/internal/client"
 	"github.com/pion/turn/v2/internal/proto"
@@ -42,7 +44,7 @@ type ClientConfig struct {
 	RTO            time.Duration
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
 	LoggerFactory  logging.LoggerFactory
-	Net            *vnet.Net
+	Net            transport.Net
 }
 
 // Client is a STUN server client
@@ -62,7 +64,7 @@ type Client struct {
 	relayedConn   *client.UDPConn        // protected by mutex ***
 	allocTryLock  client.TryLock         // thread-safe
 	listenTryLock client.TryLock         // thread-safe
-	net           *vnet.Net              // read-only
+	net           transport.Net          // read-only
 	mutex         sync.RWMutex           // thread-safe
 	mutexTrMap    sync.Mutex             // thread-safe
 	log           logging.LeveledLogger  // read-only
@@ -81,15 +83,18 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, errNilConn
 	}
 
+	var err error
 	if config.Net == nil {
-		config.Net = vnet.NewNet(nil) // defaults to native operation
-	} else if config.Net.IsVirtual() {
-		log.Warn("vnet is enabled")
+		config.Net, err = stdnet.NewNet() // defaults to native operation
+		if err != nil {
+			return nil, err
+		}
+	} else if _, ok := config.Net.(*vnet.Net); ok {
+		log.Warn("Virtual network is enabled")
 	}
 
 	var stunServ, turnServ net.Addr
 	var stunServStr, turnServStr string
-	var err error
 	if len(config.STUNServerAddr) > 0 {
 		log.Debugf("resolving %s", config.STUNServerAddr)
 		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)

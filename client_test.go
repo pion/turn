@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/vnet"
+	"github.com/pion/transport/stdnet"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,10 +32,13 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
+	nw, err := stdnet.NewNet()
+	assert.NoError(t, err)
+
 	c, err := NewClient(&ClientConfig{
 		STUNServerAddr: "stun1.l.google.com:19302",
 		Conn:           conn,
-		Net:            vnet.NewNet(nil),
+		Net:            nw,
 		LoggerFactory:  loggerFactory,
 	})
 	assert.NoError(t, err)
