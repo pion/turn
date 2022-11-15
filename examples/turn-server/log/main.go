@@ -1,3 +1,4 @@
+// Package main implements a TURN server with logging.
 package main
 
 import (

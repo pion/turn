@@ -1,3 +1,5 @@
+// Package main implements a TURN server
+// adding a software attribute.
 package main
 
 import (
