@@ -10,9 +10,6 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
-	"github.com/pion/transport/v2"
-	"github.com/pion/transport/v2/stdnet"
-	"github.com/pion/transport/v2/vnet"
 	"github.com/pion/turn/v2/internal/client"
 	"github.com/pion/turn/v2/internal/proto"
 )
@@ -35,8 +32,8 @@ const (
 
 // ClientConfig is a bag of config parameters for Client.
 type ClientConfig struct {
-	STUNServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
-	TURNServerAddr string // TURN server address (e.g. "turn.abc.com:3478")
+	STUNServerAddr net.Addr // STUN server address
+	TURNServerAddr net.Addr // TURN server address
 	Username       string
 	Password       string
 	Realm          string
@@ -44,16 +41,14 @@ type ClientConfig struct {
 	RTO            time.Duration
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
 	LoggerFactory  logging.LoggerFactory
-	Net            transport.Net
 }
 
 // Client is a STUN server client
 type Client struct {
-	conn          net.PacketConn         // read-only
-	stunServ      net.Addr               // read-only
-	turnServ      net.Addr               // read-only
-	stunServStr   string                 // read-only, used for de-multiplexing
-	turnServStr   string                 // read-only, used for de-multiplexing
+	conn           net.PacketConn // read-only
+	stunServerAddr net.Addr       // read-only
+	turnServerAddr net.Addr       // read-only
+
 	username      stun.Username          // read-only
 	password      string                 // read-only
 	realm         stun.Realm             // read-only
@@ -64,7 +59,6 @@ type Client struct {
 	relayedConn   *client.UDPConn        // protected by mutex ***
 	allocTryLock  client.TryLock         // thread-safe
 	listenTryLock client.TryLock         // thread-safe
-	net           transport.Net          // read-only
 	mutex         sync.RWMutex           // thread-safe
 	mutexTrMap    sync.Mutex             // thread-safe
 	log           logging.LeveledLogger  // read-only
@@ -83,56 +77,22 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, errNilConn
 	}
 
-	var err error
-	if config.Net == nil {
-		config.Net, err = stdnet.NewNet() // defaults to native operation
-		if err != nil {
-			return nil, err
-		}
-	} else if _, ok := config.Net.(*vnet.Net); ok {
-		log.Warn("Virtual network is enabled")
-	}
-
-	var stunServ, turnServ net.Addr
-	var stunServStr, turnServStr string
-	if len(config.STUNServerAddr) > 0 {
-		log.Debugf("resolving %s", config.STUNServerAddr)
-		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
-		if err != nil {
-			return nil, err
-		}
-		stunServStr = stunServ.String()
-		log.Debugf("stunServ: %s", stunServStr)
-	}
-	if len(config.TURNServerAddr) > 0 {
-		log.Debugf("resolving %s", config.TURNServerAddr)
-		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
-		if err != nil {
-			return nil, err
-		}
-		turnServStr = turnServ.String()
-		log.Debugf("turnServ: %s", turnServStr)
-	}
-
 	rto := defaultRTO
 	if config.RTO > 0 {
 		rto = config.RTO
 	}
 
 	c := &Client{
-		conn:        config.Conn,
-		stunServ:    stunServ,
-		turnServ:    turnServ,
-		stunServStr: stunServStr,
-		turnServStr: turnServStr,
-		username:    stun.NewUsername(config.Username),
-		password:    config.Password,
-		realm:       stun.NewRealm(config.Realm),
-		software:    stun.NewSoftware(config.Software),
-		net:         config.Net,
-		trMap:       client.NewTransactionMap(),
-		rto:         rto,
-		log:         log,
+		conn:           config.Conn,
+		stunServerAddr: config.STUNServerAddr,
+		turnServerAddr: config.TURNServerAddr,
+		username:       stun.NewUsername(config.Username),
+		password:       config.Password,
+		realm:          stun.NewRealm(config.Realm),
+		software:       stun.NewSoftware(config.Software),
+		trMap:          client.NewTransactionMap(),
+		rto:            rto,
+		log:            log,
 	}
 
 	return c, nil
@@ -140,12 +100,12 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 // TURNServerAddr return the TURN server address
 func (c *Client) TURNServerAddr() net.Addr {
-	return c.turnServ
+	return c.turnServerAddr
 }
 
 // STUNServerAddr return the STUN server address
 func (c *Client) STUNServerAddr() net.Addr {
-	return c.stunServ
+	return c.stunServerAddr
 }
 
 // Username returns username
@@ -232,10 +192,10 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 
 // SendBindingRequest sends a new STUN request to the STUN server
 func (c *Client) SendBindingRequest() (net.Addr, error) {
-	if c.stunServ == nil {
+	if c.stunServerAddr == nil {
 		return nil, errSTUNServerAddressNotSet
 	}
-	return c.SendBindingRequestTo(c.stunServ)
+	return c.SendBindingRequestTo(c.stunServerAddr)
 }
 
 // Allocate sends a TURN allocation request to the given transport address
@@ -260,7 +220,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, err
 	}
 
-	trRes, err := c.PerformTransaction(msg, c.turnServ, false)
+	trRes, err := c.PerformTransaction(msg, c.turnServerAddr, false)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +254,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, err
 	}
 
-	trRes, err = c.PerformTransaction(msg, c.turnServ, false)
+	trRes, err = c.PerformTransaction(msg, c.turnServerAddr, false)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +380,7 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 		return true, c.handleSTUNMessage(data, from)
 	case proto.IsChannelData(data):
 		return true, c.handleChannelData(data)
-	case len(c.stunServStr) != 0 && from.String() == c.stunServStr:
+	case from.String() == c.stunServerAddr.String():
 		// received from STUN server but it is not a STUN message
 		return true, errNonSTUNMessage
 	default:

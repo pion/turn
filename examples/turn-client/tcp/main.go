@@ -30,8 +30,13 @@ func main() {
 	}
 
 	// Dial TURN Server
-	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
-	conn, err := net.Dial("tcp", turnServerAddr)
+	hostPort := fmt.Sprintf("%s:%d", *host, *port)
+	turnServerAddr, err := net.ResolveTCPAddr("tcp", hostPort)
+	if err != nil {
+		log.Fatalf("Failed to resolve %s: %s", hostPort, err)
+	}
+
+	conn, err := net.DialTCP("tcp", nil, turnServerAddr)
 	if err != nil {
 		log.Panicf("Failed to connect to TURN server: %s", err)
 	}
