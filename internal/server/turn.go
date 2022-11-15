@@ -33,7 +33,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	reservationToken := ""
 
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
-	insufficentCapacityMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeInsufficientCapacity})
+	insufficientCapacityMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeInsufficientCapacity})
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
@@ -100,7 +100,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		var randomPort int
 		randomPort, err = r.AllocationManager.GetRandomEvenPort()
 		if err != nil {
-			return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficentCapacityMsg...)
+			return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 		}
 		requestedPort = randomPort
 		reservationToken = randSeq(8)
@@ -124,7 +124,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		requestedPort,
 		lifetimeDuration)
 	if err != nil {
-		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficentCapacityMsg...)
+		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}
 
 	// Once the allocation is created, the server replies with a success

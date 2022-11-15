@@ -36,7 +36,7 @@ func TestChannelNumber(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
 		n := ChannelNumber(112)
 		if n.String() != "112" {
-			t.Errorf("bad string %s, expedted 112", n.String())
+			t.Errorf("bad string %s, expected 112", n.String())
 		}
 	})
 	t.Run("NoAlloc", func(t *testing.T) {

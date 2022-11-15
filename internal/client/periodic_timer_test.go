@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPriodicTimer(t *testing.T) {
+func TestPeriodicTimer(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		timerID := 3
 		var nCbs uint64
