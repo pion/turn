@@ -45,9 +45,20 @@ func TestAllocation(t *testing.T) {
 func subTestGetPermission(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
-	addr3, _ := net.ResolveUDPAddr("udp", "127.0.0.2:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
+	addr2, err := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
+	addr3, err := net.ResolveUDPAddr("udp", "127.0.0.2:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
 
 	p := &Permission{
 		Addr: addr,
@@ -76,7 +87,11 @@ func subTestGetPermission(t *testing.T) {
 func subTestAddPermission(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	p := &Permission{
 		Addr: addr,
 	}
@@ -91,7 +106,11 @@ func subTestAddPermission(t *testing.T) {
 func subTestRemovePermission(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	p := &Permission{
 		Addr: addr,
 	}
@@ -110,10 +129,14 @@ func subTestRemovePermission(t *testing.T) {
 func subTestAddChannelBind(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	err := a.AddChannelBind(c, proto.DefaultLifetime)
+	err = a.AddChannelBind(c, proto.DefaultLifetime)
 	assert.Nil(t, err, "should succeed")
 	assert.Equal(t, a, c.allocation, "allocation should be the caller.")
 
@@ -130,7 +153,11 @@ func subTestAddChannelBind(t *testing.T) {
 func subTestGetChannelByNumber(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
 	_ = a.AddChannelBind(c, proto.DefaultLifetime)
@@ -145,7 +172,11 @@ func subTestGetChannelByNumber(t *testing.T) {
 func subTestGetChannelByAddr(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
 	_ = a.AddChannelBind(c, proto.DefaultLifetime)
@@ -161,7 +192,11 @@ func subTestGetChannelByAddr(t *testing.T) {
 func subTestRemoveChannelBind(t *testing.T) {
 	a := NewAllocation(nil, nil, nil)
 
-	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
 	_ = a.AddChannelBind(c, proto.DefaultLifetime)
@@ -204,7 +239,11 @@ func subTestAllocationClose(t *testing.T) {
 	a.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
 
 	// add channel
-	addr, _ := net.ResolveUDPAddr(network, "127.0.0.1:3478")
+	addr, err := net.ResolveUDPAddr(network, "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 	_ = a.AddChannelBind(c, proto.DefaultLifetime)
 
