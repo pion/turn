@@ -1,3 +1,4 @@
+// Package main implements an example TURN server supporting TCP
 package main
 
 import (

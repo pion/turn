@@ -1,3 +1,4 @@
+// Package main implements a simple TURN server
 package main
 
 import (

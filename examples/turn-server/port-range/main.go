@@ -1,3 +1,5 @@
+// Package main implements a TURN server with a
+// specified port range.
 package main
 
 import (

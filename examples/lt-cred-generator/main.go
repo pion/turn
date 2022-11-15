@@ -1,3 +1,5 @@
+// Package main implements a CLI tool for generating
+// long-term credentials.
 package main
 
 import (

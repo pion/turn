@@ -1,3 +1,5 @@
+// Package main implements a TURN server using
+// long-term credentials.
 package main
 
 import (

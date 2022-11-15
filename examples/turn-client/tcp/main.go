@@ -1,3 +1,4 @@
+// Package main implements a TURN client with support for TCP
 package main
 
 import (
