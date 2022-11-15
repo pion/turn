@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v2/stdnet"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,13 +31,14 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
-	nw, err := stdnet.NewNet()
-	assert.NoError(t, err)
+	addr, err := net.ResolveUDPAddr("udp", "stun1.l.google.com:19302")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
 
 	c, err := NewClient(&ClientConfig{
-		STUNServerAddr: "stun1.l.google.com:19302",
+		STUNServerAddr: addr,
 		Conn:           conn,
-		Net:            nw,
 		LoggerFactory:  loggerFactory,
 	})
 	assert.NoError(t, err)
@@ -161,10 +161,15 @@ func TestClientNonceExpiration(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+
 	client, err := NewClient(&ClientConfig{
 		Conn:           conn,
-		STUNServerAddr: "127.0.0.1:3478",
-		TURNServerAddr: "127.0.0.1:3478",
+		STUNServerAddr: addr,
+		TURNServerAddr: addr,
 		Username:       "foo",
 		Password:       "pass",
 	})

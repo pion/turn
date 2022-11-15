@@ -31,8 +31,14 @@ func main() {
 
 	cred := strings.SplitN(*user, "=", 2)
 
+	hostPort := fmt.Sprintf("%s:%d", *host, *port)
+	turnServerAddr, err := net.ResolveUDPAddr("udp", hostPort)
+	if err != nil {
+		log.Fatalf("Failed to resolve %s: %s", hostPort, err)
+	}
+
 	// TURN client won't create a local listening socket by itself.
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		log.Panicf("Failed to listen: %s", err)
 	}
@@ -41,8 +47,6 @@ func main() {
 			log.Panicf("Failed to close connection: %s", closeErr)
 		}
 	}()
-
-	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
 
 	cfg := &turn.ClientConfig{
 		STUNServerAddr: turnServerAddr,

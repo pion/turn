@@ -148,9 +148,12 @@ func TestServer(t *testing.T) {
 		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321")
 		assert.NoError(t, err)
 
+		addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:3478")
+		assert.NoError(t, err)
+
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: "127.0.0.1:3478",
-			TURNServerAddr: "127.0.0.1:3478",
+			STUNServerAddr: addr,
+			TURNServerAddr: addr,
 			Conn:           conn,
 			Username:       "user",
 			Password:       "pass",
@@ -216,8 +219,8 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 
 		client2, err := NewClient(&ClientConfig{
-			STUNServerAddr: "127.0.0.1:3478",
-			TURNServerAddr: "127.0.0.1:3478",
+			STUNServerAddr: addr,
+			TURNServerAddr: addr,
 			Conn:           conn2,
 			Username:       "user",
 			Password:       "pass",
@@ -426,11 +429,12 @@ func TestServerVNet(t *testing.T) {
 			assert.NoError(t, lconn.Close())
 		}()
 
+		stunAddr, _ := net.ResolveUDPAddr("udp", "1.2.3.4:3478")
+
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: "1.2.3.4:3478",
+			STUNServerAddr: stunAddr,
 			Conn:           lconn,
-			Net:            v.netL0,
 			LoggerFactory:  loggerFactory,
 		})
 		assert.NoError(t, err, "should succeed")
@@ -456,14 +460,16 @@ func TestServerVNet(t *testing.T) {
 		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
 		assert.NoError(t, err)
 
+		stunAddr, _ := v.netL0.ResolveUDPAddr("udp", "stun.pion.ly:3478")
+		turnAddr, _ := v.netL0.ResolveUDPAddr("udp", "turn.pion.ly:3478")
+
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: "stun.pion.ly:3478",
-			TURNServerAddr: "turn.pion.ly:3478",
+			STUNServerAddr: stunAddr,
+			TURNServerAddr: turnAddr,
 			Username:       "user",
 			Password:       "pass",
 			Conn:           lconn,
-			Net:            v.netL0,
 			LoggerFactory:  loggerFactory,
 		})
 
