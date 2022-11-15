@@ -82,7 +82,7 @@ func main() {
 	// address assigned on the TURN server.
 	log.Printf("relayed-address=%s", relayConn.LocalAddr().String())
 
-	// If you provided `-ping`, perform a ping test agaist the
+	// If you provided `-ping`, perform a ping test against the
 	// relayConn we have just allocated.
 	if *ping {
 		err = doPingTest(client, relayConn)
