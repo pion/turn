@@ -34,7 +34,7 @@ type Allocation struct {
 	closed              chan interface{}
 	log                 logging.LeveledLogger
 
-	// some clients (firefox or others using resiprocate's nICE lib) may retry allocation
+	// some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
 	// cache for response lost and client retry to implement 'stateless stack approach'
 	// https://datatracker.ietf.org/doc/html/rfc5766#section-6.2
@@ -48,7 +48,7 @@ func addr2IPFingerprint(addr net.Addr) string {
 	case *net.TCPAddr: // Do we really need this case?
 		return a.IP.String()
 	}
-	return "" // shoud never happen
+	return "" // should never happen
 }
 
 // NewAllocation creates a new instance of NewAllocation.

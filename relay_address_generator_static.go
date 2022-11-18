@@ -19,7 +19,7 @@ type RelayAddressGeneratorStatic struct {
 	Net *vnet.Net
 }
 
-// Validate is caled on server startup and confirms the RelayAddressGenerator is properly configured
+// Validate is called on server startup and confirms the RelayAddressGenerator is properly configured
 func (r *RelayAddressGeneratorStatic) Validate() error {
 	if r.Net == nil {
 		r.Net = vnet.NewNet(nil)
