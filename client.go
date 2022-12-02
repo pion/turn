@@ -10,9 +10,9 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
-	"github.com/pion/transport"
-	"github.com/pion/transport/stdnet"
-	"github.com/pion/transport/vnet"
+	"github.com/pion/transport/v2"
+	"github.com/pion/transport/v2/stdnet"
+	"github.com/pion/transport/v2/vnet"
 	"github.com/pion/turn/v2/internal/client"
 	"github.com/pion/turn/v2/internal/proto"
 )

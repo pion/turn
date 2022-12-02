@@ -5,8 +5,8 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/pion/transport"
-	"github.com/pion/transport/stdnet"
+	"github.com/pion/transport/v2"
+	"github.com/pion/transport/v2/stdnet"
 )
 
 // RelayAddressGeneratorNone returns the listener with no modifications

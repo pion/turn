@@ -5,8 +5,8 @@ import (
 	"net"
 
 	"github.com/pion/randutil"
-	"github.com/pion/transport"
-	"github.com/pion/transport/stdnet"
+	"github.com/pion/transport/v2"
+	"github.com/pion/transport/v2/stdnet"
 )
 
 // RelayAddressGeneratorPortRange can be used to only allocate connections inside a defined port range.
