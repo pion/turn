@@ -33,7 +33,7 @@ func main() {
 	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
 	conn, err := net.Dial("tcp", turnServerAddr)
 	if err != nil {
-		panic(err)
+		log.Panicf("Failed to connect to TURN server: %s", err)
 	}
 
 	cred := strings.SplitN(*user, "=", 2)
@@ -52,14 +52,14 @@ func main() {
 
 	client, err := turn.NewClient(cfg)
 	if err != nil {
-		panic(err)
+		log.Panicf("Failed to create TURN client: %s", err)
 	}
 	defer client.Close()
 
 	// Start listening on the conn provided.
 	err = client.Listen()
 	if err != nil {
-		panic(err)
+		log.Panicf("Failed to listen: %s", err)
 	}
 
 	// Allocate a relay socket on the TURN server. On success, it
@@ -67,11 +67,11 @@ func main() {
 	// socket.
 	relayConn, err := client.Allocate()
 	if err != nil {
-		panic(err)
+		log.Panicf("Failed to allocate: %s", err)
 	}
 	defer func() {
 		if closeErr := relayConn.Close(); closeErr != nil {
-			panic(closeErr)
+			log.Fatalf("Failed to close connection: %s", closeErr)
 		}
 	}()
 
@@ -84,7 +84,7 @@ func main() {
 	if *ping {
 		err = doPingTest(client, relayConn)
 		if err != nil {
-			panic(err)
+			log.Panicf("Failed to ping: %s", err)
 		}
 	}
 }
@@ -99,11 +99,11 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
 	// Set up pinger socket (pingerConn)
 	pingerConn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	if err != nil {
-		panic(err)
+		log.Panicf("Failed to listen: %s", err)
 	}
 	defer func() {
 		if closeErr := pingerConn.Close(); closeErr != nil {
-			panic(closeErr)
+			log.Panicf("Failed to close connection: %s", closeErr)
 		}
 	}()
 

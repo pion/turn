@@ -31,9 +31,9 @@ func main() {
 
 	u, p, _ := turn.GenerateLongTermCredentials(*authSecret, time.Minute)
 	if _, err := os.Stdout.WriteString(fmt.Sprintf("%s=%s", u, p)); err != nil { // for use with xargs
-		panic(err)
+		log.Panicf("Failed to write to stdout: %s", err)
 	}
 	if _, err := os.Stderr.WriteString("\n"); err != nil { // ignored by xargs
-		panic(err)
+		log.Panicf("Failed to write to stderr: %s", err)
 	}
 }
