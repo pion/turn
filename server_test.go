@@ -114,6 +114,156 @@ func TestServer(t *testing.T) {
 		assert.Equal(t, server.inboundMTU, 2000)
 		assert.NoError(t, server.Close())
 	})
+	t.Run("Filter on client address and peer IP", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		assert.NoError(t, err)
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+				return nil, false
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "0.0.0.0",
+					},
+					PermissionHandler: func(src net.Addr, peer net.IP) bool {
+						return src.String() == "127.0.0.33:54321" &&
+							peer.Equal(net.ParseIP("127.0.0.4"))
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+
+		// enforce corrent client IP and port
+		conn, err := net.ListenPacket("udp4", "127.0.0.33:54321")
+		assert.NoError(t, err)
+
+		client, err := NewClient(&ClientConfig{
+			STUNServerAddr: "127.0.0.1:3478",
+			TURNServerAddr: "127.0.0.1:3478",
+			Conn:           conn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
+
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err)
+
+		whiteAddr, errA := net.ResolveUDPAddr("udp", "127.0.0.4:12345")
+		assert.NoError(t, errA, "should succeed")
+		blackAddr, errB1 := net.ResolveUDPAddr("udp", "127.0.0.5:12345")
+		assert.NoError(t, errB1, "should succeed")
+
+		// explicit CreatePermission
+		err = client.CreatePermission(whiteAddr)
+		assert.NoError(t, err, "grant permission for whitelisted peer")
+
+		err = client.CreatePermission(blackAddr)
+		assert.ErrorContains(t, err, "error", "deny permission for blacklisted peer address")
+
+		err = client.CreatePermission(whiteAddr, whiteAddr)
+		assert.NoError(t, err, "grant permission for repeated whitelisted peer addresses")
+
+		err = client.CreatePermission(blackAddr)
+		assert.ErrorContains(t, err, "error", "deny permission for repeated blacklisted peer address")
+
+		// rg0now: isn't this a cornercase in the spec?
+		err = client.CreatePermission(whiteAddr, blackAddr)
+		assert.ErrorContains(t, err, "error", "deny permission for mixed whitelisted and blacklisted peers")
+
+		// implicit CreatePermission for ChannelBindRequests: WriteTo always tries to bind a channel
+		_, err = relayConn.WriteTo([]byte("Hello"), whiteAddr)
+		assert.NoError(t, err, "write to whitelisted peer address succeeds - 1")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), blackAddr)
+		assert.ErrorContains(t, err, "error", "write to blacklisted peer address fails - 1")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), whiteAddr)
+		assert.NoError(t, err, "write to whitelisted peer address succeeds - 2")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), blackAddr)
+		assert.ErrorContains(t, err, "error", "write to blacklisted peer address fails - 2")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), whiteAddr)
+		assert.NoError(t, err, "write to whitelisted peer address succeeds - 3")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), blackAddr)
+		assert.ErrorContains(t, err, "error", "write to blacklisted peer address fails - 3")
+
+		// let the previous transaction terminate
+		time.Sleep(200 * time.Millisecond)
+		assert.NoError(t, relayConn.Close())
+
+		client.Close()
+		assert.NoError(t, conn.Close())
+
+		// enforce filtered source address
+		conn2, err := net.ListenPacket("udp4", "127.0.0.133:54321")
+		assert.NoError(t, err)
+
+		client2, err := NewClient(&ClientConfig{
+			STUNServerAddr: "127.0.0.1:3478",
+			TURNServerAddr: "127.0.0.1:3478",
+			Conn:           conn2,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client2.Listen())
+
+		relayConn2, err := client2.Allocate()
+		assert.NoError(t, err)
+
+		// explicit CreatePermission
+		err = client2.CreatePermission(whiteAddr)
+		assert.ErrorContains(t, err, "error", "deny permission from filtered source to whitelisted peer")
+
+		err = client2.CreatePermission(blackAddr)
+		assert.ErrorContains(t, err, "error", "deny permission from filtered source to blacklisted peer")
+
+		// implicit CreatePermission for ChannelBindRequests: WriteTo always tries to bind a channel
+		_, err = relayConn2.WriteTo([]byte("Hello"), whiteAddr)
+		assert.ErrorContains(t, err, "error", "write from filtered source to whitelisted peer fails - 1")
+
+		_, err = relayConn2.WriteTo([]byte("Hello"), blackAddr)
+		assert.ErrorContains(t, err, "error", "write from filtered source to blacklisted peer fails - 1")
+
+		_, err = relayConn2.WriteTo([]byte("Hello"), whiteAddr)
+		assert.ErrorContains(t, err, "error", "write from filtered source to whitelisted peer fails - 2")
+
+		_, err = relayConn2.WriteTo([]byte("Hello"), blackAddr)
+		assert.ErrorContains(t, err, "error", "write from filtered source to blacklisted peer fails - 2")
+
+		_, err = relayConn2.WriteTo([]byte("Hello"), whiteAddr)
+		assert.ErrorContains(t, err, "error", "write from filtered source to whitelisted peer fails - 3")
+
+		_, err = relayConn2.WriteTo([]byte("Hello"), blackAddr)
+		assert.ErrorContains(t, err, "error", "write from filtered source to blacklisted peer fails - 3")
+
+		// let the previous transaction terminate
+		time.Sleep(200 * time.Millisecond)
+		assert.NoError(t, relayConn2.Close())
+
+		client2.Close()
+		assert.NoError(t, conn2.Close())
+
+		assert.NoError(t, server.Close())
+	})
 }
 
 type VNet struct {

@@ -231,8 +231,15 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 			return err
 		}
 
+		if err := r.AllocationManager.GrantPermission(r.SrcAddr, peerAddress.IP); err != nil {
+			r.Log.Infof("permission denied for client %s to peer %s", r.SrcAddr.String(),
+				peerAddress.IP.String())
+			return err
+		}
+
 		r.Log.Debugf("adding permission for %s", fmt.Sprintf("%s:%d",
 			peerAddress.IP.String(), peerAddress.Port))
+
 		a.AddPermission(allocation.NewPermission(
 			&net.UDPAddr{
 				IP:   peerAddress.IP,
@@ -314,6 +321,16 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 	peerAddr := proto.PeerAddress{}
 	if err = peerAddr.GetFrom(m); err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
+	}
+
+	if err = r.AllocationManager.GrantPermission(r.SrcAddr, peerAddr.IP); err != nil {
+		r.Log.Infof("permission denied for client %s to peer %s", r.SrcAddr.String(),
+			peerAddr.IP.String())
+
+		unauthorizedRequestMsg := buildMsg(m.TransactionID,
+			stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodeUnauthorized})
+		return buildAndSendErr(r.Conn, r.SrcAddr, err, unauthorizedRequestMsg...)
 	}
 
 	r.Log.Debugf("binding channel %d to %s",
