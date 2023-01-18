@@ -15,4 +15,5 @@ var (
 	errDupeFiveTuple               = errors.New("allocation attempt created with duplicate FiveTuple")
 	errFailedToCastUDPAddr         = errors.New("failed to cast net.Addr to *net.UDPAddr")
 	errFailedToAllocateEvenPort    = errors.New("failed to allocate an even port")
+	errAdminProhibited             = errors.New("permission request administratively prohibited")
 )

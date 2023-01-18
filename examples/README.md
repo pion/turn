@@ -45,6 +45,10 @@ The only downside is that you can't revoke a single username/password. You need 
 
 * -authSecret     : Shared secret for the Long Term Credential Mechanism
 
+#### perm-filter
+
+This example demonstrates the use of a permission handler in the PION TURN server. The example implements a filtering policy that lets clients to connect back to their own host or server-reflexive address but will drop everything else. This will let the client ping-test through but will block essentially all other peer connection attempts.
+
 ## turn-client
 The `turn-client` directory contains 2 examples that show common Pion TURN usages. All of these examples take the following arguments.
 

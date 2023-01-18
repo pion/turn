@@ -33,6 +33,8 @@ type Server struct {
 }
 
 // NewServer creates the Pion TURN server
+//
+//nolint:gocognit
 func NewServer(config ServerConfig) (*Server, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
@@ -66,9 +68,15 @@ func NewServer(config ServerConfig) (*Server, error) {
 
 	for i := range s.packetConnConfigs {
 		go func(i int, p PacketConnConfig) {
+			permissionHandler := p.PermissionHandler
+			if permissionHandler == nil {
+				permissionHandler = DefaultPermissionHandler
+			}
+
 			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 				AllocatePacketConn: p.RelayAddressGenerator.AllocatePacketConn,
 				AllocateConn:       p.RelayAddressGenerator.AllocateConn,
+				PermissionHandler:  permissionHandler,
 				LeveledLogger:      s.log,
 			})
 			if err != nil {
@@ -88,9 +96,15 @@ func NewServer(config ServerConfig) (*Server, error) {
 
 	for i, listener := range s.listenerConfigs {
 		go func(i int, l ListenerConfig) {
+			permissionHandler := l.PermissionHandler
+			if permissionHandler == nil {
+				permissionHandler = DefaultPermissionHandler
+			}
+
 			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 				AllocatePacketConn: l.RelayAddressGenerator.AllocatePacketConn,
 				AllocateConn:       l.RelayAddressGenerator.AllocateConn,
+				PermissionHandler:  permissionHandler,
 				LeveledLogger:      s.log,
 			})
 			if err != nil {
@@ -152,7 +166,7 @@ func (s *Server) Close() error {
 
 	err := errFailedToClose
 	for _, e := range errors {
-		err = fmt.Errorf("%s; Close error (%w) ", err.Error(), e)
+		err = fmt.Errorf("%s; close error (%w) ", err.Error(), e)
 	}
 
 	return err
