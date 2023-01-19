@@ -40,8 +40,13 @@ func DefaultPermissionHandler(clientAddr net.Addr, peerIP net.IP) (ok bool) {
 type PacketConnConfig struct {
 	PacketConn net.PacketConn
 
-	// When an allocation is generated the RelayAddressGenerator
-	// creates the net.PacketConn and returns the IP/Port it is available at
+	// Connect makes it possible to connect a PacketConn back to a specific remote
+	// address. This makes it possible to spawn a separate readLoop thread for the connected
+	// socket amd improve scalability.
+	Connect func(conn net.PacketConn, remoteAddr net.Addr) (net.PacketConn, error)
+
+	// RelayAddressGenerator creates the net.PacketConn when an allocation is generated and
+	// returns the IP/Port it is available at
 	RelayAddressGenerator RelayAddressGenerator
 
 	// PermissionHandler is a callback to filter peer addresses. Can be set as nil, in which

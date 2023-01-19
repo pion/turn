@@ -127,6 +127,30 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}
 
+	r.Log.Debugf("created allocation for %q", fiveTuple.Fingerprint())
+
+	// Performance optimization: Once the allocation is successfull the server may connect back
+	// the client to obtain a specific socket for which it may spawn a new readloop
+	if r.Connect != nil {
+		if conn, err := r.Connect(r.Conn, r.SrcAddr); err != nil {
+			r.Log.Infof("failed to connect to client at %s: %s", r.SrcAddr.String(),
+				err.Error())
+		} else {
+			// fire up a new readloop for the connected client socket
+			go ReadLoop(State{
+				Conn:               conn,
+				AllocationManager:  r.AllocationManager,
+				Connect:            nil,
+				Nonces:             r.Nonces,
+				AuthHandler:        r.AuthHandler,
+				Realm:              r.Realm,
+				ChannelBindTimeout: r.ChannelBindTimeout,
+				InboundMTU:         r.InboundMTU,
+				Log:                r.Log,
+			})
+		}
+	}
+
 	// Once the allocation is created, the server replies with a success
 	// response.  The success response contains:
 	//   * An XOR-RELAYED-ADDRESS attribute containing the relayed transport

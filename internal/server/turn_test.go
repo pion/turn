@@ -79,14 +79,16 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		staticKey := []byte("ABC")
 		r := Request{
-			AllocationManager: allocationManager,
-			Nonces:            &sync.Map{},
-			Conn:              l,
-			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
-			Log:               logger,
-			AuthHandler: func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool) {
-				return staticKey, true
+			State: State{
+				AllocationManager: allocationManager,
+				Nonces:            &sync.Map{},
+				Conn:              l,
+				Log:               logger,
+				AuthHandler: func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+					return staticKey, true
+				},
 			},
+			SrcAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		}
 		r.Nonces.Store(string(staticKey), time.Now())
 

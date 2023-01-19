@@ -122,3 +122,54 @@ func (s *STUNConn) SetWriteDeadline(t time.Time) error {
 func NewSTUNConn(nextConn net.Conn) *STUNConn {
 	return &STUNConn{nextConn: nextConn}
 }
+
+// WrapConn wraps a connected net.PacketCon socket, which is itself represented as a net.Conn,
+// and implement a trivial wrapper for ReadFrom and WriteTo
+type WrapConn struct {
+	nextConn  net.Conn
+	localAddr net.Addr
+}
+
+// ReadFrom implements ReadFrom from net.WrapConn
+func (s *WrapConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	n, err := s.nextConn.Read(p)
+	return n, s.nextConn.RemoteAddr(), err
+}
+
+// WriteTo implements WriteTo from net.WrapConn
+func (s *WrapConn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
+	return s.nextConn.Write(p)
+}
+
+// Close implements Close from net.WrapConn
+func (s *WrapConn) Close() error {
+	return s.nextConn.Close()
+}
+
+// LocalAddr implements LocalAddr from net.WrapConn
+func (s *WrapConn) LocalAddr() net.Addr {
+	return s.localAddr
+}
+
+// SetDeadline implements SetDeadline from net.WrapConn
+func (s *WrapConn) SetDeadline(t time.Time) error {
+	return s.nextConn.SetDeadline(t)
+}
+
+// SetReadDeadline implements SetReadDeadline from net.WrapConn
+func (s *WrapConn) SetReadDeadline(t time.Time) error {
+	return s.nextConn.SetReadDeadline(t)
+}
+
+// SetWriteDeadline implements SetWriteDeadline from net.WrapConn
+func (s *WrapConn) SetWriteDeadline(t time.Time) error {
+	return s.nextConn.SetWriteDeadline(t)
+}
+
+// NewWrapConn creates a PacketConn wrapper on top of a net.Conn. The WrapConn knows the local
+// address of the parent socket and returns that as LocalAddr() instead of its own, this makes it
+// possible to avoid the "no allocation exists" errors for the cases when the parent socket is
+// bound to 0.0.0.0 but the connected child socket is bound to a specific IP.
+func NewWrapConn(nextConn net.Conn, localAddr net.Addr) *WrapConn {
+	return &WrapConn{nextConn: nextConn, localAddr: localAddr}
+}

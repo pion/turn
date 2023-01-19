@@ -3,7 +3,6 @@ package turn
 
 import (
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -90,7 +89,17 @@ func NewServer(config ServerConfig) (*Server, error) {
 				}
 			}()
 
-			s.readLoop(p.PacketConn, allocationManager)
+			server.ReadLoop(server.State{
+				Conn:               p.PacketConn,
+				AllocationManager:  allocationManager,
+				Connect:            p.Connect,
+				Nonces:             s.nonces,
+				InboundMTU:         mtu,
+				AuthHandler:        s.authHandler,
+				Realm:              s.realm,
+				ChannelBindTimeout: s.channelBindTimeout,
+				Log:                s.log,
+			})
 		}(i, s.packetConnConfigs[i])
 	}
 
@@ -125,7 +134,17 @@ func NewServer(config ServerConfig) (*Server, error) {
 					return
 				}
 
-				go s.readLoop(NewSTUNConn(conn), allocationManager)
+				go server.ReadLoop(server.State{
+					Conn:               NewSTUNConn(conn),
+					AllocationManager:  allocationManager,
+					Connect:            nil,
+					Nonces:             s.nonces,
+					AuthHandler:        s.authHandler,
+					Realm:              s.realm,
+					ChannelBindTimeout: s.channelBindTimeout,
+					InboundMTU:         mtu,
+					Log:                s.log,
+				})
 			}
 		}(i+len(s.packetConnConfigs), listener)
 	}
@@ -170,32 +189,4 @@ func (s *Server) Close() error {
 	}
 
 	return err
-}
-
-func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manager) {
-	buf := make([]byte, s.inboundMTU)
-	for {
-		n, addr, err := p.ReadFrom(buf)
-		switch {
-		case err != nil:
-			s.log.Debugf("exit read loop on error: %s", err.Error())
-			return
-		case n >= s.inboundMTU:
-			s.log.Debugf("Read bytes exceeded MTU, packet is possibly truncated")
-		}
-
-		if err := server.HandleRequest(server.Request{
-			Conn:               p,
-			SrcAddr:            addr,
-			Buff:               buf[:n],
-			Log:                s.log,
-			AuthHandler:        s.authHandler,
-			Realm:              s.realm,
-			AllocationManager:  allocationManager,
-			ChannelBindTimeout: s.channelBindTimeout,
-			Nonces:             s.nonces,
-		}); err != nil {
-			s.log.Errorf("error when handling datagram: %v", err)
-		}
-	}
 }

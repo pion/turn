@@ -4,31 +4,17 @@ package server
 import (
 	"fmt"
 	"net"
-	"sync"
-	"time"
 
-	"github.com/pion/logging"
 	"github.com/pion/stun"
-	"github.com/pion/turn/v2/internal/allocation"
 	"github.com/pion/turn/v2/internal/proto"
 )
 
 // Request contains all the state needed to process a single incoming datagram
 type Request struct {
+	State
 	// Current Request State
-	Conn    net.PacketConn
 	SrcAddr net.Addr
 	Buff    []byte
-
-	// Server State
-	AllocationManager *allocation.Manager
-	Nonces            *sync.Map
-
-	// User Configuration
-	AuthHandler        func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
-	Log                logging.LeveledLogger
-	Realm              string
-	ChannelBindTimeout time.Duration
 }
 
 // HandleRequest processes the give Request
