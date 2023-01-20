@@ -1,4 +1,4 @@
-FROM golang:1.10
+FROM golang:latest
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION=master
