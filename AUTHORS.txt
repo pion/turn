@@ -2,7 +2,7 @@
 # we would love to have you https://github.com/pion/webrtc/wiki/Contributing
 #
 # This file is auto generated, using git to list all individuals contributors.
-# see `.github/generate-authors.sh` for the scripting
+# see https://github.com/pion/.goassets/blob/master/scripts/generate-authors.sh for the scripting
 Aaron France <aaron.l.france@gmail.com>
 Aleksandr Razumov <ar@gortc.io>
 andrefsp <andrefsp@gmail.com>
@@ -12,6 +12,7 @@ backkem <mail@backkem.me>
 Caleb Phillips <calebrphillips@gmail.com>
 cnderrauber <zengjie9004@gmail.com>
 David Colburn <xero73@gmail.com>
+Gabor Retvari <retvari@tmit.bme.hu>
 Herman Banken <hermanbanken@gmail.com>
 Hugo Arregui <hugo.arregui@gmail.com>
 Igor German <igor.german@synesis.ru>
