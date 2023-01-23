@@ -38,3 +38,6 @@ ted <ted@skydio.com>
 Tom Clift <tom@clift.id.au>
 Yusuke Nakamura <yusuke1994525@gmail.com>
 Yutaka Takeda <yt0916@gmail.com>
+
+# List of contributors not appearing in Git history
+
