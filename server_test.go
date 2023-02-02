@@ -133,7 +133,7 @@ func TestServer(t *testing.T) {
 						Address:      "0.0.0.0",
 					},
 					PermissionHandler: func(src net.Addr, peer net.IP) bool {
-						return src.String() == "127.0.0.33:54321" &&
+						return src.String() == "127.0.0.1:54321" &&
 							peer.Equal(net.ParseIP("127.0.0.4"))
 					},
 				},
@@ -144,7 +144,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 
 		// enforce corrent client IP and port
-		conn, err := net.ListenPacket("udp4", "127.0.0.33:54321")
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321")
 		assert.NoError(t, err)
 
 		client, err := NewClient(&ClientConfig{
