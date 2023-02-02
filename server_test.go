@@ -4,6 +4,7 @@
 package turn
 
 import (
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -545,6 +546,130 @@ func TestConsumeSingleTURNFrame(t *testing.T) {
 			if e == nil {
 				assert.Equal(t, len(c.data), n)
 			}
+		})
+	}
+}
+
+//nolint:gocognit,errcheck,govet
+func RunBenchmarkServer(b *testing.B, clientNum int) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	credMap := map[string][]byte{
+		"user": GenerateAuthKey("user", "pion.ly", "pass"),
+	}
+
+	testSeq := []byte("benchmark-data")
+
+	// server
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	if err != nil {
+		b.Fatalf("cannot resolve server address: %s", err.Error())
+	}
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	if err != nil {
+		b.Fatalf("cannot allocate server listener at %s:%s", serverAddr.Network(), serverAddr.String())
+	}
+	defer serverConn.Close()
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			if pw, ok := credMap[username]; ok {
+				return pw, true
+			}
+			return nil, false
+		},
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		Realm:         "pion.ly",
+		LoggerFactory: loggerFactory,
+	})
+	if err != nil {
+		b.Fatalf("cannot start server: %s", err.Error())
+	}
+	defer server.Close()
+
+	// create a sink
+	sinkAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:65432")
+	if err != nil {
+		b.Fatalf("cannot resolve sink address: %s", err.Error())
+	}
+
+	sink, err := net.ListenPacket(sinkAddr.Network(), sinkAddr.String())
+	if err != nil {
+		b.Fatalf("cannot allocate sink: %s", err.Error())
+	}
+	defer sink.Close()
+
+	go func() {
+		buf := make([]byte, 1600)
+		for {
+			_, _, err := sink.ReadFrom(buf)
+			// ignore "use of closed network connection" errors
+			if err != nil {
+				return
+			}
+
+			// do not care about received data
+		}
+	}()
+
+	// client(s)
+	clients := make([]net.PacketConn, clientNum)
+	for i := 0; i < clientNum; i++ {
+		clientConn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		if err != nil {
+			b.Fatalf("cannot allocate socket for client %d: %s", i+1, err.Error())
+		}
+		defer clientConn.Close()
+
+		client, err := NewClient(&ClientConfig{
+			STUNServerAddr: serverAddr.String(),
+			TURNServerAddr: serverAddr.String(),
+			Conn:           clientConn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		if err != nil {
+			b.Fatalf("cannot start client %d: %s", i+1, err.Error())
+		}
+		defer client.Close()
+
+		if err := client.Listen(); err != nil {
+			b.Fatalf("client %d cannot listen: %s", i+1, err.Error())
+		}
+
+		// create an allocation
+		turnConn, err := client.Allocate()
+		if err != nil {
+			b.Fatalf("client %d cannot create allocation: %s", i+1, err.Error())
+		}
+		defer turnConn.Close()
+
+		clients[i] = turnConn
+	}
+
+	// benchmark
+	for i := 0; i < b.N; i++ {
+		for i := 0; i < clientNum; i++ {
+			if _, err := clients[i].WriteTo(testSeq, sinkAddr); err != nil {
+				b.Fatalf("client %d cannot send to TURN server: %s", i+1, err.Error())
+			}
+		}
+	}
+}
+
+// BenchmarkServer will benchmark the server with multiple client connections
+func BenchmarkServer(b *testing.B) {
+	for i := 1; i <= 4; i++ {
+		b.Run(fmt.Sprintf("client_num_%d", i), func(b *testing.B) {
+			RunBenchmarkServer(b, i)
 		})
 	}
 }
