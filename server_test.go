@@ -550,7 +550,6 @@ func TestConsumeSingleTURNFrame(t *testing.T) {
 	}
 }
 
-//nolint:gocognit,errcheck,govet
 func RunBenchmarkServer(b *testing.B, clientNum int) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	credMap := map[string][]byte{
@@ -559,17 +558,17 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 
 	testSeq := []byte("benchmark-data")
 
-	// server
+	// Setup server
 	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
 	if err != nil {
-		b.Fatalf("cannot resolve server address: %s", err.Error())
+		b.Fatalf("Failed to resolve server address: %s", err)
 	}
 
 	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
 	if err != nil {
-		b.Fatalf("cannot allocate server listener at %s:%s", serverAddr.Network(), serverAddr.String())
+		b.Fatalf("Failed to allocate server listener at %s:%s", serverAddr.Network(), serverAddr.String())
 	}
-	defer serverConn.Close()
+	defer serverConn.Close() //nolint:errcheck
 
 	server, err := NewServer(ServerConfig{
 		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
@@ -589,43 +588,42 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 		LoggerFactory: loggerFactory,
 	})
 	if err != nil {
-		b.Fatalf("cannot start server: %s", err.Error())
+		b.Fatalf("Failed to start server: %s", err)
 	}
-	defer server.Close()
+	defer server.Close() //nolint:errcheck
 
-	// create a sink
+	// Create a sink
 	sinkAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:65432")
 	if err != nil {
-		b.Fatalf("cannot resolve sink address: %s", err.Error())
+		b.Fatalf("Failed to resolve sink address: %s", err)
 	}
 
 	sink, err := net.ListenPacket(sinkAddr.Network(), sinkAddr.String())
 	if err != nil {
-		b.Fatalf("cannot allocate sink: %s", err.Error())
+		b.Fatalf("Failed to allocate sink: %s", err)
 	}
-	defer sink.Close()
+	defer sink.Close() //nolint:errcheck
 
 	go func() {
 		buf := make([]byte, 1600)
 		for {
-			_, _, err := sink.ReadFrom(buf)
-			// ignore "use of closed network connection" errors
-			if err != nil {
+			// Ignore "use of closed network connection" errors
+			if _, _, listenErr := sink.ReadFrom(buf); listenErr != nil {
 				return
 			}
 
-			// do not care about received data
+			// Do not care about received data
 		}
 	}()
 
-	// client(s)
+	// Setup client(s)
 	clients := make([]net.PacketConn, clientNum)
 	for i := 0; i < clientNum; i++ {
-		clientConn, err := net.ListenPacket("udp4", "0.0.0.0:0")
-		if err != nil {
-			b.Fatalf("cannot allocate socket for client %d: %s", i+1, err.Error())
+		clientConn, listenErr := net.ListenPacket("udp4", "0.0.0.0:0")
+		if listenErr != nil {
+			b.Fatalf("Failed to allocate socket for client %d: %s", i+1, err)
 		}
-		defer clientConn.Close()
+		defer clientConn.Close() //nolint:errcheck
 
 		client, err := NewClient(&ClientConfig{
 			STUNServerAddr: serverAddr.String(),
@@ -637,35 +635,35 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 			LoggerFactory:  loggerFactory,
 		})
 		if err != nil {
-			b.Fatalf("cannot start client %d: %s", i+1, err.Error())
+			b.Fatalf("Failed to start client %d: %s", i+1, err)
 		}
 		defer client.Close()
 
-		if err := client.Listen(); err != nil {
-			b.Fatalf("client %d cannot listen: %s", i+1, err.Error())
+		if listenErr := client.Listen(); listenErr != nil {
+			b.Fatalf("Client %d cannot listen: %s", i+1, listenErr)
 		}
 
 		// create an allocation
 		turnConn, err := client.Allocate()
 		if err != nil {
-			b.Fatalf("client %d cannot create allocation: %s", i+1, err.Error())
+			b.Fatalf("Client %d cannot create allocation: %s", i+1, err)
 		}
-		defer turnConn.Close()
+		defer turnConn.Close() //nolint:errcheck
 
 		clients[i] = turnConn
 	}
 
-	// benchmark
+	// Run benchmark
 	for i := 0; i < b.N; i++ {
 		for i := 0; i < clientNum; i++ {
 			if _, err := clients[i].WriteTo(testSeq, sinkAddr); err != nil {
-				b.Fatalf("client %d cannot send to TURN server: %s", i+1, err.Error())
+				b.Fatalf("Client %d cannot send to TURN server: %s", i+1, err)
 			}
 		}
 	}
 }
 
-// BenchmarkServer will benchmark the server with multiple client connections
+// BenchmarkServer will benchmark the server with multiple simultaneous client connections
 func BenchmarkServer(b *testing.B) {
 	for i := 1; i <= 4; i++ {
 		b.Run(fmt.Sprintf("client_num_%d", i), func(b *testing.B) {
