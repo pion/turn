@@ -31,6 +31,9 @@ You could also intercept these reads/writes if you want to filter traffic going 
 #### simple
 This example is the most minimal invocation of a Pion TURN instance possible. It has no custom behavior, and could be a good starting place for running your own TURN server.
 
+#### simple-multithreaded
+A multithreaded version of the `simple` Pion TURN server, demonstrating how to scale a Pion UDP TURN server to multiple CPU cores. By default, Pion TURN servers use a single UDP socket that is shared across all clients, which limits Pion UDP/TURN servers to a single CPU thread. This example passes a configurable number of UDP sockets to the TURN server, which share the same local `address:port` pair using the `SO_REUSEPORT` socket option. This then lets the server to create a separate readloop to drain each socket. The OS kernel will distribute packets received on the `address:port` pair across the sockets by the IP 5-tuple, which makes sure that all packets of a TURN allocation will be correctly processed in a single readloop.
+
 #### tcp
 This example demonstrates listening on TCP. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TCP and UDP.
 
