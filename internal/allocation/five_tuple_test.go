@@ -34,26 +34,26 @@ func TestFiveTupleEqual(t *testing.T) {
 		{
 			"Equal",
 			true,
-			&FiveTuple{UDP, srcAddr1, dstAddr1},
-			&FiveTuple{UDP, srcAddr1, dstAddr1},
+			NewFiveTuple(srcAddr1, dstAddr1, UDP),
+			NewFiveTuple(srcAddr1, dstAddr1, UDP),
 		},
 		{
 			"DifferentProtocol",
 			false,
-			&FiveTuple{UDP, srcAddr1, dstAddr1},
-			&FiveTuple{TCP, srcAddr1, dstAddr1},
+			NewFiveTuple(srcAddr1, dstAddr1, UDP),
+			NewFiveTuple(srcAddr1, dstAddr1, TCP),
 		},
 		{
 			"DifferentSrcAddr",
 			false,
-			&FiveTuple{UDP, srcAddr1, dstAddr1},
-			&FiveTuple{UDP, srcAddr2, dstAddr1},
+			NewFiveTuple(srcAddr1, dstAddr1, UDP),
+			NewFiveTuple(srcAddr2, dstAddr1, UDP),
 		},
 		{
 			"DifferentDstAddr",
 			false,
-			&FiveTuple{UDP, srcAddr1, dstAddr1},
-			&FiveTuple{UDP, srcAddr1, dstAddr2},
+			NewFiveTuple(srcAddr1, dstAddr1, UDP),
+			NewFiveTuple(srcAddr1, dstAddr2, UDP),
 		},
 	}
 

@@ -21,18 +21,18 @@ type allocationResponse struct {
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
 type Allocation struct {
-	RelayAddr           net.Addr
-	Protocol            Protocol
-	TurnSocket          net.PacketConn
-	RelaySocket         net.PacketConn
-	fiveTuple           *FiveTuple
-	permissionsLock     sync.RWMutex
-	permissions         map[string]*Permission
-	channelBindingsLock sync.RWMutex
-	channelBindings     []*ChannelBind
-	lifetimeTimer       *time.Timer
-	closed              chan interface{}
-	log                 logging.LeveledLogger
+	ClientAddr, RelayAddr net.Addr
+	Protocol              Protocol
+	TurnSocket            net.PacketConn
+	RelaySocket           net.PacketConn
+	fiveTuple             *FiveTuple
+	permissionsLock       sync.RWMutex
+	permissions           map[string]*Permission
+	channelBindingsLock   sync.RWMutex
+	channelBindings       []*ChannelBind
+	lifetimeTimer         *time.Timer
+	closed                chan interface{}
+	log                   logging.LeveledLogger
 
 	// some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
@@ -52,8 +52,9 @@ func addr2IPFingerprint(addr net.Addr) string {
 }
 
 // NewAllocation creates a new instance of NewAllocation.
-func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
+func NewAllocation(turnSocket net.PacketConn, clientAddr net.Addr, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
 	return &Allocation{
+		ClientAddr:  clientAddr,
 		TurnSocket:  turnSocket,
 		fiveTuple:   fiveTuple,
 		permissions: make(map[string]*Permission, 64),
@@ -262,7 +263,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			}
 			channelData.Encode()
 
-			if _, err = a.TurnSocket.WriteTo(channelData.Raw, a.fiveTuple.SrcAddr); err != nil {
+			if _, err = a.TurnSocket.WriteTo(channelData.Raw, a.ClientAddr); err != nil {
 				a.log.Errorf("Failed to send ChannelData from allocation %v %v", srcAddr, err)
 			}
 		} else if p := a.GetPermission(srcAddr); p != nil {
@@ -283,7 +284,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			a.log.Debugf("relaying message from %s to client at %s",
 				srcAddr.String(),
 				a.fiveTuple.SrcAddr.String())
-			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
+			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.ClientAddr); err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
 		} else {

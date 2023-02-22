@@ -3,6 +3,7 @@ package allocation
 import (
 	"fmt"
 	"net"
+	"net/netip"
 )
 
 // Protocol is an enum for relay protocol
@@ -22,12 +23,34 @@ const (
 // the server.
 type FiveTuple struct {
 	Protocol
-	SrcAddr, DstAddr net.Addr
+	SrcAddr, DstAddr netip.AddrPort
+}
+
+// NewFiveTuple returns a new FiveTuple taking a net.Addr for both the source and the destination
+// address.
+func NewFiveTuple(srcAddr, dstAddr net.Addr, proto Protocol) *FiveTuple {
+	var s, d netip.AddrPort
+
+	switch a := srcAddr.(type) {
+	case *net.UDPAddr:
+		s = a.AddrPort()
+	case *net.TCPAddr:
+		s = a.AddrPort()
+	}
+
+	switch a := dstAddr.(type) {
+	case *net.UDPAddr:
+		d = a.AddrPort()
+	case *net.TCPAddr:
+		d = a.AddrPort()
+	}
+
+	return &FiveTuple{SrcAddr: s, DstAddr: d, Protocol: proto}
 }
 
 // Equal asserts if two FiveTuples are equal
 func (f *FiveTuple) Equal(b *FiveTuple) bool {
-	return f.Fingerprint() == b.Fingerprint()
+	return f.Protocol == b.Protocol && f.SrcAddr == b.SrcAddr && f.DstAddr == b.DstAddr
 }
 
 // Fingerprint is the identity of a FiveTuple

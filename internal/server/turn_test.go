@@ -90,9 +90,8 @@ func TestAllocationLifeTime(t *testing.T) {
 		}
 		r.Nonces.Store(string(staticKey), time.Now())
 
-		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
-
-		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour)
+		fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
+		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.SrcAddr, r.Conn, 0, time.Hour)
 		assert.NoError(t, err)
 
 		assert.NotNil(t, r.AllocationManager.GetAllocation(fiveTuple))

@@ -27,7 +27,7 @@ type Manager struct {
 	lock sync.RWMutex
 	log  logging.LeveledLogger
 
-	allocations  map[string]*Allocation
+	allocations  map[FiveTuple]*Allocation
 	reservations []*reservation
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
@@ -48,7 +48,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 
 	return &Manager{
 		log:                config.LeveledLogger,
-		allocations:        make(map[string]*Allocation, 64),
+		allocations:        make(map[FiveTuple]*Allocation, 64),
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
@@ -59,7 +59,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
-	return m.allocations[fiveTuple.Fingerprint()]
+	return m.allocations[*fiveTuple]
 }
 
 // AllocationCount returns the number of existing allocations
@@ -83,13 +83,13 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, clientAddr net.Addr, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
 		return nil, errNilFiveTuple
-	case fiveTuple.SrcAddr == nil:
+	case !fiveTuple.SrcAddr.IsValid():
 		return nil, errNilFiveTupleSrcAddr
-	case fiveTuple.DstAddr == nil:
+	case !fiveTuple.DstAddr.IsValid():
 		return nil, errNilFiveTupleDstAddr
 	case turnSocket == nil:
 		return nil, errNilTurnSocket
@@ -100,7 +100,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	if a := m.GetAllocation(fiveTuple); a != nil {
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
-	a := NewAllocation(turnSocket, fiveTuple, m.log)
+	a := NewAllocation(turnSocket, clientAddr, fiveTuple, m.log)
 
 	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
 	if err != nil {
@@ -117,7 +117,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	})
 
 	m.lock.Lock()
-	m.allocations[fiveTuple.Fingerprint()] = a
+	m.allocations[*fiveTuple] = a
 	m.lock.Unlock()
 
 	go a.packetHandler(m)
@@ -126,11 +126,9 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 
 // DeleteAllocation removes an allocation
 func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
-	fingerprint := fiveTuple.Fingerprint()
-
 	m.lock.Lock()
-	allocation := m.allocations[fingerprint]
-	delete(m.allocations, fingerprint)
+	allocation := m.allocations[*fiveTuple]
+	delete(m.allocations, *fiveTuple)
 	m.lock.Unlock()
 
 	if allocation == nil {

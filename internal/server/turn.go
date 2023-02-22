@@ -24,11 +24,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		return err
 	}
 
-	fiveTuple := &allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	}
+	fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
 	requestedPort := 0
 	reservationToken := ""
 
@@ -120,6 +116,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	lifetimeDuration := allocationLifeTime(m)
 	a, err := r.AllocationManager.CreateAllocation(
 		fiveTuple,
+		r.SrcAddr,
 		r.Conn,
 		requestedPort,
 		lifetimeDuration)
@@ -181,11 +178,7 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 	}
 
 	lifetimeDuration := allocationLifeTime(m)
-	fiveTuple := &allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	}
+	fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
 
 	if lifetimeDuration != 0 {
 		a := r.AllocationManager.GetAllocation(fiveTuple)
@@ -209,11 +202,8 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("received CreatePermission from %s", r.SrcAddr.String())
 
-	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	})
+	fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
+	a := r.AllocationManager.GetAllocation(fiveTuple)
 	if a == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
@@ -263,11 +253,9 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 
 func handleSendIndication(r Request, m *stun.Message) error {
 	r.Log.Debugf("received SendIndication from %s", r.SrcAddr.String())
-	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	})
+
+	fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
+	a := r.AllocationManager.GetAllocation(fiveTuple)
 	if a == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
@@ -297,11 +285,8 @@ func handleSendIndication(r Request, m *stun.Message) error {
 func handleChannelBindRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("received ChannelBindRequest from %s", r.SrcAddr.String())
 
-	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	})
+	fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
+	a := r.AllocationManager.GetAllocation(fiveTuple)
 	if a == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
@@ -351,11 +336,8 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 func handleChannelData(r Request, c *proto.ChannelData) error {
 	r.Log.Debugf("received ChannelData from %s", r.SrcAddr.String())
 
-	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
-		SrcAddr:  r.SrcAddr,
-		DstAddr:  r.Conn.LocalAddr(),
-		Protocol: allocation.UDP,
-	})
+	fiveTuple := allocation.NewFiveTuple(r.SrcAddr, r.Conn.LocalAddr(), allocation.UDP)
+	a := r.AllocationManager.GetAllocation(fiveTuple)
 	if a == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
