@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/md5" //nolint:gosec,gci
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -16,7 +17,6 @@ import (
 const (
 	maximumAllocationLifetime = time.Hour // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
 	nonceLifetime             = time.Hour // https://tools.ietf.org/html/rfc5766#section-4
-
 )
 
 func randSeq(n int) string {
@@ -46,6 +46,10 @@ func buildAndSend(conn net.PacketConn, dst net.Addr, attrs ...stun.Setter) error
 		return err
 	}
 	_, err = conn.WriteTo(msg.Raw, dst)
+	if errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+
 	return err
 }
 
