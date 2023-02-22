@@ -9,7 +9,7 @@ import (
 )
 
 // ChannelBind represents a TURN Channel
-// https://tools.ietf.org/html/rfc5766#section-2.5
+// See: https://tools.ietf.org/html/rfc5766#section-2.5
 type ChannelBind struct {
 	Peer   net.Addr
 	Number proto.ChannelNumber

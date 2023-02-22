@@ -58,20 +58,20 @@ type UDPConnConfig struct {
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
 // compatible with net.PacketConn and net.Conn
 type UDPConn struct {
-	obs               UDPConnObserver       // read-only
-	relayedAddr       net.Addr              // read-only
-	permMap           *permissionMap        // thread-safe
-	bindingMgr        *bindingManager       // thread-safe
-	integrity         stun.MessageIntegrity // read-only
-	_nonce            stun.Nonce            // needs mutex x
-	_lifetime         time.Duration         // needs mutex x
-	readCh            chan *inboundData     // thread-safe
-	closeCh           chan struct{}         // thread-safe
-	readTimer         *time.Timer           // thread-safe
-	refreshAllocTimer *PeriodicTimer        // thread-safe
-	refreshPermsTimer *PeriodicTimer        // thread-safe
-	mutex             sync.RWMutex          // thread-safe
-	log               logging.LeveledLogger // read-only
+	obs               UDPConnObserver       // Read-only
+	relayedAddr       net.Addr              // Read-only
+	permMap           *permissionMap        // Thread-safe
+	bindingMgr        *bindingManager       // Thread-safe
+	integrity         stun.MessageIntegrity // Read-only
+	_nonce            stun.Nonce            // Needs mutex x
+	_lifetime         time.Duration         // Needs mutex x
+	readCh            chan *inboundData     // Thread-safe
+	closeCh           chan struct{}         // Thread-safe
+	readTimer         *time.Timer           // Thread-safe
+	refreshAllocTimer *PeriodicTimer        // Thread-safe
+	refreshPermsTimer *PeriodicTimer        // Thread-safe
+	mutex             sync.RWMutex          // Thread-safe
+	log               logging.LeveledLogger // Read-only
 }
 
 // NewUDPConn creates a new instance of UDPConn
@@ -158,7 +158,7 @@ func (c *UDPConn) createPermission(perm *permission, addr net.Addr) error {
 	defer perm.mutex.Unlock()
 
 	if perm.state() == permStateIdle {
-		// punch a hole! (this would block a bit..)
+		// Punch a hole! (this would block a bit..)
 		if err := c.CreatePermissions(addr); err != nil {
 			c.permMap.delete(addr)
 			return err
@@ -180,7 +180,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 		return 0, errUDPAddrCast
 	}
 
-	// check if we have a permission for the destination IP addr
+	// Check if we have a permission for the destination IP addr
 	perm, ok := c.permMap.find(addr)
 	if !ok {
 		perm = &permission{}
@@ -203,7 +203,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 		return 0, err
 	}
 
-	// bind channel
+	// Bind channel
 	b, ok := c.bindingMgr.findByAddr(addr)
 	if !ok {
 		b = c.bindingMgr.create(addr)
@@ -213,12 +213,12 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 
 	if bindSt == bindingStateIdle || bindSt == bindingStateRequest || bindSt == bindingStateFailed {
 		func() {
-			// block only callers with the same binding until
+			// Block only callers with the same binding until
 			// the binding transaction has been complete
 			b.muBind.Lock()
 			defer b.muBind.Unlock()
 
-			// binding state may have been changed while waiting. check again.
+			// Binding state may have been changed while waiting. check again.
 			if b.state() == bindingStateIdle {
 				b.setState(bindingStateRequest)
 				go func() {
@@ -226,7 +226,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 					if err2 != nil {
 						c.log.Warnf("bind() failed: %s", err2.Error())
 						b.setState(bindingStateFailed)
-						// keep going...
+						// Keep going...
 					} else {
 						b.setState(bindingStateReady)
 					}
@@ -248,14 +248,14 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 			return 0, err
 		}
 
-		// indication has no transaction (fire-and-forget)
+		// Indication has no transaction (fire-and-forget)
 
 		return c.obs.WriteTo(msg.Raw, c.obs.TURNServerAddr())
 	}
 
-	// binding is either ready
+	// Binding is either ready
 
-	// check if the binding needs a refresh
+	// Check if the binding needs a refresh
 	func() {
 		b.muBind.Lock()
 		defer b.muBind.Unlock()
@@ -267,7 +267,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 				if err != nil {
 					c.log.Warnf("bind() for refresh failed: %s", err.Error())
 					b.setState(bindingStateFailed)
-					// keep going...
+					// Keep going...
 				} else {
 					b.setRefreshedAt(time.Now())
 					b.setState(bindingStateReady)
@@ -276,7 +276,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 		}
 	}()
 
-	// send via ChannelData
+	// Send via ChannelData
 	_, err = c.sendChannelData(p, b.number)
 	if err != nil {
 		return 0, err
@@ -568,7 +568,7 @@ func (c *UDPConn) onRefreshTimers(id int) {
 	case timerIDRefreshAlloc:
 		var err error
 		lifetime := c.lifetime()
-		// limit the max retries on errTryAgain to 3
+		// Limit the max retries on errTryAgain to 3
 		// when stale nonce returns, sencond retry should succeed
 		for i := 0; i < maxRetryAttempts; i++ {
 			err = c.refreshAllocation(lifetime, false)

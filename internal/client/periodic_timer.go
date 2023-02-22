@@ -31,7 +31,7 @@ func (t *PeriodicTimer) Start() bool {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
-	// this is a noop if the timer is always running
+	// This is a noop if the timer is always running
 	if t.stopFunc != nil {
 		return false
 	}

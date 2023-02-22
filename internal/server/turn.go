@@ -10,7 +10,7 @@ import (
 	"github.com/pion/turn/v2/internal/proto"
 )
 
-// // https://tools.ietf.org/html/rfc5766#section-6.2
+// See: https://tools.ietf.org/html/rfc5766#section-6.2
 func handleAllocateRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("received AllocateRequest from %s", r.SrcAddr.String())
 
@@ -44,7 +44,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 			msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch})
 			return buildAndSendErr(r.Conn, r.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
 		}
-		// a retry allocation
+		// A retry allocation
 		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(attrs, messageIntegrity)...)
 		return buildAndSend(r.Conn, r.SrcAddr, msg...)
 	}

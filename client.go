@@ -16,8 +16,8 @@ import (
 
 const (
 	defaultRTO        = 200 * time.Millisecond
-	maxRtxCount       = 7              // total 7 requests (Rc)
-	maxDataBufferSize = math.MaxUint16 // message size limit for Chromium
+	maxRtxCount       = 7              // Total 7 requests (Rc)
+	maxDataBufferSize = math.MaxUint16 // Message size limit for Chromium
 )
 
 //              interval [msec]
@@ -45,23 +45,23 @@ type ClientConfig struct {
 
 // Client is a STUN server client
 type Client struct {
-	conn           net.PacketConn // read-only
-	stunServerAddr net.Addr       // read-only
-	turnServerAddr net.Addr       // read-only
+	conn           net.PacketConn // Read-only
+	stunServerAddr net.Addr       // Read-only
+	turnServerAddr net.Addr       // Read-only
 
-	username      stun.Username          // read-only
-	password      string                 // read-only
-	realm         stun.Realm             // read-only
-	integrity     stun.MessageIntegrity  // read-only
-	software      stun.Software          // read-only
-	trMap         *client.TransactionMap // thread-safe
-	rto           time.Duration          // read-only
-	relayedConn   *client.UDPConn        // protected by mutex ***
-	allocTryLock  client.TryLock         // thread-safe
-	listenTryLock client.TryLock         // thread-safe
-	mutex         sync.RWMutex           // thread-safe
-	mutexTrMap    sync.Mutex             // thread-safe
-	log           logging.LeveledLogger  // read-only
+	username      stun.Username          // Read-only
+	password      string                 // Read-only
+	realm         stun.Realm             // Read-only
+	integrity     stun.MessageIntegrity  // Read-only
+	software      stun.Software          // Read-only
+	trMap         *client.TransactionMap // Thread-safe
+	rto           time.Duration          // Read-only
+	relayedConn   *client.UDPConn        // Protected by mutex ***
+	allocTryLock  client.TryLock         // Thread-safe
+	listenTryLock client.TryLock         // Thread-safe
+	mutex         sync.RWMutex           // Thread-safe
+	mutexTrMap    sync.Mutex             // Thread-safe
+	log           logging.LeveledLogger  // Tead-only
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
@@ -381,10 +381,10 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	case proto.IsChannelData(data):
 		return true, c.handleChannelData(data)
 	case from.String() == c.stunServerAddr.String():
-		// received from STUN server but it is not a STUN message
+		// Received from STUN server but it is not a STUN message
 		return true, errNonSTUNMessage
 	default:
-		// assume, this is an application data
+		// Assume, this is an application data
 		c.log.Tracef("non-STUN/TURN packet, unhandled")
 	}
 
@@ -425,7 +425,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 			relayedConn := c.relayedUDPConn()
 			if relayedConn == nil {
 				c.log.Debug("no relayed conn allocated")
-				return nil // silently discard
+				return nil // Silently discard
 			}
 
 			relayedConn.HandleInbound(data, from)
@@ -444,7 +444,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	tr, ok := c.trMap.Find(trKey)
 	if !ok {
 		c.mutexTrMap.Unlock()
-		// silently discard
+		// Silently discard
 		c.log.Debugf("no transaction for %s", msg.String())
 		return nil
 	}
@@ -477,7 +477,7 @@ func (c *Client) handleChannelData(data []byte) error {
 	relayedConn := c.relayedUDPConn()
 	if relayedConn == nil {
 		c.log.Debug("no relayed conn allocated")
-		return nil // silently discard
+		return nil // Silently discard
 	}
 
 	addr, ok := relayedConn.FindAddrByChannelNumber(uint16(chData.Number))
@@ -497,11 +497,11 @@ func (c *Client) onRtxTimeout(trKey string, nRtx int) {
 
 	tr, ok := c.trMap.Find(trKey)
 	if !ok {
-		return // already gone
+		return // Already gone
 	}
 
 	if nRtx == maxRtxCount {
-		// all retransmissions failed
+		// All retransmissions failed
 		c.trMap.Delete(trKey)
 		if !tr.WriteResult(client.TransactionResult{
 			Err: fmt.Errorf("%w %s", errAllRetransmissionsFailed, trKey),

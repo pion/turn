@@ -72,7 +72,7 @@ func TestClientWithSTUN(t *testing.T) {
 		}
 		defer c.Close()
 
-		// simple channel fo go routine start signaling
+		// Simple channel fo go routine start signaling
 		started := make(chan struct{})
 		finished := make(chan struct{})
 		var err1 error
@@ -87,8 +87,7 @@ func TestClientWithSTUN(t *testing.T) {
 			close(finished)
 		}()
 
-		// block until go routine is started to make two almost parallel requests
-
+		// Block until go routine is started to make two almost parallel requests
 		<-started
 
 		if _, err = c.SendBindingRequestTo(to); err != nil {
@@ -120,7 +119,7 @@ func TestClientWithSTUN(t *testing.T) {
 		to, err := net.ResolveUDPAddr("udp4", "127.0.0.1:9")
 		assert.NoError(t, err)
 
-		c.rto = 10 * time.Millisecond // force short timeout
+		c.rto = 10 * time.Millisecond // Force short timeout
 
 		_, err = c.SendBindingRequestTo(to)
 		assert.NotNil(t, err)
@@ -132,12 +131,6 @@ func TestClientWithSTUN(t *testing.T) {
 // The subsequent Write on the allocation will cause a CreatePermission
 // which will be forced to handle a stale nonce response
 func TestClientNonceExpiration(t *testing.T) {
-	// lim := test.TimeOut(time.Second * 30)
-	// defer lim.Stop()
-
-	// report := test.CheckRoutines(t)
-	// defer report()
-
 	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
 	assert.NoError(t, err)
 

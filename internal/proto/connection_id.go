@@ -33,7 +33,7 @@ func (c *ConnectionID) GetFrom(m *stun.Message) error {
 	if err = stun.CheckSize(stun.AttrConnectionID, len(v), connectionIDSize); err != nil {
 		return err
 	}
-	_ = v[connectionIDSize-1] // asserting length
+	_ = v[connectionIDSize-1] // Asserting length
 	*(*uint32)(c) = binary.BigEndian.Uint32(v)
 	return nil
 }
