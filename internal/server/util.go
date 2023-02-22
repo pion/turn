@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	maximumAllocationLifetime = time.Hour // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
-	nonceLifetime             = time.Hour // https://tools.ietf.org/html/rfc5766#section-4
+	maximumAllocationLifetime = time.Hour // See: https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
+	nonceLifetime             = time.Hour // See: https://tools.ietf.org/html/rfc5766#section-4
 )
 
 func randSeq(n int) string {

@@ -202,7 +202,7 @@ func (m *Manager) GetRandomEvenPort() (int, error) {
 // GrantPermission handles permission requests by calling the permission handler callback
 // associated with the TURN server listener socket
 func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
-	// no permission handler: open
+	// No permission handler: open
 	if m.permissionHandler == nil {
 		return nil
 	}

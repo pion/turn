@@ -44,7 +44,7 @@ func TestManager(t *testing.T) {
 	}
 }
 
-// test invalid Allocation creations
+// Test invalid Allocation creations
 func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
@@ -60,7 +60,7 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// test valid Allocation creations
+// Test valid Allocation creations
 func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
@@ -75,7 +75,7 @@ func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// test that two allocations can't be created with the same FiveTuple
+// Test that two allocations can't be created with the same FiveTuple
 func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
@@ -109,7 +109,7 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// test that allocation should be closed if timeout
+// Test that allocation should be closed if timeout
 func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
@@ -128,7 +128,7 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 		allocations[index] = a
 	}
 
-	// make sure all allocations timeout
+	// Make sure all allocations timeout
 	time.Sleep(lifetime + time.Second)
 	for _, alloc := range allocations {
 		if !isClose(alloc.RelaySocket) {
@@ -137,7 +137,7 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// test for manager close
+// Test for manager close
 func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
@@ -149,7 +149,7 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 	a2, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute)
 	allocations[1] = a2
 
-	// make a1 timeout
+	// Make a1 timeout
 	time.Sleep(2 * time.Second)
 
 	if err := m.Close(); err != nil {

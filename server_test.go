@@ -115,6 +115,7 @@ func TestServer(t *testing.T) {
 		assert.Equal(t, server.inboundMTU, 2000)
 		assert.NoError(t, server.Close())
 	})
+
 	t.Run("Filter on client address and peer IP", func(t *testing.T) {
 		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
 		assert.NoError(t, err)
@@ -144,7 +145,7 @@ func TestServer(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		// enforce corrent client IP and port
+		// Enforce correct client IP and port
 		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321")
 		assert.NoError(t, err)
 
@@ -171,7 +172,7 @@ func TestServer(t *testing.T) {
 		blackAddr, errB1 := net.ResolveUDPAddr("udp", "127.0.0.5:12345")
 		assert.NoError(t, errB1, "should succeed")
 
-		// explicit CreatePermission
+		// Explicit CreatePermission
 		err = client.CreatePermission(whiteAddr)
 		assert.NoError(t, err, "grant permission for whitelisted peer")
 
@@ -184,11 +185,11 @@ func TestServer(t *testing.T) {
 		err = client.CreatePermission(blackAddr)
 		assert.ErrorContains(t, err, "error", "deny permission for repeated blacklisted peer address")
 
-		// rg0now: isn't this a cornercase in the spec?
+		// Isn't this a corner case in the spec?
 		err = client.CreatePermission(whiteAddr, blackAddr)
 		assert.ErrorContains(t, err, "error", "deny permission for mixed whitelisted and blacklisted peers")
 
-		// implicit CreatePermission for ChannelBindRequests: WriteTo always tries to bind a channel
+		// Implicit CreatePermission for ChannelBindRequests: WriteTo always tries to bind a channel
 		_, err = relayConn.WriteTo([]byte("Hello"), whiteAddr)
 		assert.NoError(t, err, "write to whitelisted peer address succeeds - 1")
 
@@ -207,14 +208,14 @@ func TestServer(t *testing.T) {
 		_, err = relayConn.WriteTo([]byte("Hello"), blackAddr)
 		assert.ErrorContains(t, err, "error", "write to blacklisted peer address fails - 3")
 
-		// let the previous transaction terminate
+		// Let the previous transaction terminate
 		time.Sleep(200 * time.Millisecond)
 		assert.NoError(t, relayConn.Close())
 
 		client.Close()
 		assert.NoError(t, conn.Close())
 
-		// enforce filtered source address
+		// Enforce filtered source address
 		conn2, err := net.ListenPacket("udp4", "127.0.0.133:54321")
 		assert.NoError(t, err)
 
@@ -233,14 +234,14 @@ func TestServer(t *testing.T) {
 		relayConn2, err := client2.Allocate()
 		assert.NoError(t, err)
 
-		// explicit CreatePermission
+		// Explicit CreatePermission
 		err = client2.CreatePermission(whiteAddr)
 		assert.ErrorContains(t, err, "error", "deny permission from filtered source to whitelisted peer")
 
 		err = client2.CreatePermission(blackAddr)
 		assert.ErrorContains(t, err, "error", "deny permission from filtered source to blacklisted peer")
 
-		// implicit CreatePermission for ChannelBindRequests: WriteTo always tries to bind a channel
+		// Implicit CreatePermission for ChannelBindRequests: WriteTo always tries to bind a channel
 		_, err = relayConn2.WriteTo([]byte("Hello"), whiteAddr)
 		assert.ErrorContains(t, err, "error", "write from filtered source to whitelisted peer fails - 1")
 
@@ -259,7 +260,7 @@ func TestServer(t *testing.T) {
 		_, err = relayConn2.WriteTo([]byte("Hello"), blackAddr)
 		assert.ErrorContains(t, err, "error", "write from filtered source to blacklisted peer fails - 3")
 
-		// let the previous transaction terminate
+		// Let the previous transaction terminate
 		time.Sleep(200 * time.Millisecond)
 		assert.NoError(t, relayConn2.Close())
 
@@ -298,7 +299,7 @@ func buildVNet() (*VNet, error) {
 	}
 
 	net0, err := vnet.NewNet(&vnet.NetConfig{
-		StaticIP: "1.2.3.4", // will be assigned to eth0
+		StaticIP: "1.2.3.4", // Will be assigned to eth0
 	})
 	if err != nil {
 		return nil, err
@@ -310,7 +311,7 @@ func buildVNet() (*VNet, error) {
 	}
 
 	net1, err := vnet.NewNet(&vnet.NetConfig{
-		StaticIP: "1.2.3.5", // will be assigned to eth0
+		StaticIP: "1.2.3.5", // Will be assigned to eth0
 	})
 	if err != nil {
 		return nil, err
@@ -323,7 +324,7 @@ func buildVNet() (*VNet, error) {
 
 	// LAN
 	lan, err := vnet.NewRouter(&vnet.RouterConfig{
-		StaticIP: "5.6.7.8", // this router's external IP on eth0
+		StaticIP: "5.6.7.8", // This router's external IP on eth0
 		CIDR:     "192.168.0.0/24",
 		NATType: &vnet.NATType{
 			MappingBehavior:   vnet.EndpointIndependent,
@@ -352,7 +353,7 @@ func buildVNet() (*VNet, error) {
 		return nil, err
 	}
 
-	// start server...
+	// Start server...
 	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
 
 	udpListener, err := net0.ListenPacket("udp4", "0.0.0.0:3478")
@@ -383,7 +384,7 @@ func buildVNet() (*VNet, error) {
 		return nil, err
 	}
 
-	// register host names
+	// Register host names
 	err = wan.AddHost("stun.pion.ly", "1.2.3.4")
 	if err != nil {
 		return nil, err
@@ -485,7 +486,7 @@ func TestServerVNet(t *testing.T) {
 		echoConn, err := v.net1.ListenPacket("udp4", "1.2.3.5:5678")
 		assert.NoError(t, err)
 
-		// ensure allocation is counted
+		// Ensure allocation is counted
 		assert.Equal(t, 1, v.server.AllocationCount())
 
 		go func() {
@@ -496,11 +497,11 @@ func TestServerVNet(t *testing.T) {
 					break
 				}
 
-				// verify the message was received from the relay address
+				// Verify the message was received from the relay address
 				assert.Equal(t, conn.LocalAddr().String(), from.String(), "should match")
 				assert.Equal(t, "Hello", string(buf[:n]), "should match")
 
-				// echo the data
+				// Echo the data
 				_, err2 = echoConn.WriteTo(buf[:n], from)
 				assert.NoError(t, err2)
 			}
@@ -516,7 +517,7 @@ func TestServerVNet(t *testing.T) {
 			_, from, err2 := conn.ReadFrom(buf)
 			assert.NoError(t, err2)
 
-			// verify the message was received from the relay address
+			// Verify the message was received from the relay address
 			assert.Equal(t, echoConn.LocalAddr().String(), from.String(), "should match")
 
 			time.Sleep(100 * time.Millisecond)
@@ -632,8 +633,8 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 		defer clientConn.Close() //nolint:errcheck
 
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: serverAddr.String(),
-			TURNServerAddr: serverAddr.String(),
+			STUNServerAddr: serverAddr,
+			TURNServerAddr: serverAddr,
 			Conn:           clientConn,
 			Username:       "user",
 			Password:       "pass",
@@ -649,7 +650,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 			b.Fatalf("Client %d cannot listen: %s", i+1, listenErr)
 		}
 
-		// create an allocation
+		// Create an allocation
 		turnConn, err := client.Allocate()
 		if err != nil {
 			b.Fatalf("Client %d cannot create allocation: %s", i+1, err)

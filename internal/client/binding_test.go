@@ -21,7 +21,8 @@ func TestBindingManager(t *testing.T) {
 			n = m.assignChannelNumber()
 			assert.Equal(t, 0x7ff0+i, n, "should match")
 		}
-		// back to min
+
+		// Back to min
 		n = m.assignChannelNumber()
 		assert.Equal(t, minChannelNumber, n, "should match")
 	})

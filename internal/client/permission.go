@@ -14,8 +14,8 @@ const (
 )
 
 type permission struct {
-	st    permState    // thread-safe (atomic op)
-	mutex sync.RWMutex // thread-safe
+	st    permState    // Thread-safe (atomic op)
+	mutex sync.RWMutex // Thread-safe
 }
 
 func (p *permission) setState(state permState) {

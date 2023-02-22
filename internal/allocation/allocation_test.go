@@ -221,7 +221,7 @@ func subTestAllocationRefresh(t *testing.T) {
 	a.Refresh(0)
 	wg.Wait()
 
-	// lifetimeTimer has expired
+	// LifetimeTimer has expired
 	assert.False(t, a.lifetimeTimer.Stop())
 }
 
@@ -235,10 +235,10 @@ func subTestAllocationClose(t *testing.T) {
 
 	a := NewAllocation(nil, nil, nil)
 	a.RelaySocket = l
-	// add mock lifetimeTimer
+	// Add mock lifetimeTimer
 	a.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
 
-	// add channel
+	// Add channel
 	addr, err := net.ResolveUDPAddr(network, "127.0.0.1:3478")
 	if err != nil {
 		t.Fatalf("failed to resolve: %s", err)
@@ -247,7 +247,7 @@ func subTestAllocationClose(t *testing.T) {
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 	_ = a.AddChannelBind(c, proto.DefaultLifetime)
 
-	// add permission
+	// Add permission
 	a.AddPermission(NewPermission(addr, nil))
 
 	err = a.Close()
@@ -260,20 +260,20 @@ func subTestPacketHandler(t *testing.T) {
 
 	m, _ := newTestManager()
 
-	// turn server initialization
+	// TURN server initialization
 	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0")
 	if err != nil {
 		panic(err)
 	}
 
-	// client listener initialization
+	// Client listener initialization
 	clientListener, err := net.ListenPacket(network, "127.0.0.1:0")
 	if err != nil {
 		panic(err)
 	}
 
 	dataCh := make(chan []byte)
-	// client listener read data
+	// Client listener read data
 	go func() {
 		buffer := make([]byte, rtpMTU)
 		for {
@@ -303,9 +303,9 @@ func subTestPacketHandler(t *testing.T) {
 		panic(err)
 	}
 
-	// add permission with peer1 address
+	// Add permission with peer1 address
 	a.AddPermission(NewPermission(peerListener1.LocalAddr(), m.log))
-	// add channel with min channel number and peer2 address
+	// Add channel with min channel number and peer2 address
 	channelBind := NewChannelBind(proto.MinChannelNumber, peerListener2.LocalAddr(), m.log)
 	_ = a.AddChannelBind(channelBind, proto.DefaultLifetime)
 
@@ -313,12 +313,12 @@ func subTestPacketHandler(t *testing.T) {
 	relayAddrWithHostStr := fmt.Sprintf("127.0.0.1:%d", port)
 	relayAddrWithHost, _ := net.ResolveUDPAddr(network, relayAddrWithHostStr)
 
-	// test for permission and data message
+	// Test for permission and data message
 	targetText := "permission"
 	_, _ = peerListener1.WriteTo([]byte(targetText), relayAddrWithHost)
 	data := <-dataCh
 
-	// resolve stun data message
+	// Resolve stun data message
 	assert.True(t, stun.IsMessage(data), "should be stun message")
 
 	var msg stun.Message
@@ -330,12 +330,12 @@ func subTestPacketHandler(t *testing.T) {
 	assert.Nil(t, err, "get data from stun message failed")
 	assert.Equal(t, targetText, string(msgData), "get message doesn't equal the target text")
 
-	// test for channel bind and channel data
+	// Test for channel bind and channel data
 	targetText2 := "channel bind"
 	_, _ = peerListener2.WriteTo([]byte(targetText2), relayAddrWithHost)
 	data = <-dataCh
 
-	// resolve channel data
+	// Resolve channel data
 	assert.True(t, proto.IsChannelData(data), "should be channel data")
 
 	channelData := proto.ChannelData{
@@ -346,7 +346,7 @@ func subTestPacketHandler(t *testing.T) {
 	assert.Equal(t, channelBind.Number, channelData.Number, "get channel data's number is invalid")
 	assert.Equal(t, targetText2, string(channelData.Data), "get data doesn't equal the target text.")
 
-	// listeners close
+	// Listeners close
 	_ = m.Close()
 	_ = clientListener.Close()
 	_ = peerListener1.Close()
