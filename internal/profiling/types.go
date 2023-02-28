@@ -22,4 +22,5 @@ type Profiling struct {
 	task      *trace.Task
 	basectx   context.Context
 	mLogger   logging.LeveledLogger
+	mRegion   *trace.Region
 }

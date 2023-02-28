@@ -46,7 +46,7 @@ func HandleRequest(r Request) error {
 
 func handleDataPacket(r Request) error {
 	r.Log.Debugf("received DataPacket from %s", r.SrcAddr.String())
-	mRegion := r.Profiler.SetRegion("DataPacket")
+	r.Profiler.SetRegion("DataPacket")
 	c := proto.ChannelData{Raw: r.Buff}
 	if err := c.Decode(); err != nil {
 		return fmt.Errorf("%w: %v", errFailedToCreateChannelData, err)
@@ -56,13 +56,13 @@ func handleDataPacket(r Request) error {
 	if err != nil {
 		err = fmt.Errorf("%w from %v: %v", errUnableToHandleChannelData, r.SrcAddr, err)
 	}
-	mRegion.End()
+	r.Profiler.EndRegion()
 	return err
 }
 
 func handleTURNPacket(r Request) error {
 	r.Log.Debug("handleTURNPacket")
-	mRegion := r.Profiler.SetRegion("TURNPacket")
+	r.Profiler.SetRegion("TURNPacket")
 	m := &stun.Message{Raw: append([]byte{}, r.Buff...)}
 	if err := m.Decode(); err != nil {
 		return fmt.Errorf("%w: %v", errFailedToCreateSTUNPacket, err)
@@ -77,7 +77,7 @@ func handleTURNPacket(r Request) error {
 	if err != nil {
 		return fmt.Errorf("%w %v-%v from %v: %v", errFailedToHandle, m.Type.Method, m.Type.Class, r.SrcAddr, err)
 	}
-	mRegion.End()
+	r.Profiler.EndRegion()
 	return nil
 }
 

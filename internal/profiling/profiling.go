@@ -33,8 +33,18 @@ func (p *Profiling) OpenTracing(filename string, topLevel string) {
 	fmt.Printf("Opened task, with output to file %s\n", filename)
 }
 
-func (p *Profiling) SetRegion(regionname string) *trace.Region {
-	return trace.StartRegion(p.basectx, regionname)
+// SetRegion starts a trace region with a specified name. Note this MUST be closed before another region is entered.
+func (p *Profiling) SetRegion(regionname string) {
+	p.mRegion = trace.StartRegion(p.basectx, regionname)
+	return
+}
+
+// EndRegion ends the open trace region .
+func (p *Profiling) EndRegion() {
+	if p.mRegion != nil {
+		p.mRegion.End()
+	}
+	return
 }
 
 // End the task, Stop tracing and close the tracing file.

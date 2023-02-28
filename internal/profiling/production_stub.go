@@ -4,7 +4,6 @@ package profiling
 
 import (
 	"fmt"
-	"runtime/trace"
 
 	"github.com/pion/logging"
 )
@@ -26,4 +25,7 @@ func (p *Profiling) OpenTracing(filename string, topLevel string) {}
 func (p *Profiling) CloseTracing() {}
 
 // SetRegion provides a stub  function when in production
-func (p *Profiling) SetRegion(regionname string) *trace.Region { return &trace.Region{} }
+func (p *Profiling) SetRegion(regionname string) {}
+
+// EndRegion provides a stub function when in production
+func (p *Profiling) EndRegion() {}
