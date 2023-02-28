@@ -18,8 +18,6 @@ const (
 	defaultInboundMTU = 1600
 )
 
-//var mProfiler *profiling.Profiling
-
 // Server is an instance of the Pion TURN Server
 type Server struct {
 	log                logging.LeveledLogger

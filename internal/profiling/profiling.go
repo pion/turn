@@ -10,6 +10,7 @@ import (
 	"runtime/trace"
 )
 
+// SayHello just provides easy indication of which version has been included
 func SayHello() {
 	fmt.Println("welcome to debug")
 }
