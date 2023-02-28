@@ -9,6 +9,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/turn/v2/internal/allocation"
+	"github.com/pion/turn/v2/internal/profiling"
 	"github.com/pion/turn/v2/internal/proto"
 	"github.com/pion/turn/v2/internal/server"
 )
@@ -16,6 +17,8 @@ import (
 const (
 	defaultInboundMTU = 1600
 )
+
+//var mProfiler *profiling.Profiling
 
 // Server is an instance of the Pion TURN Server
 type Server struct {
@@ -29,6 +32,7 @@ type Server struct {
 	listenerConfigs    []ListenerConfig
 	allocationManagers []*allocation.Manager
 	inboundMTU         int
+	mProfiler          *profiling.Profiling
 }
 
 // NewServer creates the Pion TURN server
@@ -63,6 +67,8 @@ func NewServer(config ServerConfig) (*Server, error) {
 	if s.channelBindTimeout == 0 {
 		s.channelBindTimeout = proto.DefaultLifetime
 	}
+
+	s.mProfiler = profiling.NewProfiling("trace.out", s.log)
 
 	for _, cfg := range s.packetConnConfigs {
 		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
@@ -109,7 +115,7 @@ func (s *Server) Close() error {
 			errors = append(errors, err)
 		}
 	}
-
+	s.mProfiler.CloseTracing()
 	if len(errors) == 0 {
 		return nil
 	}
@@ -190,6 +196,7 @@ func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manage
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,
 			Nonces:             s.nonces,
+			Profiler:           s.mProfiler,
 		}); err != nil {
 			s.log.Errorf("error when handling datagram: %v", err)
 		}
