@@ -50,12 +50,17 @@ You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
 
 ### RFCs
 #### Implemented
-* [RFC 5389: Session Traversal Utilities for NAT (STUN)](https://tools.ietf.org/html/rfc5389)
-* [RFC 5766: Traversal Using Relays around NAT (TURN)](https://tools.ietf.org/html/rfc5766)
+* **RFC 5389**: [Session Traversal Utilities for NAT (STUN)][rfc5389]
+* **RFC 5766**: [Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)][rfc5766]
 
 #### Planned
-* [RFC 6062: Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations](https://tools.ietf.org/html/rfc6062)
-* [RFC 6156: Traversal Using Relays around NAT (TURN) Extension for IPv6](https://tools.ietf.org/html/rfc6156)
+* **RFC 6062**: [Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations][rfc6062]
+* **RFC 6156**: [Traversal Using Relays around NAT (TURN) Extension for IPv6][rfc6156]
+
+[rfc5389]: https://tools.ietf.org/html/rfc5389
+[rfc5766]: https://tools.ietf.org/html/rfc5766
+[rfc6062]: https://tools.ietf.org/html/rfc6062
+[rfc6156]: https://tools.ietf.org/html/rfc6156
 
 ### Roadmap
 The library is used as a part of our WebRTC implementation. Please refer to that [roadmap](https://github.com/pion/webrtc/issues/9) to track our major milestones.
