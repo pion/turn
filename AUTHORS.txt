@@ -5,6 +5,7 @@
 # see https://github.com/pion/.goassets/blob/master/scripts/generate-authors.sh for the scripting
 Aaron France <aaron.l.france@gmail.com>
 Aleksandr Razumov <ar@gortc.io>
+anastasia <anastasia@plutoview.com>
 andrefsp <andrefsp@gmail.com>
 Antonio Sorrentino <ansorrenltd@gmail.com>
 Atsushi Watanabe <atsushi.w@ieee.org>
