@@ -460,7 +460,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				return err
 			}
 
-			c.log.Debugf("data indication received from %s", from.String())
+			c.log.Tracef("data indication received from %s", from.String())
 
 			relayedConn := c.relayedUDPConn()
 			if relayedConn == nil {
