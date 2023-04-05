@@ -28,7 +28,7 @@ Pion TURN is a Go toolkit for building TURN servers and clients. We wrote it to 
 * **Safe** - Stability and safety is important for network services. Go provides everything we need.
 * **Scalable** - Create allocations and mutate state at runtime. Designed to make scaling easy.
 
-# Using
+### Using
 `pion/turn` is an API for building STUN/TURN clients and servers, not a binary you deploy then configure. It may require copying our examples and
 making minor modifications to fit your need, no knowledge of Go is required however. You may be able to download the pre-made binaries of our examples
 if you wish to get started quickly.
@@ -37,7 +37,7 @@ The advantage of this is that you don't need to deal with complicated config fil
 After you instantiate an instance of a Pion TURN server or client you interact with it like any library. The quickest way to get started is to look at the
 [examples](examples) or [GoDoc](https://godoc.org/github.com/pion/turn)
 
-# Examples
+### Examples
 We try to cover most common use cases in [examples](examples). If more examples could be helpful please file an issue, we are always looking
 to expand and improve `pion/turn` to make it easier for developers.
 
@@ -46,7 +46,7 @@ It is also very easy to [cross compile](https://dave.cheney.net/2015/08/22/cross
 
 You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
 
-# [FAQ](https://github.com/pion/webrtc/wiki/FAQ)
+### [FAQ](https://github.com/pion/webrtc/wiki/FAQ)
 
 ### RFCs
 #### Implemented
@@ -74,7 +74,7 @@ We are always looking to support **your projects**. Please reach out if you have
 If you need commercial support or don't want to use public methods you can contact us at [team@pion.ly](mailto:team@pion.ly)
 
 ### Contributing
-Check out the **[contributing wiki](https://github.com/pion/webrtc/wiki/Contributing)** to join the group of amazing people making this project possible: [AUTHORS.txt](./AUTHORS.txt)
+Check out the [contributing wiki](https://github.com/pion/webrtc/wiki/Contributing) to join the group of amazing people making this project possible: [AUTHORS.txt](./AUTHORS.txt)
 
 ### License
 MIT License - see [LICENSE](LICENSE) for full text
