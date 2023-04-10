@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http/httputil"
 	"sync"
 	"time"
 
@@ -146,7 +147,7 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 		go func() {
 			s.readLoop(NewSTUNConn(conn), am)
 
-			if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			if err := conn.Close(); err != nil && !errors.Is(err, httputil.ErrClosed) {
 				s.log.Errorf("failed to close conn: %s", err)
 			}
 		}()
