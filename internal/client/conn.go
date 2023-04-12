@@ -56,7 +56,7 @@ type UDPConnConfig struct {
 }
 
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
-// comatible with net.PacketConn and net.Conn
+// compatible with net.PacketConn and net.Conn
 type UDPConn struct {
 	obs               UDPConnObserver       // read-only
 	relayedAddr       net.Addr              // read-only

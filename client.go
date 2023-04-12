@@ -371,7 +371,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 
 	tr.StartRtxTimer(c.onRtxTimeout)
 
-	// If dontWait is true, get the transaction going and return immediately
+	// If ignoreResult is true, get the transaction going and return immediately
 	if ignoreResult {
 		return client.TransactionResult{}, nil
 	}
