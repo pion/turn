@@ -289,7 +289,7 @@ func handleSendIndication(r Request, m *stun.Message) error {
 
 	l, err := a.RelaySocket.WriteTo(dataAttr, msgDst)
 	if l != len(dataAttr) {
-		return fmt.Errorf("%w %d != %d (expected) err: %v", errShortWrite, l, len(dataAttr), err)
+		return fmt.Errorf("%w %d != %d (expected) err: %v", errShortWrite, l, len(dataAttr), err) //nolint:errorlint
 	}
 	return err
 }

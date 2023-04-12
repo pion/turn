@@ -385,7 +385,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 
 // OnDeallocated is called when de-allocation of relay address has been complete.
 // (Called by UDPConn)
-func (c *Client) OnDeallocated(relayedAddr net.Addr) {
+func (c *Client) OnDeallocated(net.Addr) {
 	c.setRelayedUDPConn(nil)
 }
 

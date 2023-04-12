@@ -194,7 +194,7 @@ func isClose(conn io.Closer) bool {
 	return closeErr != nil && strings.Contains(closeErr.Error(), "use of closed network connection")
 }
 
-func subTestGetRandomEvenPort(t *testing.T, turnSocket net.PacketConn) {
+func subTestGetRandomEvenPort(t *testing.T, _ net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
 

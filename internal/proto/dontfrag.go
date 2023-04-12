@@ -32,10 +32,7 @@ func (d *DontFragment) GetFrom(m *stun.Message) error {
 	if err != nil {
 		return err
 	}
-	if err = stun.CheckSize(stun.AttrDontFragment, len(v), dontFragmentSize); err != nil {
-		return err
-	}
-	return nil
+	return stun.CheckSize(stun.AttrDontFragment, len(v), dontFragmentSize)
 }
 
 // IsSet returns true if DONT-FRAGMENT attribute is set.
