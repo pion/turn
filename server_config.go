@@ -32,7 +32,7 @@ type RelayAddressGenerator interface {
 type PermissionHandler func(clientAddr net.Addr, peerIP net.IP) (ok bool)
 
 // DefaultPermissionHandler is convince function that grants permission to all peers
-func DefaultPermissionHandler(clientAddr net.Addr, peerIP net.IP) (ok bool) {
+func DefaultPermissionHandler(net.Addr, net.IP) (ok bool) {
 	return true
 }
 

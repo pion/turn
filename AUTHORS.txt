@@ -5,14 +5,17 @@
 # see https://github.com/pion/.goassets/blob/master/scripts/generate-authors.sh for the scripting
 Aaron France <aaron.l.france@gmail.com>
 Aleksandr Razumov <ar@gortc.io>
+anastasia <anastasia@plutoview.com>
 andrefsp <andrefsp@gmail.com>
 Antonio Sorrentino <ansorrenltd@gmail.com>
+Artem Yarovenko <a.yarovenko@rubetek.com>
 Atsushi Watanabe <atsushi.w@ieee.org>
 backkem <mail@backkem.me>
 Caleb Phillips <calebrphillips@gmail.com>
 cnderrauber <zengjie9004@gmail.com>
 David Colburn <xero73@gmail.com>
 Gabor Retvari <retvari@tmit.bme.hu>
+Harold Thetiot <hthetiot@gmail.com>
 Herman Banken <hermanbanken@gmail.com>
 Hugo Arregui <hugo.arregui@gmail.com>
 Igor German <igor.german@synesis.ru>

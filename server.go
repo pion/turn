@@ -2,6 +2,7 @@
 package turn
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -70,7 +71,13 @@ func NewServer(config ServerConfig) (*Server, error) {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
 
-		go s.readPacketConn(cfg, am)
+		go func(cfg PacketConnConfig, am *allocation.Manager) {
+			s.readLoop(cfg.PacketConn, am)
+
+			if err := am.Close(); err != nil {
+				s.log.Errorf("Failed to close AllocationManager: %s", err)
+			}
+		}(cfg, am)
 	}
 
 	for _, cfg := range s.listenerConfigs {
@@ -79,7 +86,13 @@ func NewServer(config ServerConfig) (*Server, error) {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
 
-		go s.readListener(cfg, am)
+		go func(cfg ListenerConfig, am *allocation.Manager) {
+			s.readListener(cfg.Listener, am)
+
+			if err := am.Close(); err != nil {
+				s.log.Errorf("Failed to close AllocationManager: %s", err)
+			}
+		}(cfg, am)
 	}
 
 	return s, nil
@@ -116,35 +129,27 @@ func (s *Server) Close() error {
 
 	err := errFailedToClose
 	for _, e := range errors {
-		err = fmt.Errorf("%s; close error (%w) ", err, e)
+		err = fmt.Errorf("%s; close error (%w) ", err, e) //nolint:errorlint
 	}
 
 	return err
 }
 
-func (s *Server) readPacketConn(p PacketConnConfig, am *allocation.Manager) {
-	s.readLoop(p.PacketConn, am)
-
-	if err := am.Close(); err != nil {
-		s.log.Errorf("Failed to close AllocationManager: %s", err)
-	}
-}
-
-func (s *Server) readListener(l ListenerConfig, am *allocation.Manager) {
-	defer func() {
-		if err := am.Close(); err != nil {
-			s.log.Errorf("Failed to close AllocationManager: %s", err)
-		}
-	}()
-
+func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 	for {
-		conn, err := l.Listener.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			s.log.Debugf("Failed to accept: %s", err)
 			return
 		}
 
-		go s.readLoop(NewSTUNConn(conn), am)
+		go func() {
+			s.readLoop(NewSTUNConn(conn), am)
+
+			if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+				s.log.Errorf("failed to close conn: %s", err)
+			}
+		}()
 	}
 }
 

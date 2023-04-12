@@ -331,7 +331,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 
 	tr.StartRtxTimer(c.onRtxTimeout)
 
-	// If dontWait is true, get the transaction going and return immediately
+	// If ignoreResult is true, get the transaction going and return immediately
 	if ignoreResult {
 		return client.TransactionResult{}, nil
 	}
@@ -345,7 +345,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 
 // OnDeallocated is called when de-allocation of relay address has been complete.
 // (Called by UDPConn)
-func (c *Client) OnDeallocated(relayedAddr net.Addr) {
+func (c *Client) OnDeallocated(net.Addr) {
 	c.setRelayedUDPConn(nil)
 }
 
@@ -420,7 +420,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				return err
 			}
 
-			c.log.Debugf("data indication received from %s", from.String())
+			c.log.Tracef("data indication received from %s", from.String())
 
 			relayedConn := c.relayedUDPConn()
 			if relayedConn == nil {

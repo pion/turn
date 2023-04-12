@@ -344,7 +344,7 @@ func (c *UDPConn) SetReadDeadline(t time.Time) error {
 // Even if write times out, it may return n > 0, indicating that
 // some of the data was successfully written.
 // A zero value for t means WriteTo will not time out.
-func (c *UDPConn) SetWriteDeadline(t time.Time) error {
+func (c *UDPConn) SetWriteDeadline(time.Time) error {
 	// Write never blocks.
 	return nil
 }

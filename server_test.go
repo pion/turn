@@ -661,7 +661,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 	}
 
 	// Run benchmark
-	for i := 0; i < b.N; i++ {
+	for j := 0; j < b.N; j++ {
 		for i := 0; i < clientNum; i++ {
 			if _, err := clients[i].WriteTo(testSeq, sinkAddr); err != nil {
 				b.Fatalf("Client %d cannot send to TURN server: %s", i+1, err)
