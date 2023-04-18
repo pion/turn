@@ -46,7 +46,20 @@ It is also very easy to [cross compile](https://dave.cheney.net/2015/08/22/cross
 
 You can also see `pion/turn` usage in [pion/ice](https://github.com/pion/ice)
 
-### [FAQ](https://github.com/pion/webrtc/wiki/FAQ)
+### FAQ
+
+Also take a look at the [Pion WebRTC FAQ](https://github.com/pion/webrtc/wiki/FAQ)
+
+#### Will pion/turn also act as a STUN server?
+Yes.
+
+#### How do I implement token-based authentication?
+Replace the username with a token in the [AuthHandler](https://github.com/pion/turn/blob/6d0ff435910870eb9024b18321b93b61844fcfec/examples/turn-server/simple/main.go#L49).
+The password sent by the client can be any non-empty string, as long as it matches that used by the [GenerateAuthKey](https://github.com/pion/turn/blob/6d0ff435910870eb9024b18321b93b61844fcfec/examples/turn-server/simple/main.go#L41)
+function.
+
+#### Will WebRTC prioritize using STUN over TURN?
+Yes.
 
 ### RFCs
 #### Implemented
