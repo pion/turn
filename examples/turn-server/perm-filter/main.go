@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 // This example demonstrates the use of a permission handler in the PION TURN server. The
 // permission handler implements a filtering policy that lets clients to connect back to their own
 // host or server-reflexive address but will filter out everything else. This will let the client
