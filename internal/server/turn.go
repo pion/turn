@@ -56,14 +56,14 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    attribute.  If the REQUESTED-TRANSPORT attribute is not included
 	//    or is malformed, the server rejects the request with a 400 (Bad
 	//    Request) error.  Otherwise, if the attribute is included but
-	//    specifies a protocol other that UDP, the server rejects the
+	//    specifies a protocol other that UDP/TCP, the server rejects the
 	//    request with a 442 (Unsupported Transport Protocol) error.
 	var requestedTransport proto.RequestedTransport
 	if err = requestedTransport.GetFrom(m); err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
-	} else if requestedTransport.Protocol != proto.ProtoUDP {
+	} else if requestedTransport.Protocol != proto.ProtoUDP && requestedTransport.Protocol != proto.ProtoTCP {
 		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeUnsupportedTransProto})
-		return buildAndSendErr(r.Conn, r.SrcAddr, errRequestedTransportMustBeUDP, msg...)
+		return buildAndSendErr(r.Conn, r.SrcAddr, errUnsupportedTransportProtocol, msg...)
 	}
 
 	// 4. The request may contain a DONT-FRAGMENT attribute.  If it does,

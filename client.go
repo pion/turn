@@ -60,11 +60,12 @@ type Client struct {
 	trMap         *client.TransactionMap // Thread-safe
 	rto           time.Duration          // Read-only
 	relayedConn   *client.UDPConn        // Protected by mutex ***
+	tcpAllocation *client.TCPAllocation  // Protected by mutex ***
 	allocTryLock  client.TryLock         // Thread-safe
 	listenTryLock client.TryLock         // Thread-safe
 	mutex         sync.RWMutex           // Thread-safe
 	mutexTrMap    sync.Mutex             // Thread-safe
-	log           logging.LeveledLogger  // Tead-only
+	log           logging.LeveledLogger  // Read-only
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on, default "0.0.0.0:0"
@@ -201,6 +202,80 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 	return c.SendBindingRequestTo(c.stunServerAddr)
 }
 
+func (c *Client) sendAllocateRequest(protocol proto.Protocol) (proto.RelayedAddress, proto.Lifetime, stun.Nonce, error) {
+	var relayed proto.RelayedAddress
+	var lifetime proto.Lifetime
+	var nonce stun.Nonce
+
+	msg, err := stun.Build(
+		stun.TransactionID,
+		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
+		proto.RequestedTransport{Protocol: protocol},
+		stun.Fingerprint,
+	)
+	if err != nil {
+		return relayed, lifetime, nonce, err
+	}
+
+	trRes, err := c.PerformTransaction(msg, c.turnServerAddr, false)
+	if err != nil {
+		return relayed, lifetime, nonce, err
+	}
+
+	res := trRes.Msg
+
+	// Anonymous allocate failed, trying to authenticate.
+	if err = nonce.GetFrom(res); err != nil {
+		return relayed, lifetime, nonce, err
+	}
+	if err = c.realm.GetFrom(res); err != nil {
+		return relayed, lifetime, nonce, err
+	}
+	c.realm = append([]byte(nil), c.realm...)
+	c.integrity = stun.NewLongTermIntegrity(
+		c.username.String(), c.realm.String(), c.password,
+	)
+	// Trying to authorize.
+	msg, err = stun.Build(
+		stun.TransactionID,
+		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
+		proto.RequestedTransport{Protocol: protocol},
+		&c.username,
+		&c.realm,
+		&nonce,
+		&c.integrity,
+		stun.Fingerprint,
+	)
+	if err != nil {
+		return relayed, lifetime, nonce, err
+	}
+
+	trRes, err = c.PerformTransaction(msg, c.turnServerAddr, false)
+	if err != nil {
+		return relayed, lifetime, nonce, err
+	}
+	res = trRes.Msg
+
+	if res.Type.Class == stun.ClassErrorResponse {
+		var code stun.ErrorCodeAttribute
+		if err = code.GetFrom(res); err == nil {
+			return relayed, lifetime, nonce, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
+		}
+		return relayed, lifetime, nonce, fmt.Errorf("%s", res.Type) //nolint:goerr113
+	}
+
+	// Getting relayed addresses from response.
+	if err := relayed.GetFrom(res); err != nil {
+		return relayed, lifetime, nonce, err
+	}
+
+	// Getting lifetime from response
+	if err := lifetime.GetFrom(res); err != nil {
+		return relayed, lifetime, nonce, err
+	}
+	return relayed, lifetime, nonce, nil
+}
+
 // Allocate sends a TURN allocation request to the given transport address
 func (c *Client) Allocate() (net.PacketConn, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
@@ -213,81 +288,52 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, relayedConn.LocalAddr().String())
 	}
 
-	msg, err := stun.Build(
-		stun.TransactionID,
-		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransport{Protocol: proto.ProtoUDP},
-		stun.Fingerprint,
-	)
+	relayed, lifetime, nonce, err := c.sendAllocateRequest(proto.ProtoUDP)
 	if err != nil {
 		return nil, err
 	}
 
-	trRes, err := c.PerformTransaction(msg, c.turnServerAddr, false)
-	if err != nil {
-		return nil, err
-	}
-
-	res := trRes.Msg
-
-	// Anonymous allocate failed, trying to authenticate.
-	var nonce stun.Nonce
-	if err = nonce.GetFrom(res); err != nil {
-		return nil, err
-	}
-	if err = c.realm.GetFrom(res); err != nil {
-		return nil, err
-	}
-	c.realm = append([]byte(nil), c.realm...)
-	c.integrity = stun.NewLongTermIntegrity(
-		c.username.String(), c.realm.String(), c.password,
-	)
-	// Trying to authorize.
-	msg, err = stun.Build(
-		stun.TransactionID,
-		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
-		proto.RequestedTransport{Protocol: proto.ProtoUDP},
-		&c.username,
-		&c.realm,
-		&nonce,
-		&c.integrity,
-		stun.Fingerprint,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	trRes, err = c.PerformTransaction(msg, c.turnServerAddr, false)
-	if err != nil {
-		return nil, err
-	}
-	res = trRes.Msg
-
-	if res.Type.Class == stun.ClassErrorResponse {
-		var code stun.ErrorCodeAttribute
-		if err = code.GetFrom(res); err == nil {
-			return nil, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
-		}
-		return nil, fmt.Errorf("%s", res.Type) //nolint:goerr113
-	}
-
-	// Getting relayed addresses from response.
-	var relayed proto.RelayedAddress
-	if err := relayed.GetFrom(res); err != nil {
-		return nil, err
-	}
 	relayedAddr := &net.UDPAddr{
 		IP:   relayed.IP,
 		Port: relayed.Port,
 	}
 
-	// Getting lifetime from response
-	var lifetime proto.Lifetime
-	if err := lifetime.GetFrom(res); err != nil {
+	relayedConn = client.NewUDPConn(&client.ConnConfig{
+		Observer:    c,
+		RelayedAddr: relayedAddr,
+		Integrity:   c.integrity,
+		Nonce:       nonce,
+		Lifetime:    lifetime.Duration,
+		Log:         c.log,
+	})
+	c.setRelayedUDPConn(relayedConn)
+
+	return relayedConn, nil
+}
+
+// Allocate TCP
+func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
+	if err := c.allocTryLock.Lock(); err != nil {
+		return nil, fmt.Errorf("%w: %s", errOneAllocateOnly, err.Error())
+	}
+	defer c.allocTryLock.Unlock()
+
+	allocation := c.getTCPAllocation()
+	if allocation != nil {
+		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, allocation.Addr().String())
+	}
+
+	relayed, lifetime, nonce, err := c.sendAllocateRequest(proto.ProtoTCP)
+	if err != nil {
 		return nil, err
 	}
 
-	relayedConn = client.NewUDPConn(&client.UDPConnConfig{
+	relayedAddr := &net.TCPAddr{
+		IP:   relayed.IP,
+		Port: relayed.Port,
+	}
+
+	allocation = client.NewTCPAllocation(&client.ConnConfig{
 		Observer:    c,
 		RelayedAddr: relayedAddr,
 		Integrity:   c.integrity,
@@ -296,15 +342,26 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		Log:         c.log,
 	})
 
-	c.setRelayedUDPConn(relayedConn)
+	c.setTCPAllocation(allocation)
 
-	return relayedConn, nil
+	return allocation, nil
 }
 
 // CreatePermission Issues a CreatePermission request for the supplied addresses
 // as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
 func (c *Client) CreatePermission(addrs ...net.Addr) error {
-	return c.relayedUDPConn().CreatePermissions(addrs...)
+	if conn := c.relayedUDPConn(); conn != nil {
+		if err := conn.CreatePermissions(addrs...); err != nil {
+			return err
+		}
+	}
+
+	if allocation := c.getTCPAllocation(); allocation != nil {
+		if err := allocation.CreatePermissions(addrs...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // PerformTransaction performs STUN transaction
@@ -350,6 +407,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 // (Called by UDPConn)
 func (c *Client) OnDeallocated(net.Addr) {
 	c.setRelayedUDPConn(nil)
+	c.setTCPAllocation(nil)
 }
 
 // HandleInbound handles data received.
@@ -408,7 +466,8 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	}
 
 	if msg.Type.Class == stun.ClassIndication {
-		if msg.Type.Method == stun.MethodData {
+		switch msg.Type.Method {
+		case stun.MethodData:
 			var peerAddr proto.PeerAddress
 			if err := peerAddr.GetFrom(msg); err != nil {
 				return err
@@ -430,8 +489,32 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				c.log.Debug("no relayed conn allocated")
 				return nil // Silently discard
 			}
-
 			relayedConn.HandleInbound(data, from)
+		case stun.MethodConnectionAttempt:
+			var peerAddr proto.PeerAddress
+			if err := peerAddr.GetFrom(msg); err != nil {
+				return err
+			}
+
+			addr := &net.TCPAddr{
+				IP:   peerAddr.IP,
+				Port: peerAddr.Port,
+			}
+
+			var cid proto.ConnectionID
+			if err := cid.GetFrom(msg); err != nil {
+				return err
+			}
+
+			c.log.Debugf("connection attempt from %s", addr.String())
+
+			allocation := c.getTCPAllocation()
+			if allocation == nil {
+				c.log.Debug("no TCP allocation exists")
+				return nil // silently discard
+			}
+
+			allocation.HandleConnectionAttempt(addr, cid)
 		}
 		return nil
 	}
@@ -541,4 +624,18 @@ func (c *Client) relayedUDPConn() *client.UDPConn {
 	defer c.mutex.RUnlock()
 
 	return c.relayedConn
+}
+
+func (c *Client) setTCPAllocation(alloc *client.TCPAllocation) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.tcpAllocation = alloc
+}
+
+func (c *Client) getTCPAllocation() *client.TCPAllocation {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.tcpAllocation
 }

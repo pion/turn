@@ -17,6 +17,7 @@ const (
 )
 
 type permission struct {
+	addr  net.Addr
 	st    permState    // Thread-safe (atomic op)
 	mutex sync.RWMutex // Thread-safe
 }
@@ -35,42 +36,35 @@ type permissionMap struct {
 	mutex   sync.RWMutex
 }
 
+func addr2IPFingerprint(addr net.Addr) string {
+	switch a := addr.(type) {
+	case *net.UDPAddr:
+		return a.IP.String()
+	case *net.TCPAddr:
+		return a.IP.String()
+	}
+	return "" // should never happen
+}
+
 func (m *permissionMap) insert(addr net.Addr, p *permission) bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		return false
-	}
-
-	m.permMap[udpAddr.IP.String()] = p
+	p.addr = addr
+	m.permMap[addr2IPFingerprint(addr)] = p
 	return true
 }
 
 func (m *permissionMap) find(addr net.Addr) (*permission, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		return nil, false
-	}
-
-	p, ok := m.permMap[udpAddr.IP.String()]
+	p, ok := m.permMap[addr2IPFingerprint(addr)]
 	return p, ok
 }
 
 func (m *permissionMap) delete(addr net.Addr) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		return
-	}
-
-	delete(m.permMap, udpAddr.IP.String())
+	delete(m.permMap, addr2IPFingerprint(addr))
 }
 
 func (m *permissionMap) addrs() []net.Addr {
@@ -78,10 +72,8 @@ func (m *permissionMap) addrs() []net.Addr {
 	defer m.mutex.RUnlock()
 
 	addrs := []net.Addr{}
-	for k := range m.permMap {
-		addrs = append(addrs, &net.UDPAddr{
-			IP: net.ParseIP(k),
-		})
+	for _, p := range m.permMap {
+		addrs = append(addrs, p.addr)
 	}
 	return addrs
 }
