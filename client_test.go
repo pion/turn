@@ -13,6 +13,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, net.PacketConn, bool) {
@@ -187,4 +188,54 @@ func TestClientNonceExpiration(t *testing.T) {
 	assert.NoError(t, allocation.Close())
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, server.Close())
+}
+
+// Create a TCP-based allocation and verify allocation can be created
+func TestTCPClient(t *testing.T) {
+	// Setup server
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478")
+	require.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey(username, realm, "pass"), true
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: tcpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+
+	// Setup clients
+	conn, err := net.Dial("tcp", "127.0.0.1:13478")
+	require.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           NewSTUNConn(conn),
+		STUNServerAddr: "127.0.0.1:13478",
+		TURNServerAddr: "127.0.0.1:13478",
+		Username:       "foo",
+		Password:       "pass",
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+
+	allocation, err := client.AllocateTCP()
+	require.NoError(t, err)
+
+	// TODO: Implement server side handling of Connect and ConnectionBind
+	// _, err = allocation.Dial(&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080})
+	// assert.NoError(t, err)
+
+	// Shutdown
+	require.NoError(t, allocation.Close())
+	require.NoError(t, conn.Close())
+	require.NoError(t, server.Close())
 }

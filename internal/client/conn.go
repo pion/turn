@@ -38,8 +38,8 @@ type inboundData struct {
 	from net.Addr
 }
 
-// UDPConnObserver is an interface to UDPConn observer
-type UDPConnObserver interface {
+// ConnObserver is an interface to UDPConn observer
+type ConnObserver interface {
 	TURNServerAddr() net.Addr
 	Username() stun.Username
 	Realm() stun.Realm
@@ -48,9 +48,9 @@ type UDPConnObserver interface {
 	OnDeallocated(relayedAddr net.Addr)
 }
 
-// UDPConnConfig is a set of configuration params use by NewUDPConn
-type UDPConnConfig struct {
-	Observer    UDPConnObserver
+// ConnConfig is a set of configuration params use by NewUDPConn and NewTCPConn
+type ConnConfig struct {
+	Observer    ConnObserver
 	RelayedAddr net.Addr
 	Integrity   stun.MessageIntegrity
 	Nonce       stun.Nonce
@@ -60,37 +60,48 @@ type UDPConnConfig struct {
 
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
 // compatible with net.PacketConn and net.Conn
-type UDPConn struct {
-	obs               UDPConnObserver       // Read-only
-	relayedAddr       net.Addr              // Read-only
-	permMap           *permissionMap        // Thread-safe
+type RelayConnContext struct {
+	obs               ConnObserver          // read-only
+	relayedAddr       net.Addr              // read-only
+	permMap           *permissionMap        // thread-safe
 	bindingMgr        *bindingManager       // Thread-safe
-	integrity         stun.MessageIntegrity // Read-only
-	_nonce            stun.Nonce            // Needs mutex x
-	_lifetime         time.Duration         // Needs mutex x
+	integrity         stun.MessageIntegrity // read-only
+	_nonce            stun.Nonce            // needs mutex x
+	_lifetime         time.Duration         // needs mutex x
 	readCh            chan *inboundData     // Thread-safe
 	closeCh           chan struct{}         // Thread-safe
-	readTimer         *time.Timer           // Thread-safe
-	refreshAllocTimer *PeriodicTimer        // Thread-safe
-	refreshPermsTimer *PeriodicTimer        // Thread-safe
-	mutex             sync.RWMutex          // Thread-safe
-	log               logging.LeveledLogger // Read-only
+	readTimer         *time.Timer           // thread-safe
+	refreshAllocTimer *PeriodicTimer        // thread-safe
+	refreshPermsTimer *PeriodicTimer        // thread-safe
+	mutex             sync.RWMutex          // thread-safe
+	log               logging.LeveledLogger // read-only
+}
+
+// UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
+// comatible with net.PacketConn and net.Conn
+type UDPConn struct {
+	bindingMgr *bindingManager   // thread-safe
+	readCh     chan *inboundData // thread-safe
+	closeCh    chan struct{}     // thread-safe
+	RelayConnContext
 }
 
 // NewUDPConn creates a new instance of UDPConn
-func NewUDPConn(config *UDPConnConfig) *UDPConn {
+func NewUDPConn(config *ConnConfig) *UDPConn {
 	c := &UDPConn{
-		obs:         config.Observer,
-		relayedAddr: config.RelayedAddr,
-		permMap:     newPermissionMap(),
-		bindingMgr:  newBindingManager(),
-		integrity:   config.Integrity,
-		_nonce:      config.Nonce,
-		_lifetime:   config.Lifetime,
-		readCh:      make(chan *inboundData, maxReadQueueSize),
-		closeCh:     make(chan struct{}),
-		readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
-		log:         config.Log,
+		bindingMgr: newBindingManager(),
+		readCh:     make(chan *inboundData, maxReadQueueSize),
+		closeCh:    make(chan struct{}),
+		RelayConnContext: RelayConnContext{
+			obs:         config.Observer,
+			relayedAddr: config.RelayedAddr,
+			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
+			permMap:     newPermissionMap(),
+			integrity:   config.Integrity,
+			_nonce:      config.Nonce,
+			_lifetime:   config.Lifetime,
+			log:         config.Log,
+		},
 	}
 
 	c.log.Debugf("initial lifetime: %d seconds", int(c.lifetime().Seconds()))
@@ -156,7 +167,7 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 }
 
-func (c *UDPConn) createPermission(perm *permission, addr net.Addr) error {
+func (c *RelayConnContext) createPermission(perm *permission, addr net.Addr) error {
 	perm.mutex.Lock()
 	defer perm.mutex.Unlock()
 
@@ -368,7 +379,7 @@ func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
 
 // CreatePermissions Issues a CreatePermission request for the supplied addresses
 // as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
-func (c *UDPConn) CreatePermissions(addrs ...net.Addr) error {
+func (c *RelayConnContext) CreatePermissions(addrs ...net.Addr) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
@@ -436,7 +447,7 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 	return b.addr, true
 }
 
-func (c *UDPConn) setNonceFromMsg(msg *stun.Message) {
+func (c *RelayConnContext) setNonceFromMsg(msg *stun.Message) {
 	// Update nonce
 	var nonce stun.Nonce
 	if err := nonce.GetFrom(msg); err == nil {
@@ -447,7 +458,7 @@ func (c *UDPConn) setNonceFromMsg(msg *stun.Message) {
 	}
 }
 
-func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error {
+func (c *RelayConnContext) refreshAllocation(lifetime time.Duration, dontWait bool) error {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
@@ -499,7 +510,7 @@ func (c *UDPConn) refreshAllocation(lifetime time.Duration, dontWait bool) error
 	return nil
 }
 
-func (c *UDPConn) refreshPermissions() error {
+func (c *RelayConnContext) refreshPermissions() error {
 	addrs := c.permMap.addrs()
 	if len(addrs) == 0 {
 		c.log.Debug("no permission to refresh")
@@ -565,7 +576,7 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 	return len(data), nil
 }
 
-func (c *UDPConn) onRefreshTimers(id int) {
+func (c *RelayConnContext) onRefreshTimers(id int) {
 	c.log.Debugf("refresh timer %d expired", id)
 	switch id {
 	case timerIDRefreshAlloc:
@@ -596,14 +607,14 @@ func (c *UDPConn) onRefreshTimers(id int) {
 	}
 }
 
-func (c *UDPConn) nonce() stun.Nonce {
+func (c *RelayConnContext) nonce() stun.Nonce {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c._nonce
 }
 
-func (c *UDPConn) setNonce(nonce stun.Nonce) {
+func (c *RelayConnContext) setNonce(nonce stun.Nonce) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -611,14 +622,14 @@ func (c *UDPConn) setNonce(nonce stun.Nonce) {
 	c._nonce = nonce
 }
 
-func (c *UDPConn) lifetime() time.Duration {
+func (c *RelayConnContext) lifetime() time.Duration {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c._lifetime
 }
 
-func (c *UDPConn) setLifetime(lifetime time.Duration) {
+func (c *RelayConnContext) setLifetime(lifetime time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
