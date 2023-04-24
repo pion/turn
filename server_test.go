@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 	"github.com/pion/transport/v2/test"
 	"github.com/pion/transport/v2/vnet"
 	"github.com/pion/turn/v2/internal/proto"
@@ -27,6 +28,7 @@ func TestServer(t *testing.T) {
 	defer report()
 
 	loggerFactory := logging.NewDefaultLoggerFactory()
+	loggerFactory.DefaultLogLevel = logging.LogLevelTrace
 
 	credMap := map[string][]byte{
 		"user": GenerateAuthKey("user", "pion.ly", "pass"),
@@ -116,6 +118,66 @@ func TestServer(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, server.inboundMTU, 2000)
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("redirect", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		assert.NoError(t, err)
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+				return nil, false
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					AllocationHandler: func(clientAddr net.Addr) (alternateServer net.Addr, errorCode stun.ErrorCode) {
+						return &net.UDPAddr{
+							IP:   net.ParseIP("1.2.3.4"),
+							Port: 8743,
+						}, stun.CodeTryAlternate
+					},
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "0.0.0.0",
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		assert.NoError(t, err)
+
+		serverAddr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:3478")
+		assert.NoError(t, err)
+
+		client, err := NewClient(&ClientConfig{
+			Conn:           conn,
+			STUNServerAddr: serverAddr,
+			TURNServerAddr: serverAddr,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
+
+		_, err = client.Allocate()
+		assert.Error(t, err, "should return error")
+
+		fmt.Printf("%#v\n", err)
+
+		client.Close()
+		assert.NoError(t, conn.Close())
+
 		assert.NoError(t, server.Close())
 	})
 

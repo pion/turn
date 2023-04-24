@@ -69,7 +69,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	}
 
 	for _, cfg := range s.packetConnConfigs {
-		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
+		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.AllocationHandler, cfg.PermissionHandler)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
@@ -84,7 +84,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	}
 
 	for _, cfg := range s.listenerConfigs {
-		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
+		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.AllocationHandler, cfg.PermissionHandler)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
@@ -101,7 +101,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	return s, nil
 }
 
-// AllocationCount returns the number of active allocations. It can be used to drain the server before closing
+// AllocationCount returns the number of active allocations. It can be used to drain the server before closing.
 func (s *Server) AllocationCount() int {
 	allocs := 0
 	for _, am := range s.allocationManagers {
@@ -156,15 +156,12 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 	}
 }
 
-func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, handler PermissionHandler) (*allocation.Manager, error) {
-	if handler == nil {
-		handler = DefaultPermissionHandler
-	}
-
+func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, allocationHandler AllocationHandler, permissionHandler PermissionHandler) (*allocation.Manager, error) {
 	am, err := allocation.NewManager(allocation.ManagerConfig{
 		AllocatePacketConn: addrGenerator.AllocatePacketConn,
 		AllocateConn:       addrGenerator.AllocateConn,
-		PermissionHandler:  handler,
+		AllocationHandler:  allocationHandler,
+		PermissionHandler:  permissionHandler,
 		LeveledLogger:      s.log,
 	})
 	if err != nil {

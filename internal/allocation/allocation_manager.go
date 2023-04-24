@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 )
 
 // ManagerConfig a bag of config params for Manager.
@@ -17,6 +18,7 @@ type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocationHandler  func(clientAddr net.Addr) (alternateServer net.Addr, errorCode stun.ErrorCode)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 }
 
@@ -35,6 +37,7 @@ type Manager struct {
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	allocationHandler  func(clientAddr net.Addr) (alternateServer net.Addr, errorCode stun.ErrorCode)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 }
 
@@ -54,6 +57,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocations:        make(map[string]*Allocation, 64),
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
+		allocationHandler:  config.AllocationHandler,
 		permissionHandler:  config.PermissionHandler,
 	}, nil
 }
@@ -83,6 +87,32 @@ func (m *Manager) Close() error {
 		}
 	}
 	return nil
+}
+
+// HandleAllocation calls the allocation handler callback to decide whether to admit a client request.
+func (m *Manager) HandleAllocation(clientAddr net.Addr) (net.IP, int, stun.ErrorCode) {
+	if m.allocationHandler == nil {
+		return nil, 0, 0
+	}
+
+	altServer, errorCode := m.allocationHandler(clientAddr)
+
+	var altIP net.IP
+	var altPort int
+	switch addr := altServer.(type) {
+	case *net.UDPAddr:
+		altIP = addr.IP
+		altPort = addr.Port
+	case *net.TCPAddr:
+		altIP = addr.IP
+		altPort = addr.Port
+	default:
+		m.log.Warnf("received unknown alternate server address from allocation handler: %s",
+			altServer.String())
+		return nil, 0, stun.CodeServerError
+	}
+
+	return altIP, altPort, errorCode
 }
 
 // CreateAllocation creates a new allocation and starts relaying

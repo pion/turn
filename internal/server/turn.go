@@ -120,6 +120,32 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    with a 300 (Try Alternate) error if it wishes to redirect the
 	//    client to a different server.  The use of this error code and
 	//    attribute follow the specification in [RFC5389].
+	if altIP, altPort, errorCode := r.AllocationManager.HandleAllocation(r.SrcAddr); errorCode != 0 {
+		r.Log.Debugf("allocation handler sending error code %d to client %s", errorCode, r.SrcAddr.String())
+
+		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse))
+		if err = errorCode.AddTo(m); err != nil {
+			return buildAndSendErr(r.Conn, r.SrcAddr, err, msg...)
+		}
+
+		if errorCode == stun.CodeTryAlternate && altIP != nil && altPort != 0 {
+			addr := &stun.AlternateServer{
+				IP:   altIP,
+				Port: altPort,
+			}
+			if err = addr.AddTo(m); err != nil {
+				return buildAndSendErr(r.Conn, r.SrcAddr, errFailedToSetAlternateServer, msg...)
+			}
+
+			r.Log.Debugf("redirecting client to %s:%d", addr.IP.String(), addr.Port)
+		}
+
+		return buildAndSend(r.Conn, r.SrcAddr, msg...)
+	}
+
+	// If all the checks pass, the server creates the allocation.  The
+	// 5-tuple is set to the 5-tuple from the Allocate request, while the
+	// list of permissions and the list of channels are initially empty.
 	lifetimeDuration := allocationLifeTime(m)
 	a, err := r.AllocationManager.CreateAllocation(
 		fiveTuple,
