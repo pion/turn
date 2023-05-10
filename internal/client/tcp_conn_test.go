@@ -83,7 +83,7 @@ func TestTCPConn(t *testing.T) {
 		loggerFactory := logging.NewDefaultLoggerFactory()
 		log := loggerFactory.NewLogger("test")
 		alloc := TCPAllocation{
-			RelayConnContext: RelayConnContext{
+			Allocation: Allocation{
 				obs:     obs,
 				permMap: pm,
 				log:     log,

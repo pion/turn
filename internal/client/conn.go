@@ -58,9 +58,7 @@ type ConnConfig struct {
 	Log         logging.LeveledLogger
 }
 
-// UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
-// compatible with net.PacketConn and net.Conn
-type RelayConnContext struct {
+type Allocation struct {
 	obs               ConnObserver          // read-only
 	relayedAddr       net.Addr              // read-only
 	permMap           *permissionMap        // thread-safe
@@ -83,7 +81,7 @@ type UDPConn struct {
 	bindingMgr *bindingManager   // thread-safe
 	readCh     chan *inboundData // thread-safe
 	closeCh    chan struct{}     // thread-safe
-	RelayConnContext
+	Allocation
 }
 
 // NewUDPConn creates a new instance of UDPConn
@@ -92,7 +90,7 @@ func NewUDPConn(config *ConnConfig) *UDPConn {
 		bindingMgr: newBindingManager(),
 		readCh:     make(chan *inboundData, maxReadQueueSize),
 		closeCh:    make(chan struct{}),
-		RelayConnContext: RelayConnContext{
+		Allocation: Allocation{
 			obs:         config.Observer,
 			relayedAddr: config.RelayedAddr,
 			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
@@ -167,7 +165,7 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 }
 
-func (c *RelayConnContext) createPermission(perm *permission, addr net.Addr) error {
+func (c *Allocation) createPermission(perm *permission, addr net.Addr) error {
 	perm.mutex.Lock()
 	defer perm.mutex.Unlock()
 
@@ -379,7 +377,7 @@ func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
 
 // CreatePermissions Issues a CreatePermission request for the supplied addresses
 // as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
-func (c *RelayConnContext) CreatePermissions(addrs ...net.Addr) error {
+func (c *Allocation) CreatePermissions(addrs ...net.Addr) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
@@ -447,7 +445,7 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 	return b.addr, true
 }
 
-func (c *RelayConnContext) setNonceFromMsg(msg *stun.Message) {
+func (c *Allocation) setNonceFromMsg(msg *stun.Message) {
 	// Update nonce
 	var nonce stun.Nonce
 	if err := nonce.GetFrom(msg); err == nil {
@@ -458,7 +456,7 @@ func (c *RelayConnContext) setNonceFromMsg(msg *stun.Message) {
 	}
 }
 
-func (c *RelayConnContext) refreshAllocation(lifetime time.Duration, dontWait bool) error {
+func (c *Allocation) refreshAllocation(lifetime time.Duration, dontWait bool) error {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
@@ -510,7 +508,7 @@ func (c *RelayConnContext) refreshAllocation(lifetime time.Duration, dontWait bo
 	return nil
 }
 
-func (c *RelayConnContext) refreshPermissions() error {
+func (c *Allocation) refreshPermissions() error {
 	addrs := c.permMap.addrs()
 	if len(addrs) == 0 {
 		c.log.Debug("no permission to refresh")
@@ -576,7 +574,7 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 	return len(data), nil
 }
 
-func (c *RelayConnContext) onRefreshTimers(id int) {
+func (c *Allocation) onRefreshTimers(id int) {
 	c.log.Debugf("refresh timer %d expired", id)
 	switch id {
 	case timerIDRefreshAlloc:
@@ -607,14 +605,14 @@ func (c *RelayConnContext) onRefreshTimers(id int) {
 	}
 }
 
-func (c *RelayConnContext) nonce() stun.Nonce {
+func (c *Allocation) nonce() stun.Nonce {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c._nonce
 }
 
-func (c *RelayConnContext) setNonce(nonce stun.Nonce) {
+func (c *Allocation) setNonce(nonce stun.Nonce) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -622,14 +620,14 @@ func (c *RelayConnContext) setNonce(nonce stun.Nonce) {
 	c._nonce = nonce
 }
 
-func (c *RelayConnContext) lifetime() time.Duration {
+func (c *Allocation) lifetime() time.Duration {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c._lifetime
 }
 
-func (c *RelayConnContext) setLifetime(lifetime time.Duration) {
+func (c *Allocation) setLifetime(lifetime time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

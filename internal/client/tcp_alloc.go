@@ -21,7 +21,7 @@ var (
 type TCPAllocation struct {
 	connAttemptCh chan *ConnectionAttempt
 	acceptTimer   *time.Timer
-	RelayConnContext
+	Allocation
 }
 
 // NewTCPAllocation creates a new instance of TCPConn
@@ -29,7 +29,7 @@ func NewTCPAllocation(config *ConnConfig) *TCPAllocation {
 	a := &TCPAllocation{
 		connAttemptCh: make(chan *ConnectionAttempt, 10),
 		acceptTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
-		RelayConnContext: RelayConnContext{
+		Allocation: Allocation{
 			obs:         config.Observer,
 			relayedAddr: config.RelayedAddr,
 			permMap:     newPermissionMap(),
