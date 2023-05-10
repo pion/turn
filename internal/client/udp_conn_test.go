@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type dummyUDPConnObserver struct {
+type dummyClient struct {
 	turnServerAddr      net.Addr
 	username            stun.Username
 	realm               stun.Realm
@@ -20,33 +20,33 @@ type dummyUDPConnObserver struct {
 	_onDeallocated      func(relayedAddr net.Addr)
 }
 
-func (obs *dummyUDPConnObserver) TURNServerAddr() net.Addr {
+func (obs *dummyClient) TURNServerAddr() net.Addr {
 	return obs.turnServerAddr
 }
 
-func (obs *dummyUDPConnObserver) Username() stun.Username {
+func (obs *dummyClient) Username() stun.Username {
 	return obs.username
 }
 
-func (obs *dummyUDPConnObserver) Realm() stun.Realm {
+func (obs *dummyClient) Realm() stun.Realm {
 	return obs.realm
 }
 
-func (obs *dummyUDPConnObserver) WriteTo(data []byte, to net.Addr) (int, error) {
+func (obs *dummyClient) WriteTo(data []byte, to net.Addr) (int, error) {
 	if obs._writeTo != nil {
 		return obs._writeTo(data, to)
 	}
 	return 0, nil
 }
 
-func (obs *dummyUDPConnObserver) PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+func (obs *dummyClient) PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 	if obs._performTransaction != nil {
 		return obs._performTransaction(msg, to, dontWait)
 	}
 	return TransactionResult{}, nil
 }
 
-func (obs *dummyUDPConnObserver) OnDeallocated(relayedAddr net.Addr) {
+func (obs *dummyClient) OnDeallocated(relayedAddr net.Addr) {
 	if obs._onDeallocated != nil {
 		obs._onDeallocated(relayedAddr)
 	}
@@ -54,7 +54,7 @@ func (obs *dummyUDPConnObserver) OnDeallocated(relayedAddr net.Addr) {
 
 func TestUDPConn(t *testing.T) {
 	t.Run("bind()", func(t *testing.T) {
-		obs := &dummyUDPConnObserver{
+		obs := &dummyClient{
 			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
@@ -68,7 +68,7 @@ func TestUDPConn(t *testing.T) {
 
 		conn := UDPConn{
 			Allocation: Allocation{
-				obs: obs,
+				client: obs,
 			},
 			bindingMgr: bm,
 		}
@@ -80,7 +80,7 @@ func TestUDPConn(t *testing.T) {
 	})
 
 	t.Run("WriteTo()", func(t *testing.T) {
-		obs := &dummyUDPConnObserver{
+		obs := &dummyClient{
 			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
@@ -105,7 +105,7 @@ func TestUDPConn(t *testing.T) {
 
 		conn := UDPConn{
 			Allocation: Allocation{
-				obs:     obs,
+				client:  obs,
 				permMap: pm,
 			},
 			bindingMgr: bm,

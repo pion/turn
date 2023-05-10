@@ -298,8 +298,8 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		Port: relayed.Port,
 	}
 
-	relayedConn = client.NewUDPConn(&client.ConnConfig{
-		Observer:    c,
+	relayedConn = client.NewUDPConn(&client.AllocationConfig{
+		Client:      c,
 		RelayedAddr: relayedAddr,
 		Integrity:   c.integrity,
 		Nonce:       nonce,
@@ -311,7 +311,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	return relayedConn, nil
 }
 
-// Allocate TCP
+// AllocateTCP creates a new TCP allocation at the TURN server.
 func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
 		return nil, fmt.Errorf("%w: %s", errOneAllocateOnly, err.Error())
@@ -333,8 +333,8 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 		Port: relayed.Port,
 	}
 
-	allocation = client.NewTCPAllocation(&client.ConnConfig{
-		Observer:    c,
+	allocation = client.NewTCPAllocation(&client.AllocationConfig{
+		Client:      c,
 		RelayedAddr: relayedAddr,
 		Integrity:   c.integrity,
 		Nonce:       nonce,

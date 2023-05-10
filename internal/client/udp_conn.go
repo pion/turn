@@ -10,10 +10,8 @@ import (
 	"io"
 	"math"
 	"net"
-	"sync"
 	"time"
 
-	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/turn/v2/internal/proto"
 )
@@ -29,50 +27,9 @@ const (
 	timerIDRefreshPerms
 )
 
-func noDeadline() time.Time {
-	return time.Time{}
-}
-
 type inboundData struct {
 	data []byte
 	from net.Addr
-}
-
-// ConnObserver is an interface to UDPConn observer
-type ConnObserver interface {
-	TURNServerAddr() net.Addr
-	Username() stun.Username
-	Realm() stun.Realm
-	WriteTo(data []byte, to net.Addr) (int, error)
-	PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error)
-	OnDeallocated(relayedAddr net.Addr)
-}
-
-// ConnConfig is a set of configuration params use by NewUDPConn and NewTCPConn
-type ConnConfig struct {
-	Observer    ConnObserver
-	RelayedAddr net.Addr
-	Integrity   stun.MessageIntegrity
-	Nonce       stun.Nonce
-	Lifetime    time.Duration
-	Log         logging.LeveledLogger
-}
-
-type Allocation struct {
-	obs               ConnObserver          // read-only
-	relayedAddr       net.Addr              // read-only
-	permMap           *permissionMap        // thread-safe
-	bindingMgr        *bindingManager       // Thread-safe
-	integrity         stun.MessageIntegrity // read-only
-	_nonce            stun.Nonce            // needs mutex x
-	_lifetime         time.Duration         // needs mutex x
-	readCh            chan *inboundData     // Thread-safe
-	closeCh           chan struct{}         // Thread-safe
-	readTimer         *time.Timer           // thread-safe
-	refreshAllocTimer *PeriodicTimer        // thread-safe
-	refreshPermsTimer *PeriodicTimer        // thread-safe
-	mutex             sync.RWMutex          // thread-safe
-	log               logging.LeveledLogger // read-only
 }
 
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
@@ -85,13 +42,13 @@ type UDPConn struct {
 }
 
 // NewUDPConn creates a new instance of UDPConn
-func NewUDPConn(config *ConnConfig) *UDPConn {
+func NewUDPConn(config *AllocationConfig) *UDPConn {
 	c := &UDPConn{
 		bindingMgr: newBindingManager(),
 		readCh:     make(chan *inboundData, maxReadQueueSize),
 		closeCh:    make(chan struct{}),
 		Allocation: Allocation{
-			obs:         config.Observer,
+			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
 			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
 			permMap:     newPermissionMap(),
@@ -262,7 +219,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 
 		// Indication has no transaction (fire-and-forget)
 
-		return c.obs.WriteTo(msg.Raw, c.obs.TURNServerAddr())
+		return c.client.WriteTo(msg.Raw, c.client.TURNServerAddr())
 	}
 
 	// Binding is either ready
@@ -309,7 +266,7 @@ func (c *UDPConn) Close() error {
 		close(c.closeCh)
 	}
 
-	c.obs.OnDeallocated(c.relayedAddr)
+	c.client.OnDeallocated(c.relayedAddr)
 	return c.refreshAllocation(0, true /* dontWait=true */)
 }
 
@@ -388,8 +345,8 @@ func (c *Allocation) CreatePermissions(addrs ...net.Addr) error {
 	}
 
 	setters = append(setters,
-		c.obs.Username(),
-		c.obs.Realm(),
+		c.client.Username(),
+		c.client.Realm(),
 		c.nonce(),
 		c.integrity,
 		stun.Fingerprint)
@@ -399,7 +356,7 @@ func (c *Allocation) CreatePermissions(addrs ...net.Addr) error {
 		return err
 	}
 
-	trRes, err := c.obs.PerformTransaction(msg, c.obs.TURNServerAddr(), false)
+	trRes, err := c.client.PerformTransaction(msg, c.client.TURNServerAddr(), false)
 	if err != nil {
 		return err
 	}
@@ -461,8 +418,8 @@ func (c *Allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
 		proto.Lifetime{Duration: lifetime},
-		c.obs.Username(),
-		c.obs.Realm(),
+		c.client.Username(),
+		c.client.Realm(),
 		c.nonce(),
 		c.integrity,
 		stun.Fingerprint,
@@ -472,7 +429,7 @@ func (c *Allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 	}
 
 	c.log.Debugf("send refresh request (dontWait=%v)", dontWait)
-	trRes, err := c.obs.PerformTransaction(msg, c.obs.TURNServerAddr(), dontWait)
+	trRes, err := c.client.PerformTransaction(msg, c.client.TURNServerAddr(), dontWait)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errFailedToRefreshAllocation, err.Error())
 	}
@@ -531,8 +488,8 @@ func (c *UDPConn) bind(b *binding) error {
 		stun.NewType(stun.MethodChannelBind, stun.ClassRequest),
 		addr2PeerAddress(b.addr),
 		proto.ChannelNumber(b.number),
-		c.obs.Username(),
-		c.obs.Realm(),
+		c.client.Username(),
+		c.client.Realm(),
 		c.nonce(),
 		c.integrity,
 		stun.Fingerprint,
@@ -543,7 +500,7 @@ func (c *UDPConn) bind(b *binding) error {
 		return err
 	}
 
-	trRes, err := c.obs.PerformTransaction(msg, c.obs.TURNServerAddr(), false)
+	trRes, err := c.client.PerformTransaction(msg, c.client.TURNServerAddr(), false)
 	if err != nil {
 		c.bindingMgr.deleteByAddr(b.addr)
 		return err
@@ -567,7 +524,7 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 		Number: proto.ChannelNumber(chNum),
 	}
 	chData.Encode()
-	_, err := c.obs.WriteTo(chData.Raw, c.obs.TURNServerAddr())
+	_, err := c.client.WriteTo(chData.Raw, c.client.TURNServerAddr())
 	if err != nil {
 		return 0, err
 	}

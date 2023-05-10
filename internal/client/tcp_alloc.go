@@ -18,6 +18,10 @@ var (
 	_ transport.Dialer      = (*TCPAllocation)(nil)
 )
 
+func noDeadline() time.Time {
+	return time.Time{}
+}
+
 type TCPAllocation struct {
 	connAttemptCh chan *ConnectionAttempt
 	acceptTimer   *time.Timer
@@ -25,12 +29,12 @@ type TCPAllocation struct {
 }
 
 // NewTCPAllocation creates a new instance of TCPConn
-func NewTCPAllocation(config *ConnConfig) *TCPAllocation {
+func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 	a := &TCPAllocation{
 		connAttemptCh: make(chan *ConnectionAttempt, 10),
 		acceptTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
 		Allocation: Allocation{
-			obs:         config.Observer,
+			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
 			permMap:     newPermissionMap(),
 			integrity:   config.Integrity,
@@ -69,8 +73,8 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnect, stun.ClassRequest),
 		addr2PeerAddress(peer),
-		a.obs.Username(),
-		a.obs.Realm(),
+		a.client.Username(),
+		a.client.Realm(),
 		a.nonce(),
 		a.integrity,
 		stun.Fingerprint,
@@ -82,7 +86,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	}
 
 	a.log.Debugf("send connect request (peer=%v)", peer)
-	trRes, err := a.obs.PerformTransaction(msg, a.obs.TURNServerAddr(), false)
+	trRes, err := a.client.PerformTransaction(msg, a.client.TURNServerAddr(), false)
 	if err != nil {
 		return 0, err
 	}
@@ -107,7 +111,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 
 // Dial connects to the address on the named network.
 func (a *TCPAllocation) Dial(network, address string) (net.Conn, error) {
-	conn, err := net.Dial(network, a.obs.TURNServerAddr().String())
+	conn, err := net.Dial(network, a.client.TURNServerAddr().String())
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +175,8 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
 		cid,
-		a.obs.Username(),
-		a.obs.Realm(),
+		a.client.Username(),
+		a.client.Realm(),
 		a.nonce(),
 		a.integrity,
 		stun.Fingerprint,
@@ -234,7 +238,7 @@ func (a *TCPAllocation) Accept() (net.Conn, error) {
 
 // AcceptTCP accepts the next incoming call and returns the new connection.
 func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
-	addr, err := net.ResolveTCPAddr("tcp4", a.obs.TURNServerAddr().String())
+	addr, err := net.ResolveTCPAddr("tcp4", a.client.TURNServerAddr().String())
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +306,7 @@ func (a *TCPAllocation) Close() error {
 	a.refreshAllocTimer.Stop()
 	a.refreshPermsTimer.Stop()
 
-	a.obs.OnDeallocated(a.relayedAddr)
+	a.client.OnDeallocated(a.relayedAddr)
 	return a.refreshAllocation(0, true /* dontWait=true */)
 }
 
