@@ -7,6 +7,8 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+
+	"github.com/pion/turn/v2/internal/ipnet"
 )
 
 type permState int32
@@ -36,35 +38,25 @@ type permissionMap struct {
 	mutex   sync.RWMutex
 }
 
-func addr2IPFingerprint(addr net.Addr) string {
-	switch a := addr.(type) {
-	case *net.UDPAddr:
-		return a.IP.String()
-	case *net.TCPAddr:
-		return a.IP.String()
-	}
-	return "" // should never happen
-}
-
 func (m *permissionMap) insert(addr net.Addr, p *permission) bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	p.addr = addr
-	m.permMap[addr2IPFingerprint(addr)] = p
+	m.permMap[ipnet.FingerprintAddr(addr)] = p
 	return true
 }
 
 func (m *permissionMap) find(addr net.Addr) (*permission, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	p, ok := m.permMap[addr2IPFingerprint(addr)]
+	p, ok := m.permMap[ipnet.FingerprintAddr(addr)]
 	return p, ok
 }
 
 func (m *permissionMap) delete(addr net.Addr) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	delete(m.permMap, addr2IPFingerprint(addr))
+	delete(m.permMap, ipnet.FingerprintAddr(addr))
 }
 
 func (m *permissionMap) addrs() []net.Addr {
