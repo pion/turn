@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-License-Identifier: MIT
+
 package client
 
 import (
@@ -20,16 +23,15 @@ type AllocationConfig struct {
 }
 
 type Allocation struct {
-	client            Client                // read-only
-	relayedAddr       net.Addr              // read-only
-	permMap           *permissionMap        // thread-safe
-	bindingMgr        *bindingManager       // Thread-safe
-	integrity         stun.MessageIntegrity // read-only
-	_nonce            stun.Nonce            // needs mutex x
-	_lifetime         time.Duration         // needs mutex x
-	refreshAllocTimer *PeriodicTimer        // thread-safe
-	refreshPermsTimer *PeriodicTimer        // thread-safe
-	readTimer         *time.Timer           // thread-safe
-	mutex             sync.RWMutex          // thread-safe
-	log               logging.LeveledLogger // read-only
+	client            Client                // Read-only
+	relayedAddr       net.Addr              // Read-only
+	permMap           *permissionMap        // Thread-safe
+	integrity         stun.MessageIntegrity // Read-only
+	_nonce            stun.Nonce            // Needs mutex x
+	_lifetime         time.Duration         // Needs mutex x
+	refreshAllocTimer *PeriodicTimer        // Thread-safe
+	refreshPermsTimer *PeriodicTimer        // Thread-safe
+	readTimer         *time.Timer           // Thread-safe
+	mutex             sync.RWMutex          // Thread-safe
+	log               logging.LeveledLogger // Read-only
 }

@@ -63,28 +63,28 @@ func FuzzSetters(f *testing.F) {
 		m1.Add(attr.t, value)
 		if err := attr.g.GetFrom(m1); err != nil {
 			if errors.Is(err, stun.ErrAttributeNotFound) {
-				fmt.Println("unexpected 404") // nolint
-				panic(err)                    // nolint
+				fmt.Println("unexpected 404") //nolint
+				panic(err)                    //nolint
 			}
 			return
 		}
 
 		m2.WriteHeader()
 		if err := attr.g.AddTo(m2); err != nil {
-			fmt.Println("failed to add attribute to m2") // nolint
-			panic(err)                                   // nolint
+			fmt.Println("failed to add attribute to m2") //nolint
+			panic(err)                                   //nolint
 		}
 
 		m3.WriteHeader()
 		v, err := m2.Get(attr.t)
 		if err != nil {
-			panic(err) // nolint
+			panic(err) //nolint
 		}
 		m3.Add(attr.t, v)
 
 		if !m2.Equal(m3) {
-			fmt.Println(m2, "not equal", m3) // nolint
-			panic("not equal")               // nolint
+			fmt.Println(m2, "not equal", m3) //nolint
+			panic("not equal")               //nolint
 		}
 	})
 }

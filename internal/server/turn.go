@@ -131,7 +131,8 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	}
 
 	// Once the allocation is created, the server replies with a success
-	// response.  The success response contains:
+	// response.
+	// The success response contains:
 	//   * An XOR-RELAYED-ADDRESS attribute containing the relayed transport
 	//     address.
 	//   * A LIFETIME attribute containing the current value of the time-to-
