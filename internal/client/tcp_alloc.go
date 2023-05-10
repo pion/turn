@@ -25,18 +25,21 @@ func noDeadline() time.Time {
 	return time.Time{}
 }
 
+// TCPAllocation is an active TCP allocation on the TURN server
+// as specified by RFC 6062.
+// The allocation can be used to Dial/Accept relayed outgoing/incoming TCP connections.
 type TCPAllocation struct {
-	connAttemptCh chan *ConnectionAttempt
+	connAttemptCh chan *connectionAttempt
 	acceptTimer   *time.Timer
-	Allocation
+	allocation
 }
 
 // NewTCPAllocation creates a new instance of TCPConn
 func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 	a := &TCPAllocation{
-		connAttemptCh: make(chan *ConnectionAttempt, 10),
+		connAttemptCh: make(chan *connectionAttempt, 10),
 		acceptTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
-		Allocation: Allocation{
+		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
 			permMap:     newPermissionMap(),
@@ -47,7 +50,7 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 		},
 	}
 
-	a.log.Debugf("initial lifetime: %d seconds", int(a.lifetime().Seconds()))
+	a.log.Debugf("Initial lifetime: %d seconds", int(a.lifetime().Seconds()))
 
 	a.refreshAllocTimer = NewPeriodicTimer(
 		timerIDRefreshAlloc,
@@ -62,10 +65,10 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 	)
 
 	if a.refreshAllocTimer.Start() {
-		a.log.Debugf("refreshAllocTimer started")
+		a.log.Debug("Started refreshAllocTimer")
 	}
 	if a.refreshPermsTimer.Start() {
-		a.log.Debugf("refreshPermsTimer started")
+		a.log.Debug("Started refreshPermsTimer")
 	}
 
 	return a
@@ -88,7 +91,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 		return 0, err
 	}
 
-	a.log.Debugf("send connect request (peer=%v)", peer)
+	a.log.Debugf("Send connect request (peer=%v)", peer)
 	trRes, err := a.client.PerformTransaction(msg, a.client.TURNServerAddr(), false)
 	if err != nil {
 		return 0, err
@@ -100,6 +103,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 		if err = code.GetFrom(res); err == nil {
 			return 0, fmt.Errorf("%s (error %s)", res.Type, code)
 		}
+
 		return 0, fmt.Errorf("%s", res.Type)
 	}
 
@@ -108,39 +112,69 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 		return 0, err
 	}
 
-	a.log.Debugf("connect request successful (cid=%v)", cid)
+	a.log.Debugf("Connect request successful (cid=%v)", cid)
 	return cid, nil
 }
 
 // Dial connects to the address on the named network.
-func (a *TCPAllocation) Dial(network, address string) (net.Conn, error) {
-	conn, err := net.Dial(network, a.client.TURNServerAddr().String())
+func (a *TCPAllocation) Dial(network, rAddrStr string) (net.Conn, error) {
+	rAddr, err := net.ResolveTCPAddr(network, rAddrStr)
 	if err != nil {
 		return nil, err
 	}
 
-	dataConn, err := a.DialWithConn(conn, network, address)
+	return a.DialTCP(network, nil, rAddr)
+}
+
+// DialWithConn connects to the address on the named network with an already existing connection.
+// The provided connection must be an already connected TCP connection to the TURN server.
+func (a *TCPAllocation) DialWithConn(conn net.Conn, network, rAddrStr string) (*TCPConn, error) {
+	rAddr, err := net.ResolveTCPAddr(network, rAddrStr)
 	if err != nil {
-		conn.Close()
+		return nil, err
 	}
+
+	return a.DialTCPWithConn(conn, network, rAddr)
+}
+
+// DialTCP acts like Dial for TCP networks.
+func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCPConn, error) {
+	var rAddrServer *net.TCPAddr
+	if addr, ok := a.client.TURNServerAddr().(*net.UDPAddr); ok {
+		rAddrServer = &net.TCPAddr{
+			IP:   addr.IP,
+			Port: addr.Port,
+		}
+	} else {
+		return nil, fmt.Errorf("invalid TURN server address")
+	}
+
+	conn, err := net.DialTCP(network, lAddr, rAddrServer)
+	if err != nil {
+		return nil, err
+	}
+
+	dataConn, err := a.DialTCPWithConn(conn, network, rAddr)
+	if err != nil {
+		conn.Close() //nolint:errcheck
+	}
+
 	return dataConn, err
 }
 
-func (a *TCPAllocation) DialWithConn(conn net.Conn, network, address string) (*TCPConn, error) {
-	addr, err := net.ResolveTCPAddr(network, address)
-	if err != nil {
-		return nil, err
-	}
+// DialTCPWithConn acts like DialWithConn for TCP networks.
+func (a *TCPAllocation) DialTCPWithConn(conn net.Conn, network string, rAddr *net.TCPAddr) (*TCPConn, error) {
+	var err error
 
 	// Check if we have a permission for the destination IP addr
-	perm, ok := a.permMap.find(addr)
+	perm, ok := a.permMap.find(rAddr)
 	if !ok {
 		perm = &permission{}
-		a.permMap.insert(addr, perm)
+		a.permMap.insert(rAddr, perm)
 	}
 
 	for i := 0; i < maxRetryAttempts; i++ {
-		if err = a.createPermission(perm, addr); !errors.Is(err, errTryAgain) {
+		if err = a.createPermission(perm, rAddr); !errors.Is(err, errTryAgain) {
 			break
 		}
 	}
@@ -149,7 +183,7 @@ func (a *TCPAllocation) DialWithConn(conn net.Conn, network, address string) (*T
 	}
 
 	// Send connect request if haven't done so.
-	cid, err := a.Connect(addr)
+	cid, err := a.Connect(rAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +195,7 @@ func (a *TCPAllocation) DialWithConn(conn net.Conn, network, address string) (*T
 
 	dataConn := &TCPConn{
 		TCPConn:       tcpConn,
-		remoteAddress: addr,
+		remoteAddress: rAddr,
 		allocation:    a,
 	}
 
@@ -188,14 +222,14 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 		return err
 	}
 
-	a.log.Debugf("send connectionBind request (cid=%v)", cid)
+	a.log.Debugf("Send connectionBind request (cid=%v)", cid)
+
 	_, err = dataConn.Write(msg.Raw)
 	if err != nil {
 		return err
 	}
 
-	// Read exactly one STUN message,
-	// any data after belongs to the user
+	// Read exactly one STUN message, any data after belongs to the user
 	b := make([]byte, stunHeaderSize)
 	n, err := dataConn.Read(b)
 	if n != stunHeaderSize {
@@ -203,6 +237,7 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 	} else if err != nil {
 		return err
 	}
+
 	if !stun.IsMessage(b) {
 		return errInvalidTURNFrame
 	}
@@ -216,7 +251,7 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 	}
 	res := &stun.Message{Raw: raw}
 	if err := res.Decode(); err != nil {
-		return fmt.Errorf("failed to decode STUN message: %s", err.Error())
+		return fmt.Errorf("failed to decode STUN message: %w", err)
 	}
 
 	switch res.Type.Class {
@@ -227,7 +262,7 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 		}
 		return fmt.Errorf("%s", res.Type)
 	case stun.ClassSuccessResponse:
-		a.log.Debug("connectionBind request successful")
+		a.log.Debug("Successful connectionBind request")
 		return nil
 	default:
 		return fmt.Errorf("unexpected STUN request message: %s", res.String())
@@ -253,13 +288,13 @@ func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
 
 	dataConn, err := a.AcceptTCPWithConn(tcpConn)
 	if err != nil {
-		tcpConn.Close()
+		tcpConn.Close() //nolint: errcheck
 	}
 
 	return dataConn, err
 }
 
-// AcceptTCP accepts the next incoming call and returns the new connection.
+// AcceptTCPWithConn accepts the next incoming call and returns the new connection.
 func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (transport.TCPConn, error) {
 	select {
 	case attempt := <-a.connAttemptCh:
@@ -313,12 +348,15 @@ func (a *TCPAllocation) Close() error {
 	return a.refreshAllocation(0, true /* dontWait=true */)
 }
 
+// Addr returns the relayed address of the allocation
 func (a *TCPAllocation) Addr() net.Addr {
 	return a.relayedAddr
 }
 
+// HandleConnectionAttempt is called by the TURN client
+// when it receives a ConnectionAttempt indication.
 func (a *TCPAllocation) HandleConnectionAttempt(from *net.TCPAddr, cid proto.ConnectionID) error {
-	a.connAttemptCh <- &ConnectionAttempt{
+	a.connAttemptCh <- &connectionAttempt{
 		from: from,
 		cid:  cid,
 	}

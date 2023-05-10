@@ -320,7 +320,7 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 
 	allocation := c.getTCPAllocation()
 	if allocation != nil {
-		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, allocation.Addr().String())
+		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, allocation.Addr())
 	}
 
 	relayed, lifetime, nonce, err := c.sendAllocateRequest(proto.ProtoTCP)

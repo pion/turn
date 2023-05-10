@@ -86,7 +86,7 @@ func TestTCPConn(t *testing.T) {
 		loggerFactory := logging.NewDefaultLoggerFactory()
 		log := loggerFactory.NewLogger("test")
 		alloc := TCPAllocation{
-			Allocation: Allocation{
+			allocation: allocation{
 				client:  obs,
 				permMap: pm,
 				log:     log,
@@ -111,7 +111,9 @@ func TestTCPConn(t *testing.T) {
 			RelayedAddr: relayedAddr,
 		})
 
-		alloc.SetDeadline(time.Now())
+		err = alloc.SetDeadline(time.Now())
+		assert.NoError(t, err)
+
 		cid, err := alloc.AcceptTCPWithConn(nil)
 		assert.Nil(t, cid)
 		assert.Contains(t, err.Error(), "i/o timeout")
