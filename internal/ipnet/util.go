@@ -49,5 +49,5 @@ func FingerprintAddr(addr net.Addr) string {
 	case *net.TCPAddr: // Do we really need this case?
 		return a.IP.String()
 	}
-	return "" // should never happen
+	return "" // Should never happen
 }

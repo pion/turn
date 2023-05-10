@@ -33,11 +33,11 @@ type inboundData struct {
 }
 
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
-// comatible with net.PacketConn and net.Conn
+// compatible with net.PacketConn and net.Conn
 type UDPConn struct {
-	bindingMgr *bindingManager   // thread-safe
-	readCh     chan *inboundData // thread-safe
-	closeCh    chan struct{}     // thread-safe
+	bindingMgr *bindingManager   // Thread-safe
+	readCh     chan *inboundData // Thread-safe
+	closeCh    chan struct{}     // Thread-safe
 	Allocation
 }
 
@@ -203,7 +203,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 			}
 		}()
 
-		// send data using SendIndication
+		// Send data using SendIndication
 		peerAddr := addr2PeerAddress(addr)
 		var msg *stun.Message
 		msg, err = stun.Build(
@@ -381,7 +381,7 @@ func (c *Allocation) CreatePermissions(addrs ...net.Addr) error {
 
 // HandleInbound passes inbound data in UDPConn
 func (c *UDPConn) HandleInbound(data []byte, from net.Addr) {
-	// copy data
+	// Copy data
 	copied := make([]byte, len(data))
 	copy(copied, data)
 

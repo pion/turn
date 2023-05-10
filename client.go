@@ -511,7 +511,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 			allocation := c.getTCPAllocation()
 			if allocation == nil {
 				c.log.Debug("no TCP allocation exists")
-				return nil // silently discard
+				return nil // Silently discard
 			}
 
 			allocation.HandleConnectionAttempt(addr, cid)
