@@ -44,16 +44,6 @@ type Allocation struct {
 	responseCache atomic.Value // *allocationResponse
 }
 
-func addr2IPFingerprint(addr net.Addr) string {
-	switch a := addr.(type) {
-	case *net.UDPAddr:
-		return a.IP.String()
-	case *net.TCPAddr: // Do we really need this case?
-		return a.IP.String()
-	}
-	return "" // Should never happen
-}
-
 // NewAllocation creates a new instance of NewAllocation.
 func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
 	return &Allocation{
@@ -70,12 +60,12 @@ func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 	a.permissionsLock.RLock()
 	defer a.permissionsLock.RUnlock()
 
-	return a.permissions[addr2IPFingerprint(addr)]
+	return a.permissions[ipnet.FingerprintAddr(addr)]
 }
 
 // AddPermission adds a new permission to the allocation
 func (a *Allocation) AddPermission(p *Permission) {
-	fingerprint := addr2IPFingerprint(p.Addr)
+	fingerprint := ipnet.FingerprintAddr(p.Addr)
 
 	a.permissionsLock.RLock()
 	existedPermission, ok := a.permissions[fingerprint]
@@ -98,7 +88,7 @@ func (a *Allocation) AddPermission(p *Permission) {
 func (a *Allocation) RemovePermission(addr net.Addr) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
-	delete(a.permissions, addr2IPFingerprint(addr))
+	delete(a.permissions, ipnet.FingerprintAddr(addr))
 }
 
 // AddChannelBind adds a new ChannelBind to the allocation, it also updates the

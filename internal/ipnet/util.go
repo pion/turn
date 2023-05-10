@@ -41,3 +41,13 @@ func AddrEqual(a, b net.Addr) bool {
 
 	return aUDP.IP.Equal(bUDP.IP) && aUDP.Port == bUDP.Port
 }
+
+func FingerprintAddr(addr net.Addr) string {
+	switch a := addr.(type) {
+	case *net.UDPAddr:
+		return a.IP.String()
+	case *net.TCPAddr: // Do we really need this case?
+		return a.IP.String()
+	}
+	return "" // should never happen
+}
