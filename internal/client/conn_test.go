@@ -67,7 +67,7 @@ func TestUDPConn(t *testing.T) {
 		})
 
 		conn := UDPConn{
-			RelayConnContext: RelayConnContext{
+			Allocation: Allocation{
 				obs: obs,
 			},
 			bindingMgr: bm,
@@ -104,7 +104,7 @@ func TestUDPConn(t *testing.T) {
 		binding.setState(bindingStateReady)
 
 		conn := UDPConn{
-			RelayConnContext: RelayConnContext{
+			Allocation: Allocation{
 				obs:     obs,
 				permMap: pm,
 			},
