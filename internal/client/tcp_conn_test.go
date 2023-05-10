@@ -84,7 +84,7 @@ func TestTCPConn(t *testing.T) {
 		log := loggerFactory.NewLogger("test")
 		alloc := TCPAllocation{
 			Allocation: Allocation{
-				obs:     obs,
+				client:  obs,
 				permMap: pm,
 				log:     log,
 			},
@@ -101,8 +101,8 @@ func TestTCPConn(t *testing.T) {
 
 		loggerFactory := logging.NewDefaultLoggerFactory()
 		obs := &dummyConnObserver{}
-		alloc := NewTCPAllocation(&ConnConfig{
-			Observer:    obs,
+		alloc := NewTCPAllocation(&AllocationConfig{
+			Client:      obs,
 			Lifetime:    time.Second,
 			Log:         loggerFactory.NewLogger("test"),
 			RelayedAddr: relayedAddr,
