@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/pion/logging"
@@ -31,6 +30,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 				if err != nil {
 					log.Panicf("Failed to accept: %s", err)
 				}
+
 				go func() {
 					message, err := bufio.NewReader(conn).ReadString('\n')
 					if err != nil {
@@ -38,6 +38,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 					}
 					addrCh <- message[:len(message)-1]
 				}()
+
 				if _, err = conn.Write([]byte(fmt.Sprintf("%s\n", relayAddr))); err != nil {
 					log.Panicf("Failed to write relayAddr: %s", err)
 				}
@@ -77,8 +78,14 @@ func main() {
 	}
 
 	// Dial TURN Server
-	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
-	conn, err := net.Dial("tcp", turnServerAddr)
+	turnServerAddrStr := fmt.Sprintf("%s:%d", *host, *port)
+
+	turnServerAddr, err := net.ResolveTCPAddr("tcp", turnServerAddrStr)
+	if err != nil {
+		log.Fatalf("Failed to resolve TURN server address: %s", err)
+	}
+
+	conn, err := net.DialTCP("tcp", nil, turnServerAddr)
 	if err != nil {
 		log.Panicf("Failed to connect to TURN server: %s", err)
 	}
@@ -122,47 +129,66 @@ func main() {
 		}
 	}()
 
-	log.Printf("relayed-address=%s", allocation.Addr().String())
+	log.Printf("relayed-address=%s", allocation.Addr())
 
 	// Learn the peers relay address via signaling channel
 	addrCh := make(chan string, 5)
 	setupSignalingChannel(addrCh, *signaling, allocation.Addr().String())
 
 	// Get peer address
-	peerAddrString := <-addrCh
-	res := strings.Split(peerAddrString, ":")
-	peerIp := res[0]
-	peerPort, _ := strconv.Atoi(res[1])
+	peerAddrStr := <-addrCh
+	peerAddr, err := net.ResolveTCPAddr("tcp", peerAddrStr)
+	if err != nil {
+		log.Fatalf("Failed to resolve peer address: %s", err)
+	}
 
-	log.Printf("Recieved peer address: %s", peerAddrString)
+	log.Printf("Received peer address: %s", peerAddrStr)
 
 	buf := make([]byte, 4096)
-	peerAddr := net.TCPAddr{IP: net.ParseIP(peerIp), Port: peerPort}
 	var n int
 	if *signaling {
-		conn, err = allocation.Dial("tcp", peerAddrString)
+		conn, err := allocation.DialTCP("tcp", nil, peerAddr)
 		if err != nil {
-			fmt.Println("Error connecting:", err)
+			log.Fatalf("Failed to dial: %s", err)
 		}
-		conn.Write([]byte("hello!"))
+
+		if _, err := conn.Write([]byte("hello!")); err != nil {
+			log.Fatalf("Failed to write: %s", err)
+		}
+
 		n, err = conn.Read(buf)
 		if err != nil {
-			log.Println("Error reading from relay conn:", err)
+			log.Fatalf("Failed to read from relay connection: %s", err)
 		}
-		conn.Close()
+
+		if err := conn.Close(); err != nil {
+			log.Fatalf("Failed to close: %s", err)
+		}
 	} else {
-		client.CreatePermission(&peerAddr)
+		if err := client.CreatePermission(peerAddr); err != nil {
+			log.Fatalf("Failed to create permission: %s", err)
+		}
+
 		conn, err := allocation.AcceptTCP()
 		if err != nil {
-			log.Println("Error accepting:", err)
+			log.Fatalf("Failed to accept TCP connection: %s", err)
 		}
-		log.Println("Accepted from:", conn.RemoteAddr())
+
+		log.Printf("Accepted connection from: %s", conn.RemoteAddr())
+
 		n, err = conn.Read(buf)
 		if err != nil {
-			log.Println("Error reading from relay conn:", err)
+			log.Fatalf("Failed to read from relay conn: %s", err)
 		}
-		conn.Write([]byte("hello back!"))
-		conn.Close()
+
+		if _, err := conn.Write([]byte("hello back!")); err != nil {
+			log.Fatalf("Failed to write: %s", err)
+		}
+
+		if err := conn.Close(); err != nil {
+			log.Fatalf("Failed to close: %s", err)
+		}
 	}
-	log.Println("Read message:", string(buf[:n]))
+
+	log.Printf("Read message: %s", string(buf[:n]))
 }

@@ -42,6 +42,8 @@ func AddrEqual(a, b net.Addr) bool {
 	return aUDP.IP.Equal(bUDP.IP) && aUDP.Port == bUDP.Port
 }
 
+// FingerprintAddr generates a fingerprint from net.UDPAddr or net.TCPAddr's
+// which can be used for indexing maps.
 func FingerprintAddr(addr net.Addr) string {
 	switch a := addr.(type) {
 	case *net.UDPAddr:

@@ -62,13 +62,15 @@ func TestPermissionMap(t *testing.T) {
 		for _, addr := range addrs {
 			switch addr.(type) {
 			case *net.UDPAddr:
-				udpAddr, err := net.ResolveUDPAddr(addr.Network(), addr.String())
+				addr, err := net.ResolveUDPAddr(addr.Network(), addr.String())
 				assert.NoError(t, err)
-				ips = append(ips, udpAddr.IP)
+
+				ips = append(ips, addr.IP)
 			case *net.TCPAddr:
-				tcpAddr, err := net.ResolveTCPAddr(addr.Network(), addr.String())
+				addr, err := net.ResolveTCPAddr(addr.Network(), addr.String())
 				assert.NoError(t, err)
-				ips = append(ips, tcpAddr.IP)
+
+				ips = append(ips, addr.IP)
 			}
 		}
 

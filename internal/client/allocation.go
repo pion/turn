@@ -22,7 +22,7 @@ type AllocationConfig struct {
 	Log         logging.LeveledLogger
 }
 
-type Allocation struct {
+type allocation struct {
 	client            Client                // Read-only
 	relayedAddr       net.Addr              // Read-only
 	permMap           *permissionMap        // Thread-safe

@@ -193,7 +193,7 @@ func TestClientNonceExpiration(t *testing.T) {
 // Create a TCP-based allocation and verify allocation can be created
 func TestTCPClient(t *testing.T) {
 	// Setup server
-	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478")
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
 	require.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -217,10 +217,13 @@ func TestTCPClient(t *testing.T) {
 	conn, err := net.Dial("tcp", "127.0.0.1:13478")
 	require.NoError(t, err)
 
+	serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:13478")
+	require.NoError(t, err)
+
 	client, err := NewClient(&ClientConfig{
 		Conn:           NewSTUNConn(conn),
-		STUNServerAddr: "127.0.0.1:13478",
-		TURNServerAddr: "127.0.0.1:13478",
+		STUNServerAddr: serverAddr,
+		TURNServerAddr: serverAddr,
 		Username:       "foo",
 		Password:       "pass",
 	})

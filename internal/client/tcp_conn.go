@@ -33,15 +33,19 @@ type TCPConn struct {
 	ConnectionID   proto.ConnectionID
 }
 
-type ConnectionAttempt struct {
+type connectionAttempt struct {
 	from *net.TCPAddr
 	cid  proto.ConnectionID
 }
 
-func (c *TCPConn) LocalAddress() net.Addr {
+// LocalAddr returns the local network address.
+// The Addr returned is shared by all invocations of LocalAddr, so do not modify it.
+func (c *TCPConn) LocalAddr() net.Addr {
 	return c.allocation.Addr()
 }
 
-func (c *TCPConn) RemoteAddress() net.Addr {
+// RemoteAddr returns the remote network address.
+// The Addr returned is shared by all invocations of RemoteAddr, so do not modify it.
+func (c *TCPConn) RemoteAddr() net.Addr {
 	return c.remoteAddress
 }

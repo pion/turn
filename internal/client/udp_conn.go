@@ -38,7 +38,7 @@ type UDPConn struct {
 	bindingMgr *bindingManager   // Thread-safe
 	readCh     chan *inboundData // Thread-safe
 	closeCh    chan struct{}     // Thread-safe
-	Allocation
+	allocation
 }
 
 // NewUDPConn creates a new instance of UDPConn
@@ -47,7 +47,7 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		bindingMgr: newBindingManager(),
 		readCh:     make(chan *inboundData, maxReadQueueSize),
 		closeCh:    make(chan struct{}),
-		Allocation: Allocation{
+		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
 			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
@@ -122,7 +122,7 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 }
 
-func (c *Allocation) createPermission(perm *permission, addr net.Addr) error {
+func (c *allocation) createPermission(perm *permission, addr net.Addr) error {
 	perm.mutex.Lock()
 	defer perm.mutex.Unlock()
 
@@ -334,7 +334,7 @@ func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
 
 // CreatePermissions Issues a CreatePermission request for the supplied addresses
 // as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
-func (c *Allocation) CreatePermissions(addrs ...net.Addr) error {
+func (c *allocation) CreatePermissions(addrs ...net.Addr) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
@@ -402,7 +402,7 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 	return b.addr, true
 }
 
-func (c *Allocation) setNonceFromMsg(msg *stun.Message) {
+func (c *allocation) setNonceFromMsg(msg *stun.Message) {
 	// Update nonce
 	var nonce stun.Nonce
 	if err := nonce.GetFrom(msg); err == nil {
@@ -413,7 +413,7 @@ func (c *Allocation) setNonceFromMsg(msg *stun.Message) {
 	}
 }
 
-func (c *Allocation) refreshAllocation(lifetime time.Duration, dontWait bool) error {
+func (c *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) error {
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
@@ -465,7 +465,7 @@ func (c *Allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 	return nil
 }
 
-func (c *Allocation) refreshPermissions() error {
+func (c *allocation) refreshPermissions() error {
 	addrs := c.permMap.addrs()
 	if len(addrs) == 0 {
 		c.log.Debug("no permission to refresh")
@@ -531,7 +531,7 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 	return len(data), nil
 }
 
-func (c *Allocation) onRefreshTimers(id int) {
+func (c *allocation) onRefreshTimers(id int) {
 	c.log.Debugf("refresh timer %d expired", id)
 	switch id {
 	case timerIDRefreshAlloc:
@@ -562,14 +562,14 @@ func (c *Allocation) onRefreshTimers(id int) {
 	}
 }
 
-func (c *Allocation) nonce() stun.Nonce {
+func (c *allocation) nonce() stun.Nonce {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c._nonce
 }
 
-func (c *Allocation) setNonce(nonce stun.Nonce) {
+func (c *allocation) setNonce(nonce stun.Nonce) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -577,14 +577,14 @@ func (c *Allocation) setNonce(nonce stun.Nonce) {
 	c._nonce = nonce
 }
 
-func (c *Allocation) lifetime() time.Duration {
+func (c *allocation) lifetime() time.Duration {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
 	return c._lifetime
 }
 
-func (c *Allocation) setLifetime(lifetime time.Duration) {
+func (c *allocation) setLifetime(lifetime time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

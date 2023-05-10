@@ -67,7 +67,7 @@ func TestUDPConn(t *testing.T) {
 		})
 
 		conn := UDPConn{
-			Allocation: Allocation{
+			allocation: allocation{
 				client: obs,
 			},
 			bindingMgr: bm,
@@ -104,7 +104,7 @@ func TestUDPConn(t *testing.T) {
 		binding.setState(bindingStateReady)
 
 		conn := UDPConn{
-			Allocation: Allocation{
+			allocation: allocation{
 				client:  obs,
 				permMap: pm,
 			},
