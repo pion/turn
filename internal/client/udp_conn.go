@@ -372,7 +372,6 @@ func (c *allocation) CreatePermissions(addrs ...net.Addr) error {
 			}
 			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
 		}
-
 		return fmt.Errorf("%s", res.Type) //nolint:goerr113
 	}
 
@@ -400,86 +399,6 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 		return nil, false
 	}
 	return b.addr, true
-}
-
-func (c *allocation) setNonceFromMsg(msg *stun.Message) {
-	// Update nonce
-	var nonce stun.Nonce
-	if err := nonce.GetFrom(msg); err == nil {
-		c.setNonce(nonce)
-		c.log.Debug("refresh allocation: 438, got new nonce.")
-	} else {
-		c.log.Warn("refresh allocation: 438 but no nonce.")
-	}
-}
-
-func (c *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) error {
-	msg, err := stun.Build(
-		stun.TransactionID,
-		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
-		proto.Lifetime{Duration: lifetime},
-		c.client.Username(),
-		c.client.Realm(),
-		c.nonce(),
-		c.integrity,
-		stun.Fingerprint,
-	)
-	if err != nil {
-		return fmt.Errorf("%w: %s", errFailedToBuildRefreshRequest, err.Error())
-	}
-
-	c.log.Debugf("send refresh request (dontWait=%v)", dontWait)
-	trRes, err := c.client.PerformTransaction(msg, c.client.TURNServerAddr(), dontWait)
-	if err != nil {
-		return fmt.Errorf("%w: %s", errFailedToRefreshAllocation, err.Error())
-	}
-
-	if dontWait {
-		c.log.Debug("refresh request sent")
-		return nil
-	}
-
-	c.log.Debug("refresh request sent, and waiting response")
-
-	res := trRes.Msg
-	if res.Type.Class == stun.ClassErrorResponse {
-		var code stun.ErrorCodeAttribute
-		if err = code.GetFrom(res); err == nil {
-			if code.Code == stun.CodeStaleNonce {
-				c.setNonceFromMsg(res)
-				return errTryAgain
-			}
-			return err
-		}
-		return fmt.Errorf("%s", res.Type) //nolint:goerr113
-	}
-
-	// Getting lifetime from response
-	var updatedLifetime proto.Lifetime
-	if err := updatedLifetime.GetFrom(res); err != nil {
-		return fmt.Errorf("%w: %s", errFailedToGetLifetime, err.Error())
-	}
-
-	c.setLifetime(updatedLifetime.Duration)
-	c.log.Debugf("updated lifetime: %d seconds", int(c.lifetime().Seconds()))
-	return nil
-}
-
-func (c *allocation) refreshPermissions() error {
-	addrs := c.permMap.addrs()
-	if len(addrs) == 0 {
-		c.log.Debug("no permission to refresh")
-		return nil
-	}
-	if err := c.CreatePermissions(addrs...); err != nil {
-		if errors.Is(err, errTryAgain) {
-			return errTryAgain
-		}
-		c.log.Errorf("fail to refresh permissions: %s", err.Error())
-		return err
-	}
-	c.log.Debug("refresh permissions successful")
-	return nil
 }
 
 func (c *UDPConn) bind(b *binding) error {
@@ -529,64 +448,4 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 		return 0, err
 	}
 	return len(data), nil
-}
-
-func (c *allocation) onRefreshTimers(id int) {
-	c.log.Debugf("refresh timer %d expired", id)
-	switch id {
-	case timerIDRefreshAlloc:
-		var err error
-		lifetime := c.lifetime()
-		// Limit the max retries on errTryAgain to 3
-		// when stale nonce returns, sencond retry should succeed
-		for i := 0; i < maxRetryAttempts; i++ {
-			err = c.refreshAllocation(lifetime, false)
-			if !errors.Is(err, errTryAgain) {
-				break
-			}
-		}
-		if err != nil {
-			c.log.Warnf("refresh allocation failed")
-		}
-	case timerIDRefreshPerms:
-		var err error
-		for i := 0; i < maxRetryAttempts; i++ {
-			err = c.refreshPermissions()
-			if !errors.Is(err, errTryAgain) {
-				break
-			}
-		}
-		if err != nil {
-			c.log.Warnf("refresh permissions failed")
-		}
-	}
-}
-
-func (c *allocation) nonce() stun.Nonce {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	return c._nonce
-}
-
-func (c *allocation) setNonce(nonce stun.Nonce) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	c.log.Debugf("set new nonce with %d bytes", len(nonce))
-	c._nonce = nonce
-}
-
-func (c *allocation) lifetime() time.Duration {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	return c._lifetime
-}
-
-func (c *allocation) setLifetime(lifetime time.Duration) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	c._lifetime = lifetime
 }
