@@ -54,7 +54,7 @@ func (obs *dummyClient) OnDeallocated(relayedAddr net.Addr) {
 
 func TestUDPConn(t *testing.T) {
 	t.Run("bind()", func(t *testing.T) {
-		obs := &dummyClient{
+		client := &dummyClient{
 			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
@@ -68,7 +68,7 @@ func TestUDPConn(t *testing.T) {
 
 		conn := UDPConn{
 			allocation: allocation{
-				client: obs,
+				client: client,
 			},
 			bindingMgr: bm,
 		}
@@ -80,7 +80,7 @@ func TestUDPConn(t *testing.T) {
 	})
 
 	t.Run("WriteTo()", func(t *testing.T) {
-		obs := &dummyClient{
+		client := &dummyClient{
 			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
@@ -105,7 +105,7 @@ func TestUDPConn(t *testing.T) {
 
 		conn := UDPConn{
 			allocation: allocation{
-				client:  obs,
+				client:  client,
 				permMap: pm,
 			},
 			bindingMgr: bm,
