@@ -11,6 +11,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/transport/v2"
+	"github.com/pion/transport/v2/stdnet"
 	"github.com/pion/turn/v2/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
@@ -41,6 +42,7 @@ func (c dummyTCPConn) Read(b []byte) (int, error) {
 }
 
 type dummyConnObserver struct {
+	net                 transport.Net
 	turnServerAddr      net.Addr
 	username            stun.Username
 	realm               stun.Realm
@@ -59,6 +61,17 @@ func (obs *dummyConnObserver) Username() stun.Username {
 
 func (obs *dummyConnObserver) Realm() stun.Realm {
 	return obs.realm
+}
+
+func (obs *dummyConnObserver) Net() transport.Net {
+	if obs.net == nil {
+		n, err := stdnet.NewNet()
+		if err != nil {
+			return nil
+		}
+		obs.net = n
+	}
+	return obs.net
 }
 
 func (obs *dummyConnObserver) WriteTo(data []byte, to net.Addr) (int, error) {
@@ -122,6 +135,31 @@ func TestTCPConn(t *testing.T) {
 		actualCid, err := alloc.Connect(addr)
 		assert.NoError(t, err)
 		assert.Equal(t, cid, actualCid)
+
+		obs = &dummyConnObserver{
+			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+				if msg.Type.Class == stun.ClassRequest && msg.Type.Method == stun.MethodConnect {
+					msg, err = stun.Build(
+						stun.TransactionID,
+						stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
+						stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
+					)
+					assert.NoError(t, err)
+					return TransactionResult{Msg: msg}, nil
+				}
+				return TransactionResult{}, errFake
+			},
+		}
+		alloc = TCPAllocation{
+			allocation: allocation{
+				client:  obs,
+				permMap: pm,
+				log:     log,
+			},
+		}
+
+		_, err = alloc.Connect(addr)
+		assert.ErrorContains(t, err, "Connect error response", "error 400")
 	})
 
 	t.Run("SetDeadline()", func(t *testing.T) {
@@ -161,10 +199,7 @@ func TestTCPConn(t *testing.T) {
 		from, err := net.ResolveTCPAddr("tcp", "127.0.0.1:11111")
 		var cid proto.ConnectionID = 5
 		assert.NoError(t, err)
-		alloc.connAttemptCh <- &connectionAttempt{
-			from: from,
-			cid:  cid,
-		}
+		alloc.HandleConnectionAttempt(from, cid)
 
 		conn := dummyTCPConn{}
 		dataConn, err := alloc.AcceptTCPWithConn(conn)

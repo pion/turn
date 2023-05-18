@@ -12,9 +12,15 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
+	"github.com/pion/turn/v2/internal/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageType, additional ...stun.Setter) []stun.Setter {
+	return append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
+}
 
 func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, net.PacketConn, bool) {
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
@@ -230,7 +236,29 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, client.Listen())
 
+	require.Equal(t, serverAddr, client.STUNServerAddr())
+
 	allocation, err := client.AllocateTCP()
+	require.NoError(t, err)
+
+	peerAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:12345")
+	require.NoError(t, err)
+	err = client.CreatePermission(peerAddr)
+	require.NoError(t, err)
+
+	var cid proto.ConnectionID = 5
+	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
+	attrs := buildMsg(
+		transactionID,
+		stun.NewType(stun.MethodConnectionAttempt, stun.ClassIndication),
+		cid,
+		proto.PeerAddress{IP: peerAddr.IP, Port: peerAddr.Port},
+	)
+
+	msg, err := stun.Build(attrs...)
+	require.NoError(t, err)
+
+	err = client.handleSTUNMessage(msg.Raw, peerAddr)
 	require.NoError(t, err)
 
 	// Shutdown
