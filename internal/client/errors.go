@@ -20,6 +20,8 @@ var (
 	errFailedToBuildRefreshRequest         = errors.New("failed to build refresh request")
 	errFailedToRefreshAllocation           = errors.New("failed to refresh allocation")
 	errFailedToGetLifetime                 = errors.New("failed to get lifetime from refresh response")
+	errInvalidTURNAddress                  = errors.New("invalid TURN server address")
+	errUnexpectedSTUNRequestMessage        = errors.New("unexpected STUN request message")
 )
 
 type timeoutError struct {

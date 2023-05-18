@@ -122,14 +122,14 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	}
 }
 
-func (c *allocation) createPermission(perm *permission, addr net.Addr) error {
+func (a *allocation) createPermission(perm *permission, addr net.Addr) error {
 	perm.mutex.Lock()
 	defer perm.mutex.Unlock()
 
 	if perm.state() == permStateIdle {
 		// Punch a hole! (this would block a bit..)
-		if err := c.CreatePermissions(addr); err != nil {
-			c.permMap.delete(addr)
+		if err := a.CreatePermissions(addr); err != nil {
+			a.permMap.delete(addr)
 			return err
 		}
 		perm.setState(permStatePermitted)
@@ -334,7 +334,7 @@ func addr2PeerAddress(addr net.Addr) proto.PeerAddress {
 
 // CreatePermissions Issues a CreatePermission request for the supplied addresses
 // as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
-func (c *allocation) CreatePermissions(addrs ...net.Addr) error {
+func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodCreatePermission, stun.ClassRequest),
@@ -345,10 +345,10 @@ func (c *allocation) CreatePermissions(addrs ...net.Addr) error {
 	}
 
 	setters = append(setters,
-		c.client.Username(),
-		c.client.Realm(),
-		c.nonce(),
-		c.integrity,
+		a.client.Username(),
+		a.client.Realm(),
+		a.nonce(),
+		a.integrity,
 		stun.Fingerprint)
 
 	msg, err := stun.Build(setters...)
@@ -356,7 +356,7 @@ func (c *allocation) CreatePermissions(addrs ...net.Addr) error {
 		return err
 	}
 
-	trRes, err := c.client.PerformTransaction(msg, c.client.TURNServerAddr(), false)
+	trRes, err := a.client.PerformTransaction(msg, a.client.TURNServerAddr(), false)
 	if err != nil {
 		return err
 	}
@@ -367,7 +367,7 @@ func (c *allocation) CreatePermissions(addrs ...net.Addr) error {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
 			if code.Code == stun.CodeStaleNonce {
-				c.setNonceFromMsg(res)
+				a.setNonceFromMsg(res)
 				return errTryAgain
 			}
 			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113

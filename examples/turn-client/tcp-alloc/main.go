@@ -20,21 +20,22 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 	addr := "127.0.0.1:5000"
 	if signaling {
 		go func() {
-			listen, err := net.Listen("tcp", addr)
+			listener, err := net.Listen("tcp", addr)
 			if err != nil {
 				log.Panicf("Failed to create signaling server: %s", err)
 			}
-			defer listen.Close()
+			defer listener.Close() //nolint:errcheck,gosec
 			for {
-				conn, err := listen.Accept()
+				conn, err := listener.Accept()
 				if err != nil {
 					log.Panicf("Failed to accept: %s", err)
 				}
 
 				go func() {
-					message, err := bufio.NewReader(conn).ReadString('\n')
+					var message string
+					message, err = bufio.NewReader(conn).ReadString('\n')
 					if err != nil {
-						log.Panicf("Failed to read relayAddr: %s", err)
+						log.Panicf("Failed to read from relayAddr: %s", err)
 					}
 					addrCh <- message[:len(message)-1]
 				}()
@@ -70,11 +71,11 @@ func main() {
 	flag.Parse()
 
 	if len(*host) == 0 {
-		log.Fatalf("'host' is required")
+		log.Panicf("'host' is required")
 	}
 
 	if len(*user) == 0 {
-		log.Fatalf("'user' is required")
+		log.Panicf("'user' is required")
 	}
 
 	// Dial TURN Server
@@ -82,7 +83,7 @@ func main() {
 
 	turnServerAddr, err := net.ResolveTCPAddr("tcp", turnServerAddrStr)
 	if err != nil {
-		log.Fatalf("Failed to resolve TURN server address: %s", err)
+		log.Panicf("Failed to resolve TURN server address: %s", err)
 	}
 
 	conn, err := net.DialTCP("tcp", nil, turnServerAddr)
@@ -125,7 +126,7 @@ func main() {
 	}
 	defer func() {
 		if closeErr := allocation.Close(); closeErr != nil {
-			log.Fatalf("Failed to close connection: %s", closeErr)
+			log.Panicf("Failed to close connection: %s", closeErr)
 		}
 	}()
 
@@ -139,7 +140,7 @@ func main() {
 	peerAddrStr := <-addrCh
 	peerAddr, err := net.ResolveTCPAddr("tcp", peerAddrStr)
 	if err != nil {
-		log.Fatalf("Failed to resolve peer address: %s", err)
+		log.Panicf("Failed to resolve peer address: %s", err)
 	}
 
 	log.Printf("Received peer address: %s", peerAddrStr)
@@ -149,44 +150,44 @@ func main() {
 	if *signaling {
 		conn, err := allocation.DialTCP("tcp", nil, peerAddr)
 		if err != nil {
-			log.Fatalf("Failed to dial: %s", err)
+			log.Panicf("Failed to dial: %s", err)
 		}
 
-		if _, err := conn.Write([]byte("hello!")); err != nil {
-			log.Fatalf("Failed to write: %s", err)
+		if _, err = conn.Write([]byte("hello!")); err != nil {
+			log.Panicf("Failed to write: %s", err)
 		}
 
 		n, err = conn.Read(buf)
 		if err != nil {
-			log.Fatalf("Failed to read from relay connection: %s", err)
+			log.Panicf("Failed to read from relay connection: %s", err)
 		}
 
 		if err := conn.Close(); err != nil {
-			log.Fatalf("Failed to close: %s", err)
+			log.Panicf("Failed to close: %s", err)
 		}
 	} else {
 		if err := client.CreatePermission(peerAddr); err != nil {
-			log.Fatalf("Failed to create permission: %s", err)
+			log.Panicf("Failed to create permission: %s", err)
 		}
 
 		conn, err := allocation.AcceptTCP()
 		if err != nil {
-			log.Fatalf("Failed to accept TCP connection: %s", err)
+			log.Panicf("Failed to accept TCP connection: %s", err)
 		}
 
 		log.Printf("Accepted connection from: %s", conn.RemoteAddr())
 
 		n, err = conn.Read(buf)
 		if err != nil {
-			log.Fatalf("Failed to read from relay conn: %s", err)
+			log.Panicf("Failed to read from relay conn: %s", err)
 		}
 
 		if _, err := conn.Write([]byte("hello back!")); err != nil {
-			log.Fatalf("Failed to write: %s", err)
+			log.Panicf("Failed to write: %s", err)
 		}
 
 		if err := conn.Close(); err != nil {
-			log.Fatalf("Failed to close: %s", err)
+			log.Panicf("Failed to close: %s", err)
 		}
 	}
 

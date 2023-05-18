@@ -10,9 +10,35 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
+	"github.com/pion/transport/v2"
 	"github.com/pion/turn/v2/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
+
+type dummyTCPConn struct {
+	transport.TCPConn
+}
+
+func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageType, additional ...stun.Setter) []stun.Setter {
+	return append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
+}
+
+func (c dummyTCPConn) Write(b []byte) (int, error) {
+	return len(b), nil
+}
+
+func (c dummyTCPConn) Read(b []byte) (int, error) {
+	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
+	messageType := stun.MessageType{Method: stun.MethodConnectionBind, Class: stun.ClassSuccessResponse}
+	attrs := buildMsg(transactionID, messageType)
+	msg, err := stun.Build(attrs...)
+	if err != nil {
+		return 0, err
+	}
+
+	copy(b, msg.Raw)
+	return len(msg.Raw), nil
+}
 
 type dummyConnObserver struct {
 	turnServerAddr      net.Addr
@@ -56,15 +82,15 @@ func (obs *dummyConnObserver) OnDeallocated(relayedAddr net.Addr) {
 }
 
 func TestTCPConn(t *testing.T) {
-	t.Run("connect()", func(t *testing.T) {
-		var serverCid proto.ConnectionID = 4567
+	t.Run("Connect()", func(t *testing.T) {
+		var cid proto.ConnectionID = 5
 		obs := &dummyConnObserver{
 			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				if msg.Type.Class == stun.ClassRequest && msg.Type.Method == stun.MethodConnect {
 					msg, err := stun.Build(
 						stun.TransactionID,
 						stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse),
-						serverCid,
+						cid,
 					)
 					assert.NoError(t, err)
 					return TransactionResult{Msg: msg}, nil
@@ -93,9 +119,9 @@ func TestTCPConn(t *testing.T) {
 			},
 		}
 
-		cid, err := alloc.Connect(addr)
-		assert.Equal(t, serverCid, cid)
+		actualCid, err := alloc.Connect(addr)
 		assert.NoError(t, err)
+		assert.Equal(t, cid, actualCid)
 	})
 
 	t.Run("SetDeadline()", func(t *testing.T) {
@@ -117,5 +143,67 @@ func TestTCPConn(t *testing.T) {
 		cid, err := alloc.AcceptTCPWithConn(nil)
 		assert.Nil(t, cid)
 		assert.Contains(t, err.Error(), "i/o timeout")
+	})
+
+	t.Run("AcceptTCPWithConn()", func(t *testing.T) {
+		relayedAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:13478")
+		assert.NoError(t, err)
+
+		loggerFactory := logging.NewDefaultLoggerFactory()
+		obs := &dummyConnObserver{}
+		alloc := NewTCPAllocation(&AllocationConfig{
+			Client:      obs,
+			Lifetime:    time.Second,
+			Log:         loggerFactory.NewLogger("test"),
+			RelayedAddr: relayedAddr,
+		})
+
+		from, err := net.ResolveTCPAddr("tcp", "127.0.0.1:11111")
+		var cid proto.ConnectionID = 5
+		assert.NoError(t, err)
+		alloc.connAttemptCh <- &connectionAttempt{
+			from: from,
+			cid:  cid,
+		}
+
+		conn := dummyTCPConn{}
+		dataConn, err := alloc.AcceptTCPWithConn(conn)
+		assert.Equal(t, cid, dataConn.ConnectionID)
+		assert.NoError(t, err)
+	})
+
+	t.Run("DialWithConn()", func(t *testing.T) {
+		relayedAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:13478")
+		assert.NoError(t, err)
+
+		var cid proto.ConnectionID = 5
+		loggerFactory := logging.NewDefaultLoggerFactory()
+		obs := &dummyConnObserver{
+			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+				typ := stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse)
+				if msg.Type.Method == stun.MethodCreatePermission {
+					typ = stun.NewType(stun.MethodCreatePermission, stun.ClassSuccessResponse)
+				}
+
+				msg, err = stun.Build(
+					stun.TransactionID,
+					typ,
+					cid,
+				)
+				assert.NoError(t, err)
+				return TransactionResult{Msg: msg}, nil
+			},
+		}
+		alloc := NewTCPAllocation(&AllocationConfig{
+			Client:      obs,
+			Lifetime:    time.Second,
+			Log:         loggerFactory.NewLogger("test"),
+			RelayedAddr: relayedAddr,
+		})
+
+		conn := dummyTCPConn{}
+		dataConn, err := alloc.DialWithConn(conn, "tcp", "127.0.0.1:11111")
+		assert.Equal(t, cid, dataConn.ConnectionID)
+		assert.NoError(t, err)
 	})
 }

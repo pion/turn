@@ -515,6 +515,8 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 			}
 
 			allocation.HandleConnectionAttempt(addr, cid)
+		default:
+			c.log.Debug("received unsupported STUN method")
 		}
 		return nil
 	}
