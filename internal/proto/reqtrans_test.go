@@ -20,13 +20,19 @@ func TestRequestedTransport(t *testing.T) {
 				"protocol: UDP",
 			)
 		}
+		r = RequestedTransport{
+			Protocol: ProtoTCP,
+		}
+		if r.String() != "protocol: TCP" {
+			t.Errorf("bad string %q, expected %q", r,
+				"protocol: TCP",
+			)
+		}
 		r.Protocol = 254
 		if r.String() != "protocol: 254" {
-			if r.String() != "protocol: UDP" {
-				t.Errorf("bad string %q, expected %q", r,
-					"protocol: 254",
-				)
-			}
+			t.Errorf("bad string %q, expected %q", r,
+				"protocol: 254",
+			)
 		}
 	})
 	t.Run("NoAlloc", func(t *testing.T) {

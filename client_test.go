@@ -233,10 +233,6 @@ func TestTCPClient(t *testing.T) {
 	allocation, err := client.AllocateTCP()
 	require.NoError(t, err)
 
-	// TODO: Implement server side handling of Connect and ConnectionBind
-	// _, err = allocation.Dial(&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080})
-	// assert.NoError(t, err)
-
 	// Shutdown
 	require.NoError(t, allocation.Close())
 	require.NoError(t, conn.Close())

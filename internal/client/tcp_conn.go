@@ -6,7 +6,6 @@ package client
 import (
 	"errors"
 	"net"
-	"time"
 
 	"github.com/pion/transport/v2"
 	"github.com/pion/turn/v2/internal/proto"
@@ -23,14 +22,13 @@ const (
 
 var _ transport.TCPConn = (*TCPConn)(nil) // Includes type check for net.Conn
 
-// TCPConn wraps a net.TCPConn and returns the allocations relayed
+// TCPConn wraps a transport.TCPConn and returns the allocations relayed
 // transport address in response to TCPConn.LocalAddress()
 type TCPConn struct {
-	*net.TCPConn
-	remoteAddress  *net.TCPAddr
-	allocation     *TCPAllocation
-	acceptDeadline time.Duration
-	ConnectionID   proto.ConnectionID
+	transport.TCPConn
+	remoteAddress *net.TCPAddr
+	allocation    *TCPAllocation
+	ConnectionID  proto.ConnectionID
 }
 
 type connectionAttempt struct {

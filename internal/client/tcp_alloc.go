@@ -74,6 +74,7 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 	return a
 }
 
+// Connect sends a Connect request to the turn server and returns a chosen connection ID
 func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	setters := []stun.Setter{
 		stun.TransactionID,
@@ -96,15 +97,16 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	res := trRes.Msg
 
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return 0, fmt.Errorf("%s (error %s)", res.Type, code)
+			return 0, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
 		}
 
-		return 0, fmt.Errorf("%s", res.Type)
+		return 0, fmt.Errorf("%s", res.Type) //nolint:goerr113
 	}
 
 	var cid proto.ConnectionID
@@ -140,13 +142,13 @@ func (a *TCPAllocation) DialWithConn(conn net.Conn, network, rAddrStr string) (*
 // DialTCP acts like Dial for TCP networks.
 func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCPConn, error) {
 	var rAddrServer *net.TCPAddr
-	if addr, ok := a.client.TURNServerAddr().(*net.UDPAddr); ok {
+	if addr, ok := a.client.TURNServerAddr().(*net.TCPAddr); ok {
 		rAddrServer = &net.TCPAddr{
 			IP:   addr.IP,
 			Port: addr.Port,
 		}
 	} else {
-		return nil, fmt.Errorf("invalid TURN server address")
+		return nil, errInvalidTURNAddress
 	}
 
 	conn, err := net.DialTCP(network, lAddr, rAddrServer)
@@ -156,14 +158,14 @@ func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCP
 
 	dataConn, err := a.DialTCPWithConn(conn, network, rAddr)
 	if err != nil {
-		conn.Close() //nolint:errcheck
+		conn.Close() //nolint:errcheck,gosec
 	}
 
 	return dataConn, err
 }
 
 // DialTCPWithConn acts like DialWithConn for TCP networks.
-func (a *TCPAllocation) DialTCPWithConn(conn net.Conn, network string, rAddr *net.TCPAddr) (*TCPConn, error) {
+func (a *TCPAllocation) DialTCPWithConn(conn net.Conn, _ string, rAddr *net.TCPAddr) (*TCPConn, error) {
 	var err error
 
 	// Check if we have a permission for the destination IP addr
@@ -188,13 +190,14 @@ func (a *TCPAllocation) DialTCPWithConn(conn net.Conn, network string, rAddr *ne
 		return nil, err
 	}
 
-	tcpConn, ok := conn.(*net.TCPConn)
+	tcpConn, ok := conn.(transport.TCPConn)
 	if !ok {
 		return nil, errTCPAddrCast
 	}
 
 	dataConn := &TCPConn{
 		TCPConn:       tcpConn,
+		ConnectionID:  cid,
 		remoteAddress: rAddr,
 		allocation:    a,
 	}
@@ -250,7 +253,7 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 		return err
 	}
 	res := &stun.Message{Raw: raw}
-	if err := res.Decode(); err != nil {
+	if err = res.Decode(); err != nil {
 		return fmt.Errorf("failed to decode STUN message: %w", err)
 	}
 
@@ -258,14 +261,14 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 	case stun.ClassErrorResponse:
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return fmt.Errorf("%s (error %s)", res.Type, code)
+			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
 		}
-		return fmt.Errorf("%s", res.Type)
+		return fmt.Errorf("%s", res.Type) //nolint:goerr113
 	case stun.ClassSuccessResponse:
 		a.log.Debug("Successful connectionBind request")
 		return nil
 	default:
-		return fmt.Errorf("unexpected STUN request message: %s", res.String())
+		return fmt.Errorf("%w: %s", errUnexpectedSTUNRequestMessage, res.String())
 	}
 }
 
@@ -288,18 +291,18 @@ func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
 
 	dataConn, err := a.AcceptTCPWithConn(tcpConn)
 	if err != nil {
-		tcpConn.Close() //nolint: errcheck
+		tcpConn.Close() //nolint:errcheck,gosec
 	}
 
 	return dataConn, err
 }
 
 // AcceptTCPWithConn accepts the next incoming call and returns the new connection.
-func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (transport.TCPConn, error) {
+func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (*TCPConn, error) {
 	select {
 	case attempt := <-a.connAttemptCh:
 
-		tcpConn, ok := conn.(*net.TCPConn)
+		tcpConn, ok := conn.(transport.TCPConn)
 		if !ok {
 			return nil, errTCPAddrCast
 		}
@@ -326,6 +329,7 @@ func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (transport.TCPConn, err
 	}
 }
 
+// SetDeadline sets the deadline associated with the listener. A zero time value disables the deadline.
 func (a *TCPAllocation) SetDeadline(t time.Time) error {
 	var d time.Duration
 	if t == noDeadline() {
@@ -355,10 +359,9 @@ func (a *TCPAllocation) Addr() net.Addr {
 
 // HandleConnectionAttempt is called by the TURN client
 // when it receives a ConnectionAttempt indication.
-func (a *TCPAllocation) HandleConnectionAttempt(from *net.TCPAddr, cid proto.ConnectionID) error {
+func (a *TCPAllocation) HandleConnectionAttempt(from *net.TCPAddr, cid proto.ConnectionID) {
 	a.connAttemptCh <- &connectionAttempt{
 		from: from,
 		cid:  cid,
 	}
-	return nil
 }
