@@ -151,7 +151,7 @@ func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCP
 		return nil, errInvalidTURNAddress
 	}
 
-	conn, err := net.DialTCP(network, lAddr, rAddrServer)
+	conn, err := a.client.Net().DialTCP(network, lAddr, rAddrServer)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +284,7 @@ func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
 		return nil, err
 	}
 
-	tcpConn, err := net.DialTCP("tcp", nil, addr)
+	tcpConn, err := a.client.Net().DialTCP("tcp", nil, addr)
 	if err != nil {
 		return nil, err
 	}

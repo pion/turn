@@ -13,6 +13,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
+	"github.com/pion/transport/v2"
+	"github.com/pion/transport/v2/stdnet"
 	"github.com/pion/turn/v2/internal/client"
 	"github.com/pion/turn/v2/internal/proto"
 )
@@ -43,12 +45,14 @@ type ClientConfig struct {
 	Software       string
 	RTO            time.Duration
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
+	Net            transport.Net
 	LoggerFactory  logging.LoggerFactory
 }
 
 // Client is a STUN server client
 type Client struct {
 	conn           net.PacketConn // Read-only
+	net            transport.Net  // Read-only
 	stunServerAddr net.Addr       // Read-only
 	turnServerAddr net.Addr       // Read-only
 
@@ -86,6 +90,14 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		rto = config.RTO
 	}
 
+	if config.Net == nil {
+		n, err := stdnet.NewNet()
+		if err != nil {
+			return nil, err
+		}
+		config.Net = n
+	}
+
 	c := &Client{
 		conn:           config.Conn,
 		stunServerAddr: config.STUNServerAddr,
@@ -95,6 +107,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		realm:          stun.NewRealm(config.Realm),
 		software:       stun.NewSoftware(config.Software),
 		trMap:          client.NewTransactionMap(),
+		net:            config.Net,
 		rto:            rto,
 		log:            log,
 	}
@@ -120,6 +133,11 @@ func (c *Client) Username() stun.Username {
 // Realm return realm
 func (c *Client) Realm() stun.Realm {
 	return c.realm
+}
+
+// Net return net
+func (c *Client) Net() transport.Net {
+	return c.net
 }
 
 // WriteTo sends data to the specified destination using the base socket.

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun"
+	"github.com/pion/transport/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,6 +31,10 @@ func (obs *dummyClient) Username() stun.Username {
 
 func (obs *dummyClient) Realm() stun.Realm {
 	return obs.realm
+}
+
+func (obs *dummyClient) Net() transport.Net {
+	return nil
 }
 
 func (obs *dummyClient) WriteTo(data []byte, to net.Addr) (int, error) {
