@@ -8,59 +8,13 @@ import (
 	"testing"
 
 	"github.com/pion/stun"
-	"github.com/pion/transport/v2"
 	"github.com/stretchr/testify/assert"
 )
 
-type dummyClient struct {
-	turnServerAddr      net.Addr
-	username            stun.Username
-	realm               stun.Realm
-	_writeTo            func(data []byte, to net.Addr) (int, error)
-	_performTransaction func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error)
-	_onDeallocated      func(relayedAddr net.Addr)
-}
-
-func (obs *dummyClient) TURNServerAddr() net.Addr {
-	return obs.turnServerAddr
-}
-
-func (obs *dummyClient) Username() stun.Username {
-	return obs.username
-}
-
-func (obs *dummyClient) Realm() stun.Realm {
-	return obs.realm
-}
-
-func (obs *dummyClient) Net() transport.Net {
-	return nil
-}
-
-func (obs *dummyClient) WriteTo(data []byte, to net.Addr) (int, error) {
-	if obs._writeTo != nil {
-		return obs._writeTo(data, to)
-	}
-	return 0, nil
-}
-
-func (obs *dummyClient) PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
-	if obs._performTransaction != nil {
-		return obs._performTransaction(msg, to, dontWait)
-	}
-	return TransactionResult{}, nil
-}
-
-func (obs *dummyClient) OnDeallocated(relayedAddr net.Addr) {
-	if obs._onDeallocated != nil {
-		obs._onDeallocated(relayedAddr)
-	}
-}
-
 func TestUDPConn(t *testing.T) {
 	t.Run("bind()", func(t *testing.T) {
-		client := &dummyClient{
-			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+		client := &mockClient{
+			performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
 		}
@@ -85,11 +39,11 @@ func TestUDPConn(t *testing.T) {
 	})
 
 	t.Run("WriteTo()", func(t *testing.T) {
-		client := &dummyClient{
-			_performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+		client := &mockClient{
+			performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
-			_writeTo: func(data []byte, to net.Addr) (int, error) {
+			writeTo: func(data []byte, to net.Addr) (int, error) {
 				return len(data), nil
 			},
 		}
