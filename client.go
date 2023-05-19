@@ -135,11 +135,6 @@ func (c *Client) Realm() stun.Realm {
 	return c.realm
 }
 
-// Net return net
-func (c *Client) Net() transport.Net {
-	return c.net
-}
-
 // WriteTo sends data to the specified destination using the base socket.
 func (c *Client) WriteTo(data []byte, to net.Addr) (int, error) {
 	return c.conn.WriteTo(data, to)
@@ -322,6 +317,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		Integrity:   c.integrity,
 		Nonce:       nonce,
 		Lifetime:    lifetime.Duration,
+		Net:         c.net,
 		Log:         c.log,
 	})
 	c.setRelayedUDPConn(relayedConn)
@@ -357,6 +353,7 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 		Integrity:   c.integrity,
 		Nonce:       nonce,
 		Lifetime:    lifetime.Duration,
+		Net:         c.net,
 		Log:         c.log,
 	})
 
