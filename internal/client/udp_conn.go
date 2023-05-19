@@ -50,8 +50,11 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
+			serverAddr:  config.ServerAddr,
 			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
 			permMap:     newPermissionMap(),
+			username:    config.Username,
+			realm:       config.Realm,
 			integrity:   config.Integrity,
 			_nonce:      config.Nonce,
 			_lifetime:   config.Lifetime,
@@ -220,7 +223,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 
 		// Indication has no transaction (fire-and-forget)
 
-		return c.client.WriteTo(msg.Raw, c.client.TURNServerAddr())
+		return c.client.WriteTo(msg.Raw, c.serverAddr)
 	}
 
 	// Binding is either ready
@@ -346,8 +349,8 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 	}
 
 	setters = append(setters,
-		a.client.Username(),
-		a.client.Realm(),
+		a.username,
+		a.realm,
 		a.nonce(),
 		a.integrity,
 		stun.Fingerprint)
@@ -357,7 +360,7 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 		return err
 	}
 
-	trRes, err := a.client.PerformTransaction(msg, a.client.TURNServerAddr(), false)
+	trRes, err := a.client.PerformTransaction(msg, a.serverAddr, false)
 	if err != nil {
 		return err
 	}
@@ -408,8 +411,8 @@ func (c *UDPConn) bind(b *binding) error {
 		stun.NewType(stun.MethodChannelBind, stun.ClassRequest),
 		addr2PeerAddress(b.addr),
 		proto.ChannelNumber(b.number),
-		c.client.Username(),
-		c.client.Realm(),
+		c.username,
+		c.realm,
 		c.nonce(),
 		c.integrity,
 		stun.Fingerprint,
@@ -420,7 +423,7 @@ func (c *UDPConn) bind(b *binding) error {
 		return err
 	}
 
-	trRes, err := c.client.PerformTransaction(msg, c.client.TURNServerAddr(), false)
+	trRes, err := c.client.PerformTransaction(msg, c.serverAddr, false)
 	if err != nil {
 		c.bindingMgr.deleteByAddr(b.addr)
 		return err
@@ -444,7 +447,7 @@ func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {
 		Number: proto.ChannelNumber(chNum),
 	}
 	chData.Encode()
-	_, err := c.client.WriteTo(chData.Raw, c.client.TURNServerAddr())
+	_, err := c.client.WriteTo(chData.Raw, c.serverAddr)
 	if err != nil {
 		return 0, err
 	}

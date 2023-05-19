@@ -42,6 +42,9 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
+			serverAddr:  config.ServerAddr,
+			username:    config.Username,
+			realm:       config.Realm,
 			permMap:     newPermissionMap(),
 			integrity:   config.Integrity,
 			_nonce:      config.Nonce,
@@ -81,8 +84,8 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnect, stun.ClassRequest),
 		addr2PeerAddress(peer),
-		a.client.Username(),
-		a.client.Realm(),
+		a.username,
+		a.realm,
 		a.nonce(),
 		a.integrity,
 		stun.Fingerprint,
@@ -94,7 +97,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	}
 
 	a.log.Debugf("Send connect request (peer=%v)", peer)
-	trRes, err := a.client.PerformTransaction(msg, a.client.TURNServerAddr(), false)
+	trRes, err := a.client.PerformTransaction(msg, a.serverAddr, false)
 	if err != nil {
 		return 0, err
 	}
@@ -143,7 +146,7 @@ func (a *TCPAllocation) DialWithConn(conn net.Conn, network, rAddrStr string) (*
 // DialTCP acts like Dial for TCP networks.
 func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCPConn, error) {
 	var rAddrServer *net.TCPAddr
-	if addr, ok := a.client.TURNServerAddr().(*net.TCPAddr); ok {
+	if addr, ok := a.serverAddr.(*net.TCPAddr); ok {
 		rAddrServer = &net.TCPAddr{
 			IP:   addr.IP,
 			Port: addr.Port,
@@ -216,8 +219,8 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),
 		cid,
-		a.client.Username(),
-		a.client.Realm(),
+		a.username,
+		a.realm,
 		a.nonce(),
 		a.integrity,
 		stun.Fingerprint,
@@ -280,7 +283,7 @@ func (a *TCPAllocation) Accept() (net.Conn, error) {
 
 // AcceptTCP accepts the next incoming call and returns the new connection.
 func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
-	addr, err := net.ResolveTCPAddr("tcp4", a.client.TURNServerAddr().String())
+	addr, err := net.ResolveTCPAddr("tcp4", a.serverAddr.String())
 	if err != nil {
 		return nil, err
 	}

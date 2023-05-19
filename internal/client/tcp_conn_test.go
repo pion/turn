@@ -51,18 +51,6 @@ type dummyConnObserver struct {
 	_onDeallocated      func(relayedAddr net.Addr)
 }
 
-func (obs *dummyConnObserver) TURNServerAddr() net.Addr {
-	return obs.turnServerAddr
-}
-
-func (obs *dummyConnObserver) Username() stun.Username {
-	return obs.username
-}
-
-func (obs *dummyConnObserver) Realm() stun.Realm {
-	return obs.realm
-}
-
 func (obs *dummyConnObserver) Net() transport.Net {
 	if obs.net == nil {
 		n, err := stdnet.NewNet()

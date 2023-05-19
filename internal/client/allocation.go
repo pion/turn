@@ -20,8 +20,11 @@ import (
 type AllocationConfig struct {
 	Client      Client
 	RelayedAddr net.Addr
+	ServerAddr  net.Addr
 	Integrity   stun.MessageIntegrity
 	Nonce       stun.Nonce
+	Username    stun.Username
+	Realm       stun.Realm
 	Lifetime    time.Duration
 	Net         transport.Net
 	Log         logging.LeveledLogger
@@ -30,8 +33,11 @@ type AllocationConfig struct {
 type allocation struct {
 	client            Client                // Read-only
 	relayedAddr       net.Addr              // Read-only
+	serverAddr        net.Addr              // Read-only
 	permMap           *permissionMap        // Thread-safe
 	integrity         stun.MessageIntegrity // Read-only
+	username          stun.Username         // Read-only
+	realm             stun.Realm            // Read-only
 	_nonce            stun.Nonce            // Needs mutex x
 	_lifetime         time.Duration         // Needs mutex x
 	net               transport.Net         // Thread-safe
@@ -58,8 +64,8 @@ func (a *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 		stun.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassRequest),
 		proto.Lifetime{Duration: lifetime},
-		a.client.Username(),
-		a.client.Realm(),
+		a.username,
+		a.realm,
 		a.nonce(),
 		a.integrity,
 		stun.Fingerprint,
@@ -69,7 +75,7 @@ func (a *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 	}
 
 	a.log.Debugf("send refresh request (dontWait=%v)", dontWait)
-	trRes, err := a.client.PerformTransaction(msg, a.client.TURNServerAddr(), dontWait)
+	trRes, err := a.client.PerformTransaction(msg, a.serverAddr, dontWait)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errFailedToRefreshAllocation, err.Error())
 	}
