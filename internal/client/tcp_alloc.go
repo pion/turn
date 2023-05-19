@@ -46,6 +46,7 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 			integrity:   config.Integrity,
 			_nonce:      config.Nonce,
 			_lifetime:   config.Lifetime,
+			net:         config.Net,
 			log:         config.Log,
 		},
 	}
@@ -151,7 +152,7 @@ func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCP
 		return nil, errInvalidTURNAddress
 	}
 
-	conn, err := a.client.Net().DialTCP(network, lAddr, rAddrServer)
+	conn, err := a.net.DialTCP(network, lAddr, rAddrServer)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +285,7 @@ func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
 		return nil, err
 	}
 
-	tcpConn, err := a.client.Net().DialTCP("tcp", nil, addr)
+	tcpConn, err := a.net.DialTCP("tcp", nil, addr)
 	if err != nil {
 		return nil, err
 	}

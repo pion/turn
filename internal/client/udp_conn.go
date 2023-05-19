@@ -55,6 +55,7 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 			integrity:   config.Integrity,
 			_nonce:      config.Nonce,
 			_lifetime:   config.Lifetime,
+			net:         config.Net,
 			log:         config.Log,
 		},
 	}

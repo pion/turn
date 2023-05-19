@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
+	"github.com/pion/transport/v2"
 	"github.com/pion/turn/v2/internal/proto"
 )
 
@@ -22,6 +23,7 @@ type AllocationConfig struct {
 	Integrity   stun.MessageIntegrity
 	Nonce       stun.Nonce
 	Lifetime    time.Duration
+	Net         transport.Net
 	Log         logging.LeveledLogger
 }
 
@@ -32,6 +34,7 @@ type allocation struct {
 	integrity         stun.MessageIntegrity // Read-only
 	_nonce            stun.Nonce            // Needs mutex x
 	_lifetime         time.Duration         // Needs mutex x
+	net               transport.Net         // Thread-safe
 	refreshAllocTimer *PeriodicTimer        // Thread-safe
 	refreshPermsTimer *PeriodicTimer        // Thread-safe
 	readTimer         *time.Timer           // Thread-safe
