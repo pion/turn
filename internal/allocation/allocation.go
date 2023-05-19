@@ -8,12 +8,14 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/turn/v2/internal/ipnet"
 	"github.com/pion/turn/v2/internal/proto"
+	"golang.org/x/sys/unix"
 )
 
 type allocationResponse struct {
@@ -24,18 +26,23 @@ type allocationResponse struct {
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate
 type Allocation struct {
-	RelayAddr           net.Addr
-	Protocol            Protocol
-	TurnSocket          net.PacketConn
-	RelaySocket         net.PacketConn
-	fiveTuple           *FiveTuple
-	permissionsLock     sync.RWMutex
-	permissions         map[string]*Permission
-	channelBindingsLock sync.RWMutex
-	channelBindings     []*ChannelBind
-	lifetimeTimer       *time.Timer
-	closed              chan interface{}
-	log                 logging.LeveledLogger
+	RelayAddr                  net.Addr
+	Protocol                   Protocol
+	RequestedTransportProtocol proto.Protocol
+	TurnSocket                 net.PacketConn
+	RelaySocket                net.PacketConn
+	RelayListener              net.Listener
+	fiveTuple                  *FiveTuple
+	permissionsLock            sync.RWMutex
+	permissions                map[string]*Permission
+	channelBindingsLock        sync.RWMutex
+	channelBindings            []*ChannelBind
+	lifetimeTimer              *time.Timer
+	closed                     chan interface{}
+	log                        logging.LeveledLogger
+	connsLock                  sync.RWMutex
+	addrToConn                 map[string]net.Conn
+	cidToConn                  map[proto.ConnectionID]net.Conn
 
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
@@ -45,13 +52,16 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new instance of NewAllocation.
-func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
+func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger, requestedTransportProtocol proto.Protocol) *Allocation {
 	return &Allocation{
-		TurnSocket:  turnSocket,
-		fiveTuple:   fiveTuple,
-		permissions: make(map[string]*Permission, 64),
-		closed:      make(chan interface{}),
-		log:         log,
+		TurnSocket:                 turnSocket,
+		RequestedTransportProtocol: requestedTransportProtocol,
+		fiveTuple:                  fiveTuple,
+		permissions:                make(map[string]*Permission, 64),
+		addrToConn:                 make(map[string]net.Conn),
+		cidToConn:                  make(map[proto.ConnectionID]net.Conn),
+		closed:                     make(chan interface{}),
+		log:                        log,
 	}
 }
 
@@ -208,7 +218,11 @@ func (a *Allocation) Close() error {
 	}
 	a.channelBindingsLock.RUnlock()
 
-	return a.RelaySocket.Close()
+	if a.RequestedTransportProtocol == proto.ProtoTCP {
+		return a.RelayListener.Close()
+	} else {
+		return a.RelaySocket.Close()
+	}
 }
 
 //  https://tools.ietf.org/html/rfc5766#section-10.3
@@ -282,5 +296,135 @@ func (a *Allocation) packetHandler(m *Manager) {
 		} else {
 			a.log.Infof("No Permission or Channel exists for %v on allocation %v", srcAddr, a.RelayAddr.String())
 		}
+	}
+}
+
+func (a *Allocation) GetConnectionByAddr(peerAddr string) net.Conn {
+	a.connsLock.RLock()
+	defer a.connsLock.RUnlock()
+	return a.addrToConn[peerAddr]
+}
+
+func (a *Allocation) GetConnectionByID(cid proto.ConnectionID) net.Conn {
+	a.connsLock.RLock()
+	defer a.connsLock.RUnlock()
+	return a.cidToConn[cid]
+}
+
+func (a *Allocation) newConnection(cid proto.ConnectionID, dst string) error {
+	a.connsLock.Lock()
+	a.addrToConn[dst] = nil
+	a.cidToConn[cid] = nil
+	a.connsLock.Unlock()
+
+	dialer := &net.Dialer{
+		LocalAddr: a.RelayAddr,
+		Control: func(network, address string, c syscall.RawConn) error {
+			var err error
+			c.Control(func(fd uintptr) {
+				err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR|unix.SO_REUSEPORT, 1)
+			})
+			return err
+		},
+	}
+
+	conn, err := dialer.Dial("tcp", dst)
+	if err != nil {
+		return err
+	}
+
+	a.connsLock.Lock()
+	a.addrToConn[dst] = conn
+	a.cidToConn[cid] = conn
+	a.connsLock.Unlock()
+
+	return nil
+}
+
+func (a *Allocation) removeConnection(cid proto.ConnectionID, dst string) {
+	a.connsLock.Lock()
+	c := a.cidToConn[cid]
+	delete(a.addrToConn, dst)
+	delete(a.cidToConn, cid)
+	a.connsLock.Unlock()
+	c.Close()
+}
+
+func (a *Allocation) connectionHandler(m *Manager) {
+	for {
+		// When a server receives an incoming TCP connection on a relayed
+		// transport address, it processes the request as follows.
+		// The server MUST accept the connection.  If it is not successful,
+		// nothing is sent to the client over the control connection.
+		conn, err := a.RelayListener.Accept()
+		if err != nil {
+			m.DeleteAllocation(a.fiveTuple)
+			return
+		}
+
+		a.log.Debugf("relay listener %s received connection from %s",
+			a.RelayListener.Addr().String(),
+			conn.RemoteAddr().String())
+
+		// If the connection is successfully accepted, it is now called a peer
+		// data connection.  The server MUST buffer any data received from the
+		// peer.  The server adjusts its advertised TCP receive window to
+		// reflect the amount of empty buffer space.
+
+		// If no permission for this peer has been installed for this
+		// allocation, the server MUST close the connection with the peer
+		// immediately after it has been accepted.
+
+		if p := a.GetPermission(conn.RemoteAddr()); p == nil {
+			a.log.Infof("No Permission or Channel exists for %v on allocation %v", conn.RemoteAddr(), a.RelayAddr.String())
+			conn.Close()
+			continue
+		}
+
+		// Otherwise, the server sends a ConnectionAttempt indication to the
+		// client over the control connection.  The indication MUST include an
+		// XOR-PEER-ADDRESS attribute containing the peer's transport address,
+		// as well as a CONNECTION-ID attribute uniquely identifying the peer
+		// data connection.
+		cid := m.newCID(a)
+
+		a.connsLock.Lock()
+		a.addrToConn[conn.RemoteAddr().String()] = conn
+		a.cidToConn[cid] = conn
+		a.connsLock.Unlock()
+
+		msg, err := stun.Build(
+			stun.TransactionID,
+			stun.NewType(stun.MethodConnectionAttempt, stun.ClassIndication),
+		)
+		if err != nil {
+			a.log.Errorf("Failed to build MethodConnectionAttempt message %v", err)
+			continue
+		}
+
+		addr, ok := conn.RemoteAddr().(*net.TCPAddr)
+		if !ok {
+			a.log.Errorf("Failed to parse remote tcp address")
+			continue
+		}
+
+		peerAddr := proto.PeerAddress{}
+		peerAddr.IP = addr.IP
+		peerAddr.Port = addr.Port
+
+		if err = peerAddr.AddTo(msg); err != nil {
+			a.log.Errorf("Failed to build MethodConnectionAttempt message %v", err)
+			return
+		}
+
+		attrCid := proto.ConnectionID(cid)
+		attrCid.AddTo(msg)
+		a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr)
+
+		// If no ConnectionBind request associated with this peer data
+		// connection is received after 30 seconds, the peer data connection
+		// MUST be closed.
+
+		go m.removeAfter30(cid, conn.RemoteAddr())
 	}
 }

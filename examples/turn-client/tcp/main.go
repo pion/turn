@@ -14,6 +14,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/turn/v2"
+	"github.com/pion/turn/v2/utils"
 )
 
 func main() {
@@ -51,7 +52,7 @@ func main() {
 	cfg := &turn.ClientConfig{
 		STUNServerAddr: turnServerAddr,
 		TURNServerAddr: turnServerAddr,
-		Conn:           turn.NewSTUNConn(conn),
+		Conn:           utils.NewSTUNConn(conn),
 		Username:       cred[0],
 		Password:       cred[1],
 		Realm:          *realm,

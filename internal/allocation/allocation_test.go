@@ -16,6 +16,7 @@ import (
 	"github.com/pion/stun"
 	"github.com/pion/turn/v2/internal/ipnet"
 	"github.com/pion/turn/v2/internal/proto"
+	"github.com/pion/turn/v2/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,6 +36,8 @@ func TestAllocation(t *testing.T) {
 		{"Close", subTestAllocationClose},
 		{"packetHandler", subTestPacketHandler},
 		{"ResponseCache", subTestResponseCache},
+		{"GetConnection", subTestGetConnection},
+		{"ConnectionHandler", subTestConnectionHandler},
 	}
 
 	for _, tc := range tt {
@@ -46,7 +49,7 @@ func TestAllocation(t *testing.T) {
 }
 
 func subTestGetPermission(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -88,7 +91,7 @@ func subTestGetPermission(t *testing.T) {
 }
 
 func subTestAddPermission(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -107,7 +110,7 @@ func subTestAddPermission(t *testing.T) {
 }
 
 func subTestRemovePermission(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -130,7 +133,7 @@ func subTestRemovePermission(t *testing.T) {
 }
 
 func subTestAddChannelBind(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -154,7 +157,7 @@ func subTestAddChannelBind(t *testing.T) {
 }
 
 func subTestGetChannelByNumber(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -173,7 +176,7 @@ func subTestGetChannelByNumber(t *testing.T) {
 }
 
 func subTestGetChannelByAddr(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -193,7 +196,7 @@ func subTestGetChannelByAddr(t *testing.T) {
 }
 
 func subTestRemoveChannelBind(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -214,7 +217,7 @@ func subTestRemoveChannelBind(t *testing.T) {
 }
 
 func subTestAllocationRefresh(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -236,7 +239,7 @@ func subTestAllocationClose(t *testing.T) {
 		panic(err)
 	}
 
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 	a.RelaySocket = l
 	// Add mock lifetimeTimer
 	a.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
@@ -292,7 +295,7 @@ func subTestPacketHandler(t *testing.T) {
 	a, err := m.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, 0, proto.DefaultLifetime)
+	}, turnSocket, 0, proto.DefaultLifetime, proto.ProtoUDP)
 
 	assert.Nil(t, err, "should succeed")
 
@@ -357,7 +360,7 @@ func subTestPacketHandler(t *testing.T) {
 }
 
 func subTestResponseCache(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, proto.ProtoUDP)
 	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
 	responseAttrs := []stun.Setter{
 		&proto.Lifetime{
@@ -369,4 +372,115 @@ func subTestResponseCache(t *testing.T) {
 	cacheID, cacheAttr := a.GetResponseCache()
 	assert.Equal(t, transactionID, cacheID)
 	assert.Equal(t, responseAttrs, cacheAttr)
+}
+
+func subTestGetConnection(t *testing.T) {
+	a := NewAllocation(nil, nil, nil, proto.ProtoTCP)
+	a.RelayAddr, _ = net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to resolve: %s", err)
+	}
+	peerAddr := listener.Addr().String()
+
+	err = a.newConnection(proto.ConnectionID(0), peerAddr)
+	assert.Nil(t, err)
+
+	lconn, _ := listener.Accept()
+	lconn.Close()
+	listener.Close()
+
+	conn := a.GetConnectionByAddr(peerAddr)
+	assert.NotNil(t, conn)
+	assert.Equal(t, conn.RemoteAddr().String(), peerAddr)
+
+	conn = a.GetConnectionByID(proto.ConnectionID(0))
+	assert.Equal(t, conn.RemoteAddr().String(), peerAddr)
+
+	conn = a.GetConnectionByAddr("127.0.0.1:0")
+	assert.Nil(t, conn)
+
+	conn = a.GetConnectionByID(proto.ConnectionID(1))
+	assert.Nil(t, conn)
+
+	a.removeConnection(proto.ConnectionID(0), peerAddr)
+	conn = a.GetConnectionByID(proto.ConnectionID(0))
+	assert.Nil(t, conn)
+}
+
+func subTestConnectionHandler(t *testing.T) {
+	network := "tcp"
+	m, _ := newTestManager()
+
+	turnListener, err := net.Listen(network, "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+
+	clientConn, err := net.Dial(network, turnListener.Addr().String())
+	if err != nil {
+		panic(err)
+	}
+
+	turnConn, err := turnListener.Accept()
+	clientSocket := utils.NewSTUNConn(clientConn)
+	turnSocket := utils.NewSTUNConn(turnConn)
+	if err != nil {
+		panic(err)
+	}
+
+	dataCh := make(chan []byte)
+	// client listener read data
+	go func() {
+		buffer := make([]byte, rtpMTU)
+		for {
+			n, _, err2 := clientSocket.ReadFrom(buffer)
+			if err2 != nil {
+				return
+			}
+
+			dataCh <- buffer[:n]
+		}
+	}()
+
+	a, err := m.CreateAllocation(&FiveTuple{
+		SrcAddr: clientSocket.LocalAddr(),
+		DstAddr: turnSocket.LocalAddr(),
+	}, turnSocket, 0, proto.DefaultLifetime, proto.ProtoTCP)
+
+	assert.Nil(t, err)
+
+	dialer := &net.Dialer{
+		LocalAddr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 4000},
+	}
+	// create permissions for peer
+	a.AddPermission(NewPermission(dialer.LocalAddr, m.log))
+
+	// attempt to connect to allocation as peer
+	peerConn, err := dialer.Dial(network, a.RelayListener.Addr().String())
+	assert.Nil(t, err)
+
+	// check if recieved MethodConnectionAttempt
+	data := <-dataCh
+
+	conn := a.GetConnectionByAddr(peerConn.LocalAddr().String())
+	assert.NotNil(t, conn)
+	assert.Equal(t, conn.RemoteAddr().String(), peerConn.LocalAddr().String())
+
+	assert.True(t, stun.IsMessage(data), "should be stun message")
+	conn.Close()
+
+	var msg stun.Message
+	err = stun.Decode(data, &msg)
+	assert.Nil(t, err, "decode data to stun message failed")
+	assert.Equal(t, msg.Type.Class, stun.ClassIndication)
+	assert.Equal(t, msg.Type.Method, stun.MethodConnectionAttempt)
+
+	// listeners close
+	_ = m.Close()
+	_ = turnConn.Close()
+	_ = clientConn.Close()
+	_ = peerConn.Close()
+	_ = turnListener.Close()
 }

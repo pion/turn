@@ -77,6 +77,7 @@ func main() {
 					RelayAddress: net.ParseIP(*publicIP),
 					Address:      "0.0.0.0",
 				},
+				Protocol: "tls",
 			},
 		},
 	})

@@ -15,6 +15,7 @@ import (
 	"github.com/pion/turn/v2/internal/allocation"
 	"github.com/pion/turn/v2/internal/proto"
 	"github.com/pion/turn/v2/internal/server"
+	"github.com/pion/turn/v2/utils"
 )
 
 const (
@@ -69,7 +70,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	}
 
 	for _, cfg := range s.packetConnConfigs {
-		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
+		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler, allocation.UDP)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
@@ -84,7 +85,12 @@ func NewServer(config ServerConfig) (*Server, error) {
 	}
 
 	for _, cfg := range s.listenerConfigs {
-		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
+		protocol := allocation.TCP
+		if cfg.Protocol == "tls" {
+			protocol = allocation.TLS
+		}
+
+		am, err := s.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler, protocol)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
@@ -147,7 +153,7 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 		}
 
 		go func() {
-			s.readLoop(NewSTUNConn(conn), am)
+			s.readLoop(utils.NewSTUNConn(conn), am)
 
 			if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 				s.log.Errorf("failed to close conn: %s", err)
@@ -156,7 +162,7 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 	}
 }
 
-func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, handler PermissionHandler) (*allocation.Manager, error) {
+func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, handler PermissionHandler, protocol allocation.Protocol) (*allocation.Manager, error) {
 	if handler == nil {
 		handler = DefaultPermissionHandler
 	}
@@ -164,8 +170,10 @@ func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, ha
 	am, err := allocation.NewManager(allocation.ManagerConfig{
 		AllocatePacketConn: addrGenerator.AllocatePacketConn,
 		AllocateConn:       addrGenerator.AllocateConn,
+		AllocateListener:   addrGenerator.AllocateListener,
 		PermissionHandler:  handler,
 		LeveledLogger:      s.log,
+		Protocol:           protocol,
 	})
 	if err != nil {
 		return am, err

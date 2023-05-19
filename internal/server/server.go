@@ -94,6 +94,10 @@ func getMessageHandler(class stun.MessageClass, method stun.Method) (func(r Requ
 		switch method {
 		case stun.MethodAllocate:
 			return handleAllocateRequest, nil
+		case stun.MethodConnect:
+			return handleConnectRequest, nil
+		case stun.MethodConnectionBind:
+			return handleConnectionBindRequest, nil
 		case stun.MethodRefresh:
 			return handleRefreshRequest, nil
 		case stun.MethodCreatePermission:

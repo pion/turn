@@ -14,6 +14,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun"
 	"github.com/pion/turn/v2/internal/proto"
+	"github.com/pion/turn/v2/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -227,7 +228,7 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
-		Conn:           NewSTUNConn(conn),
+		Conn:           utils.NewSTUNConn(conn),
 		STUNServerAddr: serverAddr,
 		TURNServerAddr: serverAddr,
 		Username:       "foo",

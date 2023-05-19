@@ -4,12 +4,15 @@
 package turn
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
+	"syscall"
 
 	"github.com/pion/transport/v2"
 	"github.com/pion/transport/v2/stdnet"
+	"golang.org/x/sys/unix"
 )
 
 // RelayAddressGeneratorStatic can be used to return static IP address each time a relay is created.
@@ -60,6 +63,32 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, request
 	relayAddr.IP = r.RelayAddress
 
 	return conn, relayAddr, nil
+}
+
+// AllocateListener generates a new Listener to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorStatic) AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error) {
+	config := &net.ListenConfig{Control: func(network, address string, c syscall.RawConn) error {
+		var err error
+		c.Control(func(fd uintptr) {
+			err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR|unix.SO_REUSEPORT, 1)
+		})
+		return err
+	}}
+
+	listener, err := config.Listen(context.Background(), network, r.Address+":"+strconv.Itoa(requestedPort))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Replace actual listening IP with the user requested one of RelayAddressGeneratorStatic
+	relayAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return nil, nil, errNilConn
+	}
+
+	relayAddr.IP = r.RelayAddress
+
+	return listener, relayAddr, nil
 }
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
