@@ -314,6 +314,9 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	relayedConn = client.NewUDPConn(&client.AllocationConfig{
 		Client:      c,
 		RelayedAddr: relayedAddr,
+		ServerAddr:  c.turnServerAddr,
+		Realm:       c.realm,
+		Username:    c.username,
 		Integrity:   c.integrity,
 		Nonce:       nonce,
 		Lifetime:    lifetime.Duration,
@@ -350,6 +353,9 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 	allocation = client.NewTCPAllocation(&client.AllocationConfig{
 		Client:      c,
 		RelayedAddr: relayedAddr,
+		ServerAddr:  c.turnServerAddr,
+		Realm:       c.realm,
+		Username:    c.username,
 		Integrity:   c.integrity,
 		Nonce:       nonce,
 		Lifetime:    lifetime.Duration,
