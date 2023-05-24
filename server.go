@@ -177,6 +177,7 @@ func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, ha
 }
 
 func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manager) {
+	defer p.Close()
 	buf := make([]byte, s.inboundMTU)
 	for {
 		n, addr, err := p.ReadFrom(buf)
