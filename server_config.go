@@ -22,6 +22,9 @@ type RelayAddressGenerator interface {
 	// Allocate a PacketConn (UDP) RelayAddress
 	AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 
+	// Allocate a TCP Listener
+	AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error)
+
 	// Allocate a Conn (TCP) RelayAddress
 	AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error)
 }
@@ -67,7 +70,7 @@ func (c *PacketConnConfig) validate() error {
 // ListenerConfig is a single net.Listener to accept connections on. This will be used for TCP, TLS and DTLS listeners
 type ListenerConfig struct {
 	Listener net.Listener
-
+	Protocol string // TCP, or TLS
 	// When an allocation is generated the RelayAddressGenerator
 	// creates the net.PacketConn and returns the IP/Port it is available at
 	RelayAddressGenerator RelayAddressGenerator

@@ -8,6 +8,7 @@ package server
 
 import (
 	"net"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -73,7 +74,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 				return conn, conn.LocalAddr(), nil
 			},
-			AllocateConn: func(network string, requestedPort int) (net.Conn, net.Addr, error) {
+			AllocateListener: func(network string, requestedPort int) (net.Listener, net.Addr, error) {
 				return nil, nil, nil
 			},
 			LeveledLogger: logger,
@@ -95,7 +96,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour)
+		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour, proto.ProtoUDP)
 		assert.NoError(t, err)
 
 		assert.NotNil(t, r.AllocationManager.GetAllocation(fiveTuple))
@@ -109,5 +110,69 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		assert.NoError(t, handleRefreshRequest(r, m))
 		assert.Nil(t, r.AllocationManager.GetAllocation(fiveTuple))
+	})
+}
+
+func TestTCPAllocation(t *testing.T) {
+	t.Run("TCPAlloc", func(t *testing.T) {
+		l, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, l.Close())
+		}()
+
+		logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+		allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+			AllocatePacketConn: func(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+				return nil, nil, nil
+			},
+			AllocateListener: func(network string, requestedPort int) (net.Listener, net.Addr, error) {
+				listener, err := net.Listen(network, "127.0.0.1:"+strconv.Itoa(requestedPort))
+				if err != nil {
+					return nil, nil, err
+				}
+
+				return listener, listener.Addr(), nil
+			},
+			LeveledLogger: logger,
+			Protocol:      allocation.TCP,
+		})
+		assert.NoError(t, err)
+
+		staticKey := []byte("ABC")
+		r := Request{
+			AllocationManager: allocationManager,
+			Nonces:            &sync.Map{},
+			Conn:              l,
+			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+			Log:               logger,
+			AuthHandler: func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+				return staticKey, true
+			},
+		}
+		r.Nonces.Store(string(staticKey), time.Now())
+
+		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.TCP}
+
+		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour, proto.ProtoTCP)
+		assert.NoError(t, err)
+
+		a := r.AllocationManager.GetAllocation(fiveTuple)
+		assert.NotNil(t, a)
+
+		var peerAddr proto.PeerAddress
+		peerAddr.IP = net.ParseIP("127.0.0.1")
+		peerAddr.Port = 7777
+		m := &stun.Message{}
+		assert.NoError(t, peerAddr.AddTo(m))
+		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Username(staticKey)).AddTo(m))
+
+		assert.EqualError(t, handleConnectRequest(r, m), errConnectionFailure.Error())
+		conn := a.GetConnectionByAddr("127.0.0.1:7777")
+		assert.Nil(t, conn)
 	})
 }

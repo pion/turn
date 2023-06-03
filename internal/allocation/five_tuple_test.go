@@ -11,12 +11,17 @@ import (
 func TestFiveTupleProtocol(t *testing.T) {
 	udpExpect := Protocol(0)
 	tcpExpect := Protocol(1)
+	tlsExpect := Protocol(2)
 
 	if udpExpect != UDP {
 		t.Errorf("Invalid UDP Protocol value, expect %d but %d", udpExpect, UDP)
 	}
 
 	if tcpExpect != TCP {
+		t.Errorf("Invalid TCP Protocol value, expect %d but %d", tcpExpect, TCP)
+	}
+
+	if tlsExpect != TLS {
 		t.Errorf("Invalid TCP Protocol value, expect %d but %d", tcpExpect, TCP)
 	}
 }

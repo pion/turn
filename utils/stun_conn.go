@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
-
-package turn
+package utils
 
 import (
 	"encoding/binary"
@@ -119,6 +118,10 @@ func (s *STUNConn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline implements SetWriteDeadline from net.PacketConn
 func (s *STUNConn) SetWriteDeadline(t time.Time) error {
 	return s.nextConn.SetWriteDeadline(t)
+}
+
+func (s *STUNConn) Conn() net.Conn {
+	return s.nextConn
 }
 
 // NewSTUNConn creates a STUNConn

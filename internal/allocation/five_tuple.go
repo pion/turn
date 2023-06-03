@@ -15,6 +15,7 @@ type Protocol uint8
 const (
 	UDP Protocol = iota
 	TCP
+	TLS
 )
 
 // FiveTuple is the combination (client IP address and port, server IP

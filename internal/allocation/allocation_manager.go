@@ -5,11 +5,13 @@ package allocation
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v2/internal/proto"
 )
 
 // ManagerConfig a bag of config params for Manager.
@@ -17,7 +19,9 @@ type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+	Protocol           Protocol
 }
 
 type reservation struct {
@@ -35,7 +39,12 @@ type Manager struct {
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	allocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+
+	waitingConns map[proto.ConnectionID]*Allocation
+	runningConns map[proto.ConnectionID]*Allocation
+	Protocol     Protocol
 }
 
 // NewManager creates a new instance of Manager.
@@ -43,8 +52,8 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 	switch {
 	case config.AllocatePacketConn == nil:
 		return nil, errAllocatePacketConnMustBeSet
-	case config.AllocateConn == nil:
-		return nil, errAllocateConnMustBeSet
+	case config.AllocateListener == nil:
+		return nil, errAllocateListenerMustBeSet
 	case config.LeveledLogger == nil:
 		return nil, errLeveledLoggerMustBeSet
 	}
@@ -54,7 +63,11 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocations:        make(map[string]*Allocation, 64),
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
+		allocateListener:   config.AllocateListener,
 		permissionHandler:  config.PermissionHandler,
+		waitingConns:       make(map[proto.ConnectionID]*Allocation),
+		runningConns:       make(map[proto.ConnectionID]*Allocation),
+		Protocol:           config.Protocol,
 	}, nil
 }
 
@@ -86,7 +99,7 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration, requestedTransportProtocol proto.Protocol) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
 		return nil, errNilFiveTuple
@@ -103,15 +116,24 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	if a := m.GetAllocation(fiveTuple); a != nil {
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
-	a := NewAllocation(turnSocket, fiveTuple, m.log)
+	a := NewAllocation(turnSocket, fiveTuple, m.log, requestedTransportProtocol)
 
-	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
-	if err != nil {
-		return nil, err
+	if a.RequestedTransportProtocol == proto.ProtoTCP {
+		listener, relayAddr, err := m.allocateListener("tcp", requestedPort)
+		if err != nil {
+			return nil, err
+		}
+		a.RelayListener = listener
+		a.RelayAddr = relayAddr
+	} else {
+		conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
+		if err != nil {
+			return nil, err
+		}
+
+		a.RelaySocket = conn
+		a.RelayAddr = relayAddr
 	}
-
-	a.RelaySocket = conn
-	a.RelayAddr = relayAddr
 
 	m.log.Debugf("listening on relay addr: %s", a.RelayAddr.String())
 
@@ -123,7 +145,11 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	m.allocations[fiveTuple.Fingerprint()] = a
 	m.lock.Unlock()
 
-	go a.packetHandler(m)
+	if a.RequestedTransportProtocol == proto.ProtoTCP {
+		go a.connectionHandler(m)
+	} else {
+		go a.packetHandler(m)
+	}
 	return a, nil
 }
 
@@ -215,4 +241,71 @@ func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
 	}
 
 	return errAdminProhibited
+}
+
+func (m *Manager) BindConnection(cid proto.ConnectionID) net.Conn {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	a := m.waitingConns[cid]
+	delete(m.waitingConns, cid)
+	if a == nil {
+		return nil
+	}
+	m.runningConns[cid] = a
+	return a.GetConnectionByID(cid)
+}
+
+func (m *Manager) DeleteConnection(cid proto.ConnectionID) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	delete(m.runningConns, cid)
+}
+
+func (m *Manager) Connect(a *Allocation, dst net.Addr) (proto.ConnectionID, error) {
+	cid := m.newCID(a)
+
+	err := a.newConnection(cid, dst.String())
+	if err != nil {
+		return 0, err
+	}
+
+	// If no ConnectionBind request associated with this peer data
+	// connection is received after 30 seconds, the peer data connection
+	// MUST be closed.
+	go m.removeAfter30(cid, dst)
+
+	return cid, nil
+}
+
+func (m *Manager) removeAfter30(cid proto.ConnectionID, dst net.Addr) {
+	<-time.After(30 * time.Second)
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	a, ok := m.waitingConns[cid]
+	if !ok {
+		return
+	}
+	delete(m.waitingConns, cid)
+	a.removeConnection(cid, dst.String())
+}
+
+func (m *Manager) newCID(a *Allocation) proto.ConnectionID {
+	m.lock.Lock()
+	var cid proto.ConnectionID
+	for {
+		cid = proto.ConnectionID(rand.Uint32())
+		if cid == 0 {
+			continue
+		} else if _, ok := m.waitingConns[cid]; ok {
+			continue
+		} else if _, ok := m.runningConns[cid]; ok {
+			continue
+		} else {
+			break
+		}
+	}
+	m.waitingConns[cid] = a
+	m.lock.Unlock()
+
+	return cid
 }
