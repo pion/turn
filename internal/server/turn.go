@@ -15,7 +15,7 @@ import (
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
 func handleAllocateRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("received AllocateRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received AllocateRequest from %s", r.SrcAddr.String())
 
 	// 1. The server MUST require that the request be authenticated.  This
 	//    authentication MUST be done using the long-term credential
@@ -177,7 +177,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 }
 
 func handleRefreshRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("received RefreshRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received RefreshRequest from %s", r.SrcAddr.String())
 
 	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
 	if !hasAuth {
@@ -211,7 +211,7 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 }
 
 func handleCreatePermissionRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("received CreatePermission from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received CreatePermission from %s", r.SrcAddr.String())
 
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
@@ -241,7 +241,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 			return err
 		}
 
-		r.Log.Debugf("adding permission for %s", fmt.Sprintf("%s:%d",
+		r.Log.Debugf("Adding permission for %s", fmt.Sprintf("%s:%d",
 			peerAddress.IP.String(), peerAddress.Port))
 
 		a.AddPermission(allocation.NewPermission(
@@ -266,7 +266,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 }
 
 func handleSendIndication(r Request, m *stun.Message) error {
-	r.Log.Debugf("received SendIndication from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received SendIndication from %s", r.SrcAddr.String())
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
 		DstAddr:  r.Conn.LocalAddr(),
@@ -299,7 +299,7 @@ func handleSendIndication(r Request, m *stun.Message) error {
 }
 
 func handleChannelBindRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("received ChannelBindRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received ChannelBindRequest from %s", r.SrcAddr.String())
 
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
@@ -337,7 +337,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, unauthorizedRequestMsg...)
 	}
 
-	r.Log.Debugf("binding channel %d to %s",
+	r.Log.Debugf("Binding channel %d to %s",
 		channel,
 		fmt.Sprintf("%s:%d", peerAddr.IP.String(), peerAddr.Port))
 	err = a.AddChannelBind(allocation.NewChannelBind(
@@ -353,7 +353,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 }
 
 func handleChannelData(r Request, c *proto.ChannelData) error {
-	r.Log.Debugf("received ChannelData from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received ChannelData from %s", r.SrcAddr.String())
 
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,

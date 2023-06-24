@@ -36,7 +36,7 @@ type Request struct {
 
 // HandleRequest processes the give Request
 func HandleRequest(r Request) error {
-	r.Log.Debugf("received %d bytes of udp from %s on %s", len(r.Buff), r.SrcAddr.String(), r.Conn.LocalAddr().String())
+	r.Log.Debugf("Received %d bytes of udp from %s on %s", len(r.Buff), r.SrcAddr.String(), r.Conn.LocalAddr().String())
 
 	if proto.IsChannelData(r.Buff) {
 		return handleDataPacket(r)
@@ -46,7 +46,7 @@ func HandleRequest(r Request) error {
 }
 
 func handleDataPacket(r Request) error {
-	r.Log.Debugf("received DataPacket from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received DataPacket from %s", r.SrcAddr.String())
 	c := proto.ChannelData{Raw: r.Buff}
 	if err := c.Decode(); err != nil {
 		return fmt.Errorf("%w: %v", errFailedToCreateChannelData, err) //nolint:errorlint
@@ -61,7 +61,7 @@ func handleDataPacket(r Request) error {
 }
 
 func handleTURNPacket(r Request) error {
-	r.Log.Debug("handleTURNPacket")
+	r.Log.Debug("Handling TURN packet")
 	m := &stun.Message{Raw: append([]byte{}, r.Buff...)}
 	if err := m.Decode(); err != nil {
 		return fmt.Errorf("%w: %v", errFailedToCreateSTUNPacket, err) //nolint:errorlint
