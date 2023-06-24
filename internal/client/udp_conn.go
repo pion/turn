@@ -63,7 +63,7 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		},
 	}
 
-	c.log.Debugf("initial lifetime: %d seconds", int(c.lifetime().Seconds()))
+	c.log.Debugf("Initial lifetime: %d seconds", int(c.lifetime().Seconds()))
 
 	c.refreshAllocTimer = NewPeriodicTimer(
 		timerIDRefreshAlloc,
@@ -78,10 +78,10 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 	)
 
 	if c.refreshAllocTimer.Start() {
-		c.log.Debugf("refreshAllocTimer started")
+		c.log.Debugf("Started refresh allocation timer")
 	}
 	if c.refreshPermsTimer.Start() {
-		c.log.Debugf("refreshPermsTimer started")
+		c.log.Debugf("Started refresh permission timer")
 	}
 
 	return c
@@ -197,7 +197,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 				go func() {
 					err2 := c.bind(b)
 					if err2 != nil {
-						c.log.Warnf("bind() failed: %s", err2.Error())
+						c.log.Warnf("Failed to bind bind(): %s", err2)
 						b.setState(bindingStateFailed)
 						// Keep going...
 					} else {
@@ -238,7 +238,7 @@ func (c *UDPConn) WriteTo(p []byte, addr net.Addr) (int, error) { //nolint: goco
 			go func() {
 				err = c.bind(b)
 				if err != nil {
-					c.log.Warnf("bind() for refresh failed: %s", err.Error())
+					c.log.Warnf("Failed to bind() for refresh: %s", err)
 					b.setState(bindingStateFailed)
 					// Keep going...
 				} else {
@@ -391,7 +391,7 @@ func (c *UDPConn) HandleInbound(data []byte, from net.Addr) {
 	select {
 	case c.readCh <- &inboundData{data: copied, from: from}:
 	default:
-		c.log.Warnf("receive buffer full")
+		c.log.Warnf("Receive buffer full")
 	}
 }
 
@@ -435,7 +435,7 @@ func (c *UDPConn) bind(b *binding) error {
 		return fmt.Errorf("unexpected response type %s", res.Type) //nolint:goerr113
 	}
 
-	c.log.Debugf("channel binding successful: %s %d", b.addr.String(), b.number)
+	c.log.Debugf("Channel binding successful: %s %d", b.addr.String(), b.number)
 
 	// Success.
 	return nil

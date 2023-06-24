@@ -243,7 +243,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 			return
 		}
 
-		a.log.Debugf("relay socket %s received %d bytes from %s",
+		a.log.Debugf("Relay socket %s received %d bytes from %s",
 			a.RelaySocket.LocalAddr().String(),
 			n,
 			srcAddr.String())
@@ -273,7 +273,7 @@ func (a *Allocation) packetHandler(m *Manager) {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 				return
 			}
-			a.log.Debugf("relaying message from %s to client at %s",
+			a.log.Debugf("Relaying message from %s to client at %s",
 				srcAddr.String(),
 				a.fiveTuple.SrcAddr.String())
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {

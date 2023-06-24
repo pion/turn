@@ -25,11 +25,11 @@ func main() {
 	flag.Parse()
 
 	if len(*host) == 0 {
-		log.Fatalf("'host' is required")
+		log.Fatalf("Parameter 'host' is required")
 	}
 
 	if len(*user) == 0 {
-		log.Fatalf("'user' is required")
+		log.Fatalf("Parameter 'user' is required")
 	}
 
 	// Dial TURN Server
