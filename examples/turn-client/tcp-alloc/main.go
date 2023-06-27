@@ -96,8 +96,8 @@ func main() {
 	// Start a new TURN Client and wrap our net.Conn in a STUNConn
 	// This allows us to simulate datagram based communication over a net.Conn
 	cfg := &turn.ClientConfig{
-		STUNServerAddr: turnServerAddr,
-		TURNServerAddr: turnServerAddr,
+		STUNServerAddr: turnServerAddrStr,
+		TURNServerAddr: turnServerAddrStr,
 		Conn:           turn.NewSTUNConn(conn),
 		Username:       cred[0],
 		Password:       cred[1],

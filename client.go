@@ -37,8 +37,8 @@ const (
 
 // ClientConfig is a bag of config parameters for Client.
 type ClientConfig struct {
-	STUNServerAddr net.Addr // STUN server address
-	TURNServerAddr net.Addr // TURN server address
+	STUNServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
+	TURNServerAddr string // TURN server address (e.g. "turn.abc.com:3478")
 	Username       string
 	Password       string
 	Realm          string
@@ -98,10 +98,34 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		config.Net = n
 	}
 
+	var (
+		stunServ, turnServ       net.Addr
+		stunServStr, turnServStr string
+		err                      error
+	)
+	if len(config.STUNServerAddr) > 0 {
+		log.Debugf("resolving %s", config.STUNServerAddr)
+		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
+		if err != nil {
+			return nil, err
+		}
+		stunServStr = stunServ.String()
+		log.Debugf("stunServ: %s", stunServStr)
+	}
+	if len(config.TURNServerAddr) > 0 {
+		log.Debugf("resolving %s", config.TURNServerAddr)
+		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
+		if err != nil {
+			return nil, err
+		}
+		turnServStr = turnServ.String()
+		log.Debugf("turnServ: %s", turnServStr)
+	}
+
 	c := &Client{
 		conn:           config.Conn,
-		stunServerAddr: config.STUNServerAddr,
-		turnServerAddr: config.TURNServerAddr,
+		stunServerAddr: stunServ,
+		turnServerAddr: turnServ,
 		username:       stun.NewUsername(config.Username),
 		password:       config.Password,
 		realm:          stun.NewRealm(config.Realm),

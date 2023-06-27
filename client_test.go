@@ -41,10 +41,7 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
-	addr, err := net.ResolveUDPAddr("udp", "stun1.l.google.com:19302")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	addr := "stun1.l.google.com:19302"
 
 	c, err := NewClient(&ClientConfig{
 		STUNServerAddr: addr,
@@ -164,10 +161,8 @@ func TestClientNonceExpiration(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
-	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	// nolint: goconst
+	addr := "127.0.0.1:3478"
 
 	client, err := NewClient(&ClientConfig{
 		Conn:           conn,
@@ -223,7 +218,7 @@ func TestTCPClient(t *testing.T) {
 	conn, err := net.Dial("tcp", "127.0.0.1:13478")
 	require.NoError(t, err)
 
-	serverAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:13478")
+	serverAddr := "127.0.0.1:13478"
 	require.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
@@ -236,7 +231,7 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, client.Listen())
 
-	require.Equal(t, serverAddr, client.STUNServerAddr())
+	require.Equal(t, serverAddr, client.STUNServerAddr().String())
 
 	allocation, err := client.AllocateTCP()
 	require.NoError(t, err)

@@ -25,21 +25,16 @@ func main() {
 	flag.Parse()
 
 	if len(*host) == 0 {
-		log.Fatalf("Parameter 'host' is required")
+		log.Fatalf("'host' is required")
 	}
 
 	if len(*user) == 0 {
-		log.Fatalf("Parameter 'user' is required")
+		log.Fatalf("'user' is required")
 	}
 
 	// Dial TURN Server
-	hostPort := fmt.Sprintf("%s:%d", *host, *port)
-	turnServerAddr, err := net.ResolveTCPAddr("tcp", hostPort)
-	if err != nil {
-		log.Fatalf("Failed to resolve %s: %s", hostPort, err)
-	}
-
-	conn, err := net.DialTCP("tcp", nil, turnServerAddr)
+	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
+	conn, err := net.Dial("tcp", turnServerAddr)
 	if err != nil {
 		log.Panicf("Failed to connect to TURN server: %s", err)
 	}
