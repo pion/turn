@@ -54,10 +54,7 @@ func TestNewLongTermAuthHandler(t *testing.T) {
 	username, password, err := GenerateLongTermCredentials(sharedSecret, time.Minute)
 	assert.NoError(t, err)
 
-	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	addr := "127.0.0.1:3478"
 
 	client, err := NewClient(&ClientConfig{
 		STUNServerAddr: addr,
