@@ -4,7 +4,7 @@
 package turn
 
 import (
-	"crypto/md5" //nolint:gosec,gci
+	"crypto/sha256" //nolint:gosec,gci
 	"fmt"
 	"net"
 	"strings"
@@ -96,7 +96,7 @@ type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok 
 // GenerateAuthKey is a convenience function to easily generate keys in the format used by AuthHandler
 func GenerateAuthKey(username, realm, password string) []byte {
 	// #nosec
-	h := md5.New()
+	h := sha256.New()
 	fmt.Fprint(h, strings.Join([]string{username, realm, password}, ":"))
 	return h.Sum(nil)
 }
