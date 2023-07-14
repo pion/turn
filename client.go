@@ -98,28 +98,25 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		config.Net = n
 	}
 
-	var (
-		stunServ, turnServ       net.Addr
-		stunServStr, turnServStr string
-		err                      error
-	)
+	var stunServ, turnServ net.Addr
+	var err error
+
 	if len(config.STUNServerAddr) > 0 {
-		log.Debugf("resolving %s", config.STUNServerAddr)
 		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
 		if err != nil {
 			return nil, err
 		}
-		stunServStr = stunServ.String()
-		log.Debugf("stunServ: %s", stunServStr)
+
+		log.Debugf("Resolved STUN server %s to %s", config.STUNServerAddr, stunServ)
 	}
+
 	if len(config.TURNServerAddr) > 0 {
-		log.Debugf("resolving %s", config.TURNServerAddr)
 		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
 		if err != nil {
 			return nil, err
 		}
-		turnServStr = turnServ.String()
-		log.Debugf("turnServ: %s", turnServStr)
+
+		log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 	}
 
 	c := &Client{
