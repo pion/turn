@@ -483,7 +483,7 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 		return true, c.handleSTUNMessage(data, from)
 	case proto.IsChannelData(data):
 		return true, c.handleChannelData(data)
-	case from.String() == c.stunServerAddr.String():
+	case c.stunServerAddr != nil && from.String() == c.stunServerAddr.String():
 		// Received from STUN server but it is not a STUN message
 		return true, errNonSTUNMessage
 	default:
