@@ -26,4 +26,5 @@ var (
 	errShortWrite                             = errors.New("packet write smaller than packet")
 	errNoSuchChannelBind                      = errors.New("no such channel bind")
 	errFailedWriteSocket                      = errors.New("failed writing to socket")
+	errFailedToSetAlternateServer             = errors.New("cannot add ALTERNATE-SERVER attribute")
 )

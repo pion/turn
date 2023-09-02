@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -26,6 +27,15 @@ type RelayAddressGenerator interface {
 	AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error)
 }
 
+// AllocationHandler is a callback used to handle incoming allocation requests, allowing users to
+// customize Pion TURN with custom behavior. If the returned error code is nonzero then the request
+// is rejected with the given error code. This is useful to, e.g., return an "Allocation Quota
+// Reached" when the number of allocations from the client address surpasses a limit. If the error
+// code is "Try Alternate" then the reject response will also contain an ALTERNATE-SERVER attribute
+// with the returned alternate server address. This is useful to redirect the client to another
+// TURN server.
+type AllocationHandler func(clientAddr net.Addr) (alternateServer net.Addr, errorCode stun.ErrorCode)
+
 // PermissionHandler is a callback to filter incoming CreatePermission and ChannelBindRequest
 // requests based on the client IP address and port and the peer IP address the client intends to
 // connect to. If the client is behind a NAT then the filter acts on the server reflexive
@@ -33,11 +43,6 @@ type RelayAddressGenerator interface {
 // are per-allocation and per-peer-IP-address, to mimic the address-restricted filtering mechanism
 // of NATs that comply with [RFC4787], see https://tools.ietf.org/html/rfc5766#section-2.3.
 type PermissionHandler func(clientAddr net.Addr, peerIP net.IP) (ok bool)
-
-// DefaultPermissionHandler is convince function that grants permission to all peers
-func DefaultPermissionHandler(net.Addr, net.IP) (ok bool) {
-	return true
-}
 
 // PacketConnConfig is a single net.PacketConn to listen/write on. This will be used for UDP listeners
 type PacketConnConfig struct {
@@ -47,9 +52,12 @@ type PacketConnConfig struct {
 	// creates the net.PacketConn and returns the IP/Port it is available at
 	RelayAddressGenerator RelayAddressGenerator
 
-	// PermissionHandler is a callback to filter peer addresses. Can be set as nil, in which
-	// case the DefaultPermissionHandler is automatically instantiated to admit all peer
-	// connections
+	// AllocationHandler is a callback to filter client addresses or redirect clients to an
+	// alternate server.
+	AllocationHandler AllocationHandler
+
+	// PermissionHandler is a callback to filter peer addresses. Specifying no permission
+	// handler will admit all peer connections.
 	PermissionHandler PermissionHandler
 }
 
@@ -72,9 +80,12 @@ type ListenerConfig struct {
 	// creates the net.PacketConn and returns the IP/Port it is available at
 	RelayAddressGenerator RelayAddressGenerator
 
-	// PermissionHandler is a callback to filter peer addresses. Can be set as nil, in which
-	// case the DefaultPermissionHandler is automatically instantiated to admit all peer
-	// connections
+	// AllocationHandler is a callback to filter client addresses or redirect clients to an
+	// alternate server.
+	AllocationHandler AllocationHandler
+
+	// PermissionHandler is a callback to filter peer addresses. Specifying no permission
+	// handler will admit all peer connections.
 	PermissionHandler PermissionHandler
 }
 
@@ -114,7 +125,7 @@ type ServerConfig struct {
 	// Realm sets the realm for this server
 	Realm string
 
-	// AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
+	// AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior.
 	AuthHandler AuthHandler
 
 	// ChannelBindTimeout sets the lifetime of channel binding. Defaults to 10 minutes.
