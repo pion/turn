@@ -7,7 +7,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/pion/transport/v2"
+	"github.com/pion/transport/v3"
 	"github.com/pion/turn/v2/internal/proto"
 )
 
