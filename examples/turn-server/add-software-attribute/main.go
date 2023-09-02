@@ -16,7 +16,7 @@ import (
 	"syscall"
 
 	"github.com/pion/stun"
-	"github.com/pion/turn/v2"
+	"github.com/pion/turn/v3"
 )
 
 // attributeAdder wraps a PacketConn and appends the SOFTWARE attribute to STUN packets

@@ -8,9 +8,9 @@ import (
 	"net"
 
 	"github.com/pion/stun"
-	"github.com/pion/turn/v2/internal/allocation"
-	"github.com/pion/turn/v2/internal/ipnet"
-	"github.com/pion/turn/v2/internal/proto"
+	"github.com/pion/turn/v3/internal/allocation"
+	"github.com/pion/turn/v3/internal/ipnet"
+	"github.com/pion/turn/v3/internal/proto"
 )
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
