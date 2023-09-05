@@ -6,7 +6,7 @@ package proto
 import (
 	"encoding/binary"
 
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 )
 
 // ConnectionID represents CONNECTION-ID attribute.

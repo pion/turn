@@ -4,7 +4,7 @@
 package server
 
 import (
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 	"github.com/pion/turn/v3/internal/ipnet"
 )
 
