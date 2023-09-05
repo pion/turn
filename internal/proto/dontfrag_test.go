@@ -6,7 +6,7 @@ package proto
 import (
 	"testing"
 
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 )
 
 func TestDontFragment(t *testing.T) {

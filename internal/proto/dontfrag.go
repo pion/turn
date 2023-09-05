@@ -4,7 +4,7 @@
 package proto
 
 import (
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 )
 
 // DontFragmentAttr is a deprecated alias for DontFragment

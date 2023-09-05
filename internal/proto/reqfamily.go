@@ -6,7 +6,7 @@ package proto
 import (
 	"errors"
 
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 )
 
 // RequestedAddressFamily represents the REQUESTED-ADDRESS-FAMILY Attribute as

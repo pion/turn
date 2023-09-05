@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 )
 
 func TestReservationToken(t *testing.T) {

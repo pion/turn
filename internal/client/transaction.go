@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/stun"
+	"github.com/pion/stun/v2"
 )
 
 const (
