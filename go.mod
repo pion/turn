@@ -1,6 +1,6 @@
 module github.com/pion/turn/v3
 
-go 1.13
+go 1.16
 
 require (
 	github.com/pion/logging v0.2.2
@@ -10,3 +10,6 @@ require (
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/sys v0.15.0
 )
+
+// ebpf/xdp offload
+require github.com/cilium/ebpf v0.12.3
