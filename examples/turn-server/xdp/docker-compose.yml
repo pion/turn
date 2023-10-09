@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+# SPDX-License-Identifier: MIT
+
+version: "3.1"
+
+services:
+  pion-turn:
+    container_name: "pion-turn"
+    image: pion-turn:${VERSION:-latest}
+    build:
+      context: ./
+    stdin_open: true
+    environment:
+      - VERSION=${PION_TURN_VERSION:-master}
+      - REALM=${PION_TURN_REALM:-localhost}
+      - USERS=${PION_TURN_USERS:-username=password}
+      - PUBLIC_IP=${PION_TURN_PUBLIC_IP:-127.0.0.1}
+      - UDP_PORT=${PION_TURN_UDP_PORT:-3478}
+    network_mode: host
+    ports:
+      # STUN
+      - "${PION_TURN_UDP_PORT:-3478}:${PION_TURN_UDP_PORT:-3478}"
+      # TURN
+      - "49152-65535:49152-65535"
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - NET_RAW

@@ -29,4 +29,5 @@ var (
 	errFailedToDecodeSTUN            = errors.New("failed to decode STUN message")
 	errUnexpectedSTUNRequestMessage  = errors.New("unexpected STUN request message")
 	errRelayAddressGeneratorNil      = errors.New("RelayAddressGenerator is nil")
+	errUnsupportedOffloadMechanism   = errors.New("unsupported offload mechanism")
 )

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+# SPDX-License-Identifier: MIT
+
+# headers automatically fetched from libbpf
+bpf_endian.h
+bpf_helper_defs.h
+bpf_helpers.h
+bpf_tracing.h
