@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/pion/randutil"
 	"github.com/pion/stun/v2"
 	"github.com/pion/turn/v3/internal/allocation"
 	"github.com/pion/turn/v3/internal/ipnet"
 	"github.com/pion/turn/v3/internal/proto"
 )
+
+const runesAlpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
 func handleAllocateRequest(r Request, m *stun.Message) error {
@@ -106,7 +109,10 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 			return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 		}
 		requestedPort = randomPort
-		reservationToken = randSeq(8)
+		reservationToken, err = randutil.GenerateCryptoRandomString(8, runesAlpha)
+		if err != nil {
+			return err
+		}
 	}
 
 	// 7. At any point, the server MAY choose to reject the request with a

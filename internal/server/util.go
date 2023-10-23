@@ -5,10 +5,11 @@ package server
 
 import (
 	"crypto/md5" //nolint:gosec,gci
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"net"
 	"strconv"
 	"time"
@@ -22,22 +23,21 @@ const (
 	nonceLifetime             = time.Hour // See: https://tools.ietf.org/html/rfc5766#section-4
 )
 
-func randSeq(n int) string {
-	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))] //nolint:gosec
-	}
-	return string(b)
-}
-
 func buildNonce() (string, error) {
 	/* #nosec */
 	h := md5.New()
 	if _, err := io.WriteString(h, strconv.FormatInt(time.Now().Unix(), 10)); err != nil {
 		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err) //nolint:errorlint
 	}
-	if _, err := io.WriteString(h, strconv.FormatInt(rand.Int63(), 10)); err != nil { //nolint:gosec
+
+	maxInt63 := big.NewInt(1<<63 - 1)
+	maxInt63.Add(maxInt63, big.NewInt(1))
+	randInt63, err := rand.Int(rand.Reader, maxInt63)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err) //nolint:errorlint
+	}
+
+	if _, err := io.WriteString(h, randInt63.String()); err != nil { //nolint:gosec
 		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err) //nolint:errorlint
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
