@@ -149,6 +149,13 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 		go func() {
 			s.readLoop(NewSTUNConn(conn), am)
 
+			// Delete allocation
+			am.DeleteAllocation(&allocation.FiveTuple{
+				Protocol: allocation.UDP, // fixed UDP
+				SrcAddr:  conn.RemoteAddr(),
+				DstAddr:  conn.LocalAddr(),
+			})
+
 			if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 				s.log.Errorf("Failed to close conn: %s", err)
 			}

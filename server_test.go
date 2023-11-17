@@ -9,12 +9,14 @@ package turn
 import (
 	"fmt"
 	"net"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/transport/v3/test"
 	"github.com/pion/transport/v3/vnet"
+	"github.com/pion/turn/v3/internal/allocation"
 	"github.com/pion/turn/v3/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
@@ -116,6 +118,93 @@ func TestServer(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, server.inboundMTU, 2000)
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("Delete allocation on spontaneous TCP close", func(t *testing.T) {
+		// Test whether allocation is properly deleted when client spontaneously closes the
+		// TCP connection underlying it
+		tcpListener, err := net.Listen("tcp4", "127.0.0.1:3478")
+		assert.NoError(t, err)
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+				return nil, false
+			},
+			ListenerConfigs: []ListenerConfig{
+				{
+					Listener: tcpListener,
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "127.0.0.1",
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+
+		// make sure we can reuse the client port
+		dialer := &net.Dialer{
+			Control: func(network, address string, conn syscall.RawConn) error {
+				return conn.Control(func(descriptor uintptr) {
+					_ = syscall.SetsockoptInt(int(descriptor), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+				})
+			},
+		}
+		conn, err := dialer.Dial("tcp", "127.0.0.1:3478")
+		assert.NoError(t, err)
+
+		clientAddr := conn.LocalAddr()
+
+		serverAddr, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:3478")
+		assert.NoError(t, err)
+
+		client, err := NewClient(&ClientConfig{
+			STUNServerAddr: serverAddr.String(),
+			TURNServerAddr: serverAddr.String(),
+			Conn:           NewSTUNConn(conn),
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
+
+		_, err = client.SendBindingRequestTo(&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 3478})
+		assert.NoError(t, err, "should succeed")
+
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err)
+		assert.NotNil(t, relayConn)
+
+		fiveTuple := &allocation.FiveTuple{
+			Protocol: allocation.UDP, // Fixed UDP
+			SrcAddr:  clientAddr,
+			DstAddr:  serverAddr,
+		}
+		// Allocation exists
+		assert.Len(t, server.allocationManagers, 1)
+		assert.NotNil(t, server.allocationManagers[0].GetAllocation(fiveTuple))
+
+		// client.Close()
+		// This should properly close the client and delete the allocation on the server
+		assert.NoError(t, conn.Close())
+
+		// Let connection to properly close
+		time.Sleep(100 * time.Millisecond)
+		// to we still have the allocation on the server?
+		assert.Nil(t, server.allocationManagers[0].GetAllocation(fiveTuple))
+
+		client.Close()
+		// This should err: client connection has gone so we cannot send the Refresh(0)
+		// message
+		assert.Error(t, relayConn.Close())
 		assert.NoError(t, server.Close())
 	})
 
