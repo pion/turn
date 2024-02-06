@@ -7,8 +7,8 @@ import "errors"
 
 var (
 	errFailedToGenerateNonce                  = errors.New("failed to generate nonce")
+	errInvalidNonce                           = errors.New("invalid nonce")
 	errFailedToSendError                      = errors.New("failed to send error message")
-	errDuplicatedNonce                        = errors.New("duplicated Nonce generated, discarding request")
 	errNoSuchUser                             = errors.New("no such user exists")
 	errUnexpectedClass                        = errors.New("unexpected class")
 	errUnexpectedMethod                       = errors.New("unexpected method")

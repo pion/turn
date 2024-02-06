@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/pion/logging"
@@ -27,7 +26,7 @@ type Server struct {
 	authHandler        AuthHandler
 	realm              string
 	channelBindTimeout time.Duration
-	nonces             *sync.Map
+	nonceHash          *server.NonceHash
 
 	packetConnConfigs  []PacketConnConfig
 	listenerConfigs    []ListenerConfig
@@ -53,6 +52,11 @@ func NewServer(config ServerConfig) (*Server, error) {
 		mtu = config.InboundMTU
 	}
 
+	nonceHash, err := server.NewNonceHash()
+	if err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		log:                loggerFactory.NewLogger("turn"),
 		authHandler:        config.AuthHandler,
@@ -60,7 +64,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 		channelBindTimeout: config.ChannelBindTimeout,
 		packetConnConfigs:  config.PacketConnConfigs,
 		listenerConfigs:    config.ListenerConfigs,
-		nonces:             &sync.Map{},
+		nonceHash:          nonceHash,
 		inboundMTU:         mtu,
 	}
 
@@ -198,7 +202,7 @@ func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manage
 			Realm:              s.realm,
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,
-			Nonces:             s.nonces,
+			NonceHash:          s.nonceHash,
 		}); err != nil {
 			s.log.Errorf("Failed to handle datagram: %v", err)
 		}
