@@ -8,7 +8,6 @@ package server
 
 import (
 	"net"
-	"sync"
 	"testing"
 	"time"
 
@@ -80,18 +79,21 @@ func TestAllocationLifeTime(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		staticKey := []byte("ABC")
+		nonceHash, err := NewNonceHash()
+		assert.NoError(t, err)
+		staticKey, err := nonceHash.Generate()
+		assert.NoError(t, err)
+
 		r := Request{
 			AllocationManager: allocationManager,
-			Nonces:            &sync.Map{},
+			NonceHash:         nonceHash,
 			Conn:              l,
 			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 			Log:               logger,
 			AuthHandler: func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool) {
-				return staticKey, true
+				return []byte(staticKey), true
 			},
 		}
-		r.Nonces.Store(string(staticKey), time.Now())
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
 

@@ -4,14 +4,9 @@
 package server
 
 import (
-	"crypto/md5" //nolint:gosec,gci
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
-	"math/big"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/pion/stun/v2"
@@ -20,28 +15,7 @@ import (
 
 const (
 	maximumAllocationLifetime = time.Hour // See: https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
-	nonceLifetime             = time.Hour // See: https://tools.ietf.org/html/rfc5766#section-4
 )
-
-func buildNonce() (string, error) {
-	/* #nosec */
-	h := md5.New()
-	if _, err := io.WriteString(h, strconv.FormatInt(time.Now().Unix(), 10)); err != nil {
-		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err) //nolint:errorlint
-	}
-
-	maxInt63 := big.NewInt(1<<63 - 1)
-	maxInt63.Add(maxInt63, big.NewInt(1))
-	randInt63, err := rand.Int(rand.Reader, maxInt63)
-	if err != nil {
-		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err) //nolint:errorlint
-	}
-
-	if _, err := io.WriteString(h, randInt63.String()); err != nil { //nolint:gosec
-		return "", fmt.Errorf("%w: %v", errFailedToGenerateNonce, err) //nolint:errorlint
-	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
 
 func buildAndSend(conn net.PacketConn, dst net.Addr, attrs ...stun.Setter) error {
 	msg, err := stun.Build(attrs...)
@@ -70,14 +44,9 @@ func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageTy
 
 func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) (stun.MessageIntegrity, bool, error) {
 	respondWithNonce := func(responseCode stun.ErrorCode) (stun.MessageIntegrity, bool, error) {
-		nonce, err := buildNonce()
+		nonce, err := r.NonceHash.Generate()
 		if err != nil {
 			return nil, false, err
-		}
-
-		// Nonce has already been taken
-		if _, keyCollision := r.Nonces.LoadOrStore(nonce, time.Now()); keyCollision {
-			return nil, false, errDuplicatedNonce
 		}
 
 		return nil, false, buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID,
@@ -101,15 +70,8 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	// Assert Nonce exists and is not expired
-	nonceCreationTime, nonceFound := r.Nonces.Load(string(*nonceAttr))
-	if !nonceFound {
-		r.Nonces.Delete(nonceAttr)
-		return respondWithNonce(stun.CodeStaleNonce)
-	}
-
-	if timeValue, ok := nonceCreationTime.(time.Time); !ok || time.Since(timeValue) >= nonceLifetime {
-		r.Nonces.Delete(nonceAttr)
+	// Assert Nonce is signed and is not expired
+	if err := r.NonceHash.Validate(nonceAttr.String()); err != nil {
 		return respondWithNonce(stun.CodeStaleNonce)
 	}
 
