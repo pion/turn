@@ -7,7 +7,6 @@ package server
 import (
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/pion/logging"
@@ -25,7 +24,7 @@ type Request struct {
 
 	// Server State
 	AllocationManager *allocation.Manager
-	Nonces            *sync.Map
+	NonceHash         *NonceHash
 
 	// User Configuration
 	AuthHandler        func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)

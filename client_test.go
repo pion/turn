@@ -177,11 +177,6 @@ func TestClientNonceExpiration(t *testing.T) {
 	allocation, err := client.Allocate()
 	assert.NoError(t, err)
 
-	server.nonces.Range(func(key, value interface{}) bool {
-		server.nonces.Delete(key)
-		return true
-	})
-
 	_, err = allocation.WriteTo([]byte{0x00}, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080})
 	assert.NoError(t, err)
 
