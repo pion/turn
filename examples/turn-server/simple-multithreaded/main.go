@@ -53,7 +53,7 @@ func main() {
 	// UDP listeners share the same local address:port with setting SO_REUSEPORT and the kernel
 	// will load-balance received packets per the IP 5-tuple
 	listenerConfig := &net.ListenConfig{
-		Control: func(network, address string, conn syscall.RawConn) error {
+		Control: func(network, address string, conn syscall.RawConn) error { // nolint: revive
 			var operr error
 			if err = conn.Control(func(fd uintptr) {
 				operr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1)
@@ -90,7 +90,7 @@ func main() {
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
 		// Return the key for that user, or false when no user is found
-		AuthHandler: func(username string, realm string, srcAddr net.Addr) ([]byte, bool) {
+		AuthHandler: func(username string, realm string, srcAddr net.Addr) ([]byte, bool) { // nolint: revive
 			if key, ok := usersMap[username]; ok {
 				return key, true
 			}

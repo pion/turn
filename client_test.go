@@ -142,7 +142,7 @@ func TestClientNonceExpiration(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
 			return GenerateAuthKey(username, realm, "pass"), true
 		},
 		PacketConnConfigs: []PacketConnConfig{
@@ -193,7 +193,7 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
 			return GenerateAuthKey(username, realm, "pass"), true
 		},
 		ListenerConfigs: []ListenerConfig{

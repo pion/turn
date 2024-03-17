@@ -14,7 +14,7 @@ import (
 func TestUDPConn(t *testing.T) {
 	t.Run("bind()", func(t *testing.T) {
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
 		}
@@ -40,10 +40,10 @@ func TestUDPConn(t *testing.T) {
 
 	t.Run("WriteTo()", func(t *testing.T) {
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
-			writeTo: func(data []byte, to net.Addr) (int, error) {
+			writeTo: func(data []byte, _ net.Addr) (int, error) {
 				return len(data), nil
 			},
 		}

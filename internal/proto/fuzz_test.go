@@ -31,7 +31,7 @@ func (a attrs) pick(v byte) struct {
 }
 
 func FuzzSetters(f *testing.F) {
-	f.Fuzz(func(t *testing.T, attrType byte, value []byte) {
+	f.Fuzz(func(_ *testing.T, attrType byte, value []byte) {
 		var (
 			m1 = &stun.Message{
 				Raw: make([]byte, 0, 2048),
@@ -92,7 +92,7 @@ func FuzzSetters(f *testing.F) {
 func FuzzChannelData(f *testing.F) {
 	d := &ChannelData{}
 
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		d.Reset()
 
 		if len(data) > channelDataHeaderSize {
@@ -123,7 +123,7 @@ func FuzzChannelData(f *testing.F) {
 }
 
 func FuzzIsChannelData(f *testing.F) {
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		IsChannelData(data)
 	})
 }

@@ -167,7 +167,7 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 }
 
 func randomFiveTuple() *FiveTuple {
-	/* #nosec */
+	// nolint
 	return &FiveTuple{
 		SrcAddr: &net.UDPAddr{IP: nil, Port: rand.Int()},
 		DstAddr: &net.UDPAddr{IP: nil, Port: rand.Int()},
@@ -179,7 +179,7 @@ func newTestManager() (*Manager, error) {
 
 	config := ManagerConfig{
 		LeveledLogger: loggerFactory.NewLogger("test"),
-		AllocatePacketConn: func(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+		AllocatePacketConn: func(string, int) (net.PacketConn, net.Addr, error) {
 			conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 			if err != nil {
 				return nil, nil, err
@@ -187,7 +187,7 @@ func newTestManager() (*Manager, error) {
 
 			return conn, conn.LocalAddr(), nil
 		},
-		AllocateConn: func(network string, requestedPort int) (net.Conn, net.Addr, error) { return nil, nil, nil },
+		AllocateConn: func(string, int) (net.Conn, net.Addr, error) { return nil, nil, nil },
 	}
 	return NewManager(config)
 }

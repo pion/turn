@@ -39,7 +39,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
@@ -128,7 +128,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
@@ -150,7 +150,7 @@ func TestServer(t *testing.T) {
 
 		// make sure we can reuse the client port
 		dialer := &net.Dialer{
-			Control: func(network, address string, conn syscall.RawConn) error {
+			Control: func(_, _ string, conn syscall.RawConn) error {
 				return conn.Control(func(descriptor uintptr) {
 					_ = syscall.SetsockoptInt(int(descriptor), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 				})
@@ -213,7 +213,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
@@ -453,7 +453,7 @@ func buildVNet() (*VNet, error) {
 	}
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
 			if pw, ok := credMap[username]; ok {
 				return pw, true
 			}
@@ -591,7 +591,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 	defer serverConn.Close() //nolint:errcheck
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
 			if pw, ok := credMap[username]; ok {
 				return pw, true
 			}
