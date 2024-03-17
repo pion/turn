@@ -7,6 +7,6 @@ require (
 	github.com/pion/randutil v0.1.0
 	github.com/pion/stun/v2 v2.0.0
 	github.com/pion/transport/v3 v3.0.1
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	golang.org/x/sys v0.15.0
 )
