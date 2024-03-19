@@ -13,6 +13,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v2"
 	"github.com/pion/turn/v3/internal/ipnet"
+	"github.com/pion/turn/v3/internal/offload"
 	"github.com/pion/turn/v3/internal/proto"
 )
 
@@ -111,6 +112,21 @@ func (a *Allocation) AddChannelBind(c *ChannelBind, lifetime time.Duration) erro
 		a.channelBindings = append(a.channelBindings, c)
 		c.start(lifetime)
 
+		// enable offload
+		// currently we support offload for UDP connections only
+		peer := offload.Connection{
+			RemoteAddr: c.Peer,
+			LocalAddr:  a.RelayAddr,
+			Protocol:   proto.ProtoUDP,
+		}
+		client := offload.Connection{
+			RemoteAddr: a.fiveTuple.SrcAddr,
+			LocalAddr:  a.fiveTuple.DstAddr,
+			Protocol:   proto.ProtoUDP,
+			ChannelID:  uint32(c.Number),
+		}
+		_ = offload.Engine.Upsert(client, peer)
+
 		// Channel binds also refresh permissions.
 		a.AddPermission(NewPermission(c.Peer, a.log))
 	} else {
@@ -128,14 +144,33 @@ func (a *Allocation) RemoveChannelBind(number proto.ChannelNumber) bool {
 	a.channelBindingsLock.Lock()
 	defer a.channelBindingsLock.Unlock()
 
+	var cAddr net.Addr
+	ret := false
+
 	for i := len(a.channelBindings) - 1; i >= 0; i-- {
 		if a.channelBindings[i].Number == number {
+			cAddr = a.channelBindings[i].Peer
 			a.channelBindings = append(a.channelBindings[:i], a.channelBindings[i+1:]...)
-			return true
+			ret = true
+			break
 		}
 	}
 
-	return false
+	// disable offload
+	peer := offload.Connection{
+		RemoteAddr: cAddr,
+		LocalAddr:  a.RelayAddr,
+		Protocol:   proto.ProtoUDP,
+		ChannelID:  uint32(number),
+	}
+	client := offload.Connection{
+		RemoteAddr: a.RelayAddr,
+		LocalAddr:  cAddr,
+		Protocol:   proto.ProtoUDP,
+	}
+	_ = offload.Engine.Remove(client, peer)
+
+	return ret
 }
 
 // GetChannelByNumber gets the ChannelBind from this allocation by id
