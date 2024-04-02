@@ -4,7 +4,7 @@
 package proto
 
 import (
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +28,7 @@ func loadData(tb testing.TB, name string) []byte {
 			tb.Fatal(errClose)
 		}
 	}()
-	v, err := ioutil.ReadAll(f)
+	v, err := io.ReadAll(f)
 	if err != nil {
 		tb.Fatal(err)
 	}
