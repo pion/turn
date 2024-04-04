@@ -307,7 +307,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, conn.Close())
 
 		// Enforce filtered source address
-		conn2, err := net.ListenPacket("udp4", "127.0.0.133:54321")
+		conn2, err := net.ListenPacket("udp4", "127.0.0.1:12321")
 		assert.NoError(t, err)
 
 		client2, err := NewClient(&ClientConfig{
