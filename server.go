@@ -167,9 +167,24 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 	}
 }
 
+type nilAddressGenerator struct{}
+
+func (n *nilAddressGenerator) Validate() error { return errRelayAddressGeneratorNil }
+
+func (n *nilAddressGenerator) AllocatePacketConn(string, int) (net.PacketConn, net.Addr, error) {
+	return nil, nil, errRelayAddressGeneratorNil
+}
+
+func (n *nilAddressGenerator) AllocateConn(string, int) (net.Conn, net.Addr, error) {
+	return nil, nil, errRelayAddressGeneratorNil
+}
+
 func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, handler PermissionHandler) (*allocation.Manager, error) {
 	if handler == nil {
 		handler = DefaultPermissionHandler
+	}
+	if addrGenerator == nil {
+		addrGenerator = &nilAddressGenerator{}
 	}
 
 	am, err := allocation.NewManager(allocation.ManagerConfig{

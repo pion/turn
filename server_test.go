@@ -570,6 +570,52 @@ func TestConsumeSingleTURNFrame(t *testing.T) {
 	}
 }
 
+func TestSTUNOnly(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	assert.NoError(t, err)
+
+	defer serverConn.Close() //nolint:errcheck
+
+	server, err := NewServer(ServerConfig{
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+		}},
+		Realm:         "pion.ly",
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	defer server.Close() //nolint:errcheck
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           conn,
+		STUNServerAddr: "127.0.0.1:3478",
+		TURNServerAddr: "127.0.0.1:3478",
+		Username:       "user",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+	defer client.Close()
+
+	reflAddr, err := client.SendBindingRequest()
+	assert.NoError(t, err)
+
+	_, ok := reflAddr.(*net.UDPAddr)
+	assert.True(t, ok)
+
+	_, err = client.Allocate()
+	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
+}
+
 func RunBenchmarkServer(b *testing.B, clientNum int) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	credMap := map[string][]byte{

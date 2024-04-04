@@ -57,11 +57,14 @@ func (c *PacketConnConfig) validate() error {
 	if c.PacketConn == nil {
 		return errConnUnset
 	}
-	if c.RelayAddressGenerator == nil {
-		return errRelayAddressGeneratorUnset
+
+	if c.RelayAddressGenerator != nil {
+		if err := c.RelayAddressGenerator.Validate(); err != nil {
+			return err
+		}
 	}
 
-	return c.RelayAddressGenerator.Validate()
+	return nil
 }
 
 // ListenerConfig is a single net.Listener to accept connections on. This will be used for TCP, TLS and DTLS listeners
