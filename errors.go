@@ -28,4 +28,5 @@ var (
 	errNonSTUNMessage                = errors.New("non-STUN message from STUN server")
 	errFailedToDecodeSTUN            = errors.New("failed to decode STUN message")
 	errUnexpectedSTUNRequestMessage  = errors.New("unexpected STUN request message")
+	errRelayAddressGeneratorNil      = errors.New("RelayAddressGenerator is nil")
 )

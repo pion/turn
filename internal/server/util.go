@@ -66,6 +66,13 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 	realmAttr := &stun.Realm{}
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(callingMethod, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
+	// No Auth handler is set, server is running in STUN only mode
+	// Respond with 400 so clients don't retry
+	if r.AuthHandler == nil {
+		sendErr := buildAndSend(r.Conn, r.SrcAddr, badRequestMsg...)
+		return nil, false, sendErr
+	}
+
 	if err := nonceAttr.GetFrom(m); err != nil {
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
