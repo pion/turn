@@ -113,7 +113,7 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	a.RelaySocket = conn
 	a.RelayAddr = relayAddr
 
-	m.log.Debugf("Listening on relay address: %s", a.RelayAddr.String())
+	m.log.Debugf("Listening on relay address: %s", a.RelayAddr)
 
 	a.lifetimeTimer = time.AfterFunc(lifetime, func() {
 		m.DeleteAllocation(a.fiveTuple)

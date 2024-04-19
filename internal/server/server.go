@@ -35,7 +35,7 @@ type Request struct {
 
 // HandleRequest processes the give Request
 func HandleRequest(r Request) error {
-	r.Log.Debugf("Received %d bytes of udp from %s on %s", len(r.Buff), r.SrcAddr.String(), r.Conn.LocalAddr().String())
+	r.Log.Debugf("Received %d bytes of udp from %s on %s", len(r.Buff), r.SrcAddr, r.Conn.LocalAddr())
 
 	if proto.IsChannelData(r.Buff) {
 		return handleDataPacket(r)

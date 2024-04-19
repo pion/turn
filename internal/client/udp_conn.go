@@ -435,7 +435,7 @@ func (c *UDPConn) bind(b *binding) error {
 		return fmt.Errorf("unexpected response type %s", res.Type) //nolint:goerr113
 	}
 
-	c.log.Debugf("Channel binding successful: %s %d", b.addr.String(), b.number)
+	c.log.Debugf("Channel binding successful: %s %d", b.addr, b.number)
 
 	// Success.
 	return nil
