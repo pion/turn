@@ -244,9 +244,9 @@ func (a *Allocation) packetHandler(m *Manager) {
 		}
 
 		a.log.Debugf("Relay socket %s received %d bytes from %s",
-			a.RelaySocket.LocalAddr().String(),
+			a.RelaySocket.LocalAddr(),
 			n,
-			srcAddr.String())
+			srcAddr)
 
 		if channel := a.GetChannelByAddr(srcAddr); channel != nil {
 			channelData := &proto.ChannelData{
@@ -274,13 +274,13 @@ func (a *Allocation) packetHandler(m *Manager) {
 				return
 			}
 			a.log.Debugf("Relaying message from %s to client at %s",
-				srcAddr.String(),
-				a.fiveTuple.SrcAddr.String())
+				srcAddr,
+				a.fiveTuple.SrcAddr)
 			if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
 				a.log.Errorf("Failed to send DataIndication from allocation %v %v", srcAddr, err)
 			}
 		} else {
-			a.log.Infof("No Permission or Channel exists for %v on allocation %v", srcAddr, a.RelayAddr.String())
+			a.log.Infof("No Permission or Channel exists for %v on allocation %v", srcAddr, a.RelayAddr)
 		}
 	}
 }

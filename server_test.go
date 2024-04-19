@@ -536,7 +536,7 @@ func TestServerVNet(t *testing.T) {
 		log.Debug("sending a binding request.")
 		reflAddr, err := client.SendBindingRequest()
 		assert.NoError(t, err)
-		log.Debugf("mapped-address: %v", reflAddr.String())
+		log.Debugf("mapped-address: %s", reflAddr)
 		udpAddr, ok := reflAddr.(*net.UDPAddr)
 		assert.True(t, ok)
 

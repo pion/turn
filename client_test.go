@@ -67,7 +67,7 @@ func TestClientWithSTUN(t *testing.T) {
 
 		resp, err := c.SendBindingRequest()
 		assert.NoError(t, err, "should succeed")
-		log.Debugf("mapped-addr: %s", resp.String())
+		log.Debugf("mapped-addr: %s", resp)
 		assert.Equal(t, 0, c.trMap.Size(), "should be no transaction left")
 		assert.NoError(t, pc.Close())
 	})
