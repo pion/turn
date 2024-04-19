@@ -30,7 +30,7 @@ type Manager struct {
 	lock sync.RWMutex
 	log  logging.LeveledLogger
 
-	allocations  map[string]*Allocation
+	allocations  map[FiveTupleFingerprint]*Allocation
 	reservations []*reservation
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
@@ -51,7 +51,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 
 	return &Manager{
 		log:                config.LeveledLogger,
-		allocations:        make(map[string]*Allocation, 64),
+		allocations:        make(map[FiveTupleFingerprint]*Allocation, 64),
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
