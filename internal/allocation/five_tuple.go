@@ -4,7 +4,6 @@
 package allocation
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -33,7 +32,32 @@ func (f *FiveTuple) Equal(b *FiveTuple) bool {
 	return f.Fingerprint() == b.Fingerprint()
 }
 
+// FiveTupleFingerprint is a comparable representation of a FiveTuple
+type FiveTupleFingerprint struct {
+	srcIP, dstIP     [16]byte
+	srcPort, dstPort uint16
+	protocol         Protocol
+}
+
 // Fingerprint is the identity of a FiveTuple
-func (f *FiveTuple) Fingerprint() string {
-	return fmt.Sprintf("%d_%s_%s", f.Protocol, f.SrcAddr.String(), f.DstAddr.String())
+func (f *FiveTuple) Fingerprint() (fp FiveTupleFingerprint) {
+	srcIP, srcPort := netAddrIPAndPort(f.SrcAddr)
+	copy(fp.srcIP[:], srcIP)
+	fp.srcPort = srcPort
+	dstIP, dstPort := netAddrIPAndPort(f.DstAddr)
+	copy(fp.dstIP[:], dstIP)
+	fp.dstPort = dstPort
+	fp.protocol = f.Protocol
+	return
+}
+
+func netAddrIPAndPort(addr net.Addr) (net.IP, uint16) {
+	switch a := addr.(type) {
+	case *net.UDPAddr:
+		return a.IP.To16(), uint16(a.Port)
+	case *net.TCPAddr:
+		return a.IP.To16(), uint16(a.Port)
+	default:
+		return nil, 0
+	}
 }
