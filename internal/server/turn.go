@@ -18,7 +18,7 @@ const runesAlpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
 func handleAllocateRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("Received AllocateRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received AllocateRequest from %s", r.SrcAddr)
 
 	// 1. The server MUST require that the request be authenticated.  This
 	//    authentication MUST be done using the long-term credential
@@ -183,7 +183,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 }
 
 func handleRefreshRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("Received RefreshRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received RefreshRequest from %s", r.SrcAddr)
 
 	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
 	if !hasAuth {
@@ -217,7 +217,7 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 }
 
 func handleCreatePermissionRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("Received CreatePermission from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received CreatePermission from %s", r.SrcAddr)
 
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
@@ -242,13 +242,12 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		}
 
 		if err := r.AllocationManager.GrantPermission(r.SrcAddr, peerAddress.IP); err != nil {
-			r.Log.Infof("permission denied for client %s to peer %s", r.SrcAddr.String(),
-				peerAddress.IP.String())
+			r.Log.Infof("permission denied for client %s to peer %s", r.SrcAddr, peerAddress.IP)
 			return err
 		}
 
 		r.Log.Debugf("Adding permission for %s", fmt.Sprintf("%s:%d",
-			peerAddress.IP.String(), peerAddress.Port))
+			peerAddress.IP, peerAddress.Port))
 
 		a.AddPermission(allocation.NewPermission(
 			&net.UDPAddr{
@@ -272,7 +271,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 }
 
 func handleSendIndication(r Request, m *stun.Message) error {
-	r.Log.Debugf("Received SendIndication from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received SendIndication from %s", r.SrcAddr)
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
 		DstAddr:  r.Conn.LocalAddr(),
@@ -305,7 +304,7 @@ func handleSendIndication(r Request, m *stun.Message) error {
 }
 
 func handleChannelBindRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("Received ChannelBindRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received ChannelBindRequest from %s", r.SrcAddr)
 
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,
@@ -334,8 +333,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 	}
 
 	if err = r.AllocationManager.GrantPermission(r.SrcAddr, peerAddr.IP); err != nil {
-		r.Log.Infof("permission denied for client %s to peer %s", r.SrcAddr.String(),
-			peerAddr.IP.String())
+		r.Log.Infof("permission denied for client %s to peer %s", r.SrcAddr, peerAddr.IP)
 
 		unauthorizedRequestMsg := buildMsg(m.TransactionID,
 			stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
@@ -343,9 +341,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, unauthorizedRequestMsg...)
 	}
 
-	r.Log.Debugf("Binding channel %d to %s",
-		channel,
-		fmt.Sprintf("%s:%d", peerAddr.IP.String(), peerAddr.Port))
+	r.Log.Debugf("Binding channel %d to %s", channel, peerAddr)
 	err = a.AddChannelBind(allocation.NewChannelBind(
 		channel,
 		&net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port},
@@ -359,7 +355,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 }
 
 func handleChannelData(r Request, c *proto.ChannelData) error {
-	r.Log.Debugf("Received ChannelData from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received ChannelData from %s", r.SrcAddr)
 
 	a := r.AllocationManager.GetAllocation(&allocation.FiveTuple{
 		SrcAddr:  r.SrcAddr,

@@ -9,7 +9,7 @@ import (
 )
 
 func handleBindingRequest(r Request, m *stun.Message) error {
-	r.Log.Debugf("Received BindingRequest from %s", r.SrcAddr.String())
+	r.Log.Debugf("Received BindingRequest from %s", r.SrcAddr)
 
 	ip, port, err := ipnet.AddrIPPort(r.SrcAddr)
 	if err != nil {

@@ -425,7 +425,7 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 
 	c.trMap.Insert(trKey, tr)
 
-	c.log.Tracef("Start %s transaction %s to %s", msg.Type, trKey, tr.To.String())
+	c.log.Tracef("Start %s transaction %s to %s", msg.Type, trKey, tr.To)
 	_, err := c.conn.WriteTo(tr.Raw, to)
 	if err != nil {
 		return client.TransactionResult{}, err
@@ -524,7 +524,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				return err
 			}
 
-			c.log.Tracef("Data indication received from %s", from.String())
+			c.log.Tracef("Data indication received from %s", from)
 
 			relayedConn := c.relayedUDPConn()
 			if relayedConn == nil {
@@ -548,7 +548,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 				return err
 			}
 
-			c.log.Debugf("Connection attempt from %s", addr.String())
+			c.log.Debugf("Connection attempt from %s", addr)
 
 			allocation := c.getTCPAllocation()
 			if allocation == nil {
@@ -575,7 +575,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 	if !ok {
 		c.mutexTrMap.Unlock()
 		// Silently discard
-		c.log.Debugf("No transaction for %s", msg.String())
+		c.log.Debugf("No transaction for %s", msg)
 		return nil
 	}
 
@@ -589,7 +589,7 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error {
 		From:    from,
 		Retries: tr.Retries(),
 	}) {
-		c.log.Debugf("No listener for %s", msg.String())
+		c.log.Debugf("No listener for %s", msg)
 	}
 
 	return nil
