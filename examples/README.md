@@ -65,7 +65,9 @@ This mechanism is described in https://datatracker.ietf.org/doc/html/draft-ubert
 This example demonstrates the use of a permission handler in the PION TURN server. The example implements a filtering policy that lets clients to connect back to their own host or server-reflexive address but will drop everything else. This will let the client ping-test through but will block essentially all other peer connection attempts.
 
 ## turn-client
-The `turn-client` directory contains 2 examples that show common Pion TURN usages. All of these examples take the following arguments.
+The `turn-client` directory contains 3 examples that show common Pion TURN usages. 
+
+All of these examples except `tcp-alloc` take the following arguments.
 
 * -host      : TURN server host
 * -ping      : Run ping test
@@ -126,3 +128,41 @@ Following diagram shows what turn-client does:
 > mappedAddr and the external IP:port (*3) are the same) This process is known as
 > "UDP hole punching" and TURN server exhibits "Address-restricted" behavior. Once it is done,
 > packets coming from (*3) will be received by relayConn.
+
+
+#### tcp-alloc
+The `tcp-alloc` exemplifies how to create client TCP allocations and use them to exchange messages between peers. It simulates two clients and creates a TCP allocation for each. Then, both clients exchange their relayed addresses with each other through a signaling server. Finally, each client uses its TCP allocation and the relayed address of the other client to send and receive a single message.
+
+The `tcp-alloc` takes the following arguments:
+
+* -host      : TURN server host
+* -port      : Listening port (defaults to 3478)
+* -user      : &lt;username&gt;=&lt;password&gt; pair
+* -realm     : Realm name (defaults to "pion.ly")
+* -signaling : Run the signaling server
+
+
+To run the example:
+
+1) Start one client and the signaling server used to exchange the relayed addresses:
+
+```sh
+go build
+./tcp-alloc -host <turn-server-name> -port <port> -user=<username=password> -signaling=true
+```
+
+2) Start the other client without starting the signaling server:
+
+```sh
+./tcp-alloc -host <turn-server-name> -port <port> -user=<username=password> -signaling=false
+```
+
+A Coturn TURN server can be locally deployed and used for testing with the following command (this is a test configuration of the Coturn TURN server and should not be used for production):
+
+```sh
+/bin/turnserver -lt-cred-mech -u <username:password> -r pion.ly --allow-loopback-peers --cli-password=<clipassword>
+```
+
+>If using this Coturn TURN server deployment: 
+>* turn-server-name      : 127.0.0.1
+>* port                  : 3478

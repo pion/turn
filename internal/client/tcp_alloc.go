@@ -151,6 +151,11 @@ func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCP
 			IP:   addr.IP,
 			Port: addr.Port,
 		}
+	} else if addr, ok := a.serverAddr.(*net.UDPAddr); ok {
+		rAddrServer = &net.TCPAddr{
+			IP:   addr.IP,
+			Port: addr.Port,
+		}
 	} else {
 		return nil, errInvalidTURNAddress
 	}
