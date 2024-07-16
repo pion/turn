@@ -28,6 +28,7 @@ type Request struct {
 
 	// User Configuration
 	AuthHandler        func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
+	AuthSuccess        func(username string, realm string, srcAddr net.Addr)
 	Log                logging.LeveledLogger
 	Realm              string
 	ChannelBindTimeout time.Duration

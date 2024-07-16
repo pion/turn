@@ -97,6 +97,10 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
+	if r.AuthSuccess != nil {
+		r.AuthSuccess(usernameAttr.String(), realmAttr.String(), r.SrcAddr)
+	}
+
 	return stun.MessageIntegrity(ourKey), true, nil
 }
 
