@@ -84,6 +84,8 @@ func TestAllocationLifeTime(t *testing.T) {
 		staticKey, err := nonceHash.Generate()
 		assert.NoError(t, err)
 
+		authSuccessCallbackTimes := 0
+
 		r := Request{
 			AllocationManager: allocationManager,
 			NonceHash:         nonceHash,
@@ -93,13 +95,16 @@ func TestAllocationLifeTime(t *testing.T) {
 			AuthHandler: func(string, string, net.Addr) (key []byte, ok bool) {
 				return []byte(staticKey), true
 			},
+
+			AuthSuccess: func(username string, realm string, srcAddr net.Addr) {
+				authSuccessCallbackTimes++
+			},
 		}
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
 
 		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour)
 		assert.NoError(t, err)
-
 		assert.NotNil(t, r.AllocationManager.GetAllocation(fiveTuple))
 
 		m := &stun.Message{}
@@ -109,7 +114,12 @@ func TestAllocationLifeTime(t *testing.T) {
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Username(staticKey)).AddTo(m))
 
+		assert.NoError(t, handleCreatePermissionRequest(r, m))
+		assert.Equal(t, 1, authSuccessCallbackTimes)
+
 		assert.NoError(t, handleRefreshRequest(r, m))
+		assert.Equal(t, 2, authSuccessCallbackTimes)
+
 		assert.Nil(t, r.AllocationManager.GetAllocation(fiveTuple))
 	})
 }
