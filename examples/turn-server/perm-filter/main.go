@@ -18,7 +18,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pion/turn/v3"
+	"github.com/pion/turn/v4"
 )
 
 func main() {

@@ -6,7 +6,7 @@ package client
 import (
 	"net"
 
-	"github.com/pion/stun/v2"
+	"github.com/pion/stun/v3"
 )
 
 type mockClient struct {
