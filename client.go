@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/stun/v2"
+	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/stdnet"
-	"github.com/pion/turn/v3/internal/client"
-	"github.com/pion/turn/v3/internal/proto"
+	"github.com/pion/turn/v4/internal/client"
+	"github.com/pion/turn/v4/internal/proto"
 )
 
 const (

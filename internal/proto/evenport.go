@@ -3,7 +3,7 @@
 
 package proto
 
-import "github.com/pion/stun/v2"
+import "github.com/pion/stun/v3"
 
 // EvenPort represents EVEN-PORT attribute.
 //

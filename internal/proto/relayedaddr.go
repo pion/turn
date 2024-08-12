@@ -6,7 +6,7 @@ package proto
 import (
 	"net"
 
-	"github.com/pion/stun/v2"
+	"github.com/pion/stun/v3"
 )
 
 // RelayedAddress implements XOR-RELAYED-ADDRESS attribute.

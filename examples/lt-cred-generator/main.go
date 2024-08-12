@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/pion/turn/v3"
+	"github.com/pion/turn/v4"
 )
 
 // Outputs username & password according to the
