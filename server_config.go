@@ -100,7 +100,7 @@ type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok 
 func GenerateAuthKey(username, realm, password string) []byte {
 	// #nosec
 	h := md5.New()
-	fmt.Fprint(h, strings.Join([]string{username, realm, password}, ":"))
+	fmt.Fprint(h, strings.Join([]string{username, realm, password}, ":")) // nolint: errcheck
 	return h.Sum(nil)
 }
 
