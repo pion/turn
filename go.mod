@@ -1,6 +1,6 @@
 module github.com/pion/turn/v4
 
-go 1.19
+go 1.20
 
 require (
 	github.com/pion/logging v0.2.2
