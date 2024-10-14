@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/turn/v4/internal/allocation"
+	"github.com/pion/turn/v4/internal/auth"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -96,9 +97,13 @@ func (c *ListenerConfig) validate() error {
 	return c.RelayAddressGenerator.Validate()
 }
 
+// RequestAttributes represents attributes of a TURN request which
+// may be useful for authorizing the underlying request.
+type RequestAttributes = auth.RequestAttributes
+
 // AuthHandler is a callback used to handle incoming auth requests,
 // allowing users to customize Pion TURN with custom behavior.
-type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok bool)
+type AuthHandler = auth.AuthHandler
 
 // GenerateAuthKey is a convenience function to easily generate keys in the format used by AuthHandler.
 func GenerateAuthKey(username, realm, password string) []byte {
