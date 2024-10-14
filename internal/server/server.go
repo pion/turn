@@ -5,6 +5,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
 	"github.com/pion/turn/v4/internal/allocation"
+	"github.com/pion/turn/v4/internal/auth"
 	"github.com/pion/turn/v4/internal/proto"
 )
 
@@ -21,13 +23,14 @@ type Request struct {
 	Conn    net.PacketConn
 	SrcAddr net.Addr
 	Buff    []byte
+	TLS     *tls.ConnectionState
 
 	// Server State
 	AllocationManager *allocation.Manager
 	NonceHash         NonceManager
 
 	// User Configuration
-	AuthHandler func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
+	AuthHandler auth.AuthHandler
 
 	// Quota Handler
 	QuotaHandler func(username string, realm string, srcAddr net.Addr) (ok bool)

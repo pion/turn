@@ -153,8 +153,8 @@ func TestClientNonceExpiration(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-			return GenerateAuthKey(username, realm, "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		PacketConnConfigs: []PacketConnConfig{
 			{
@@ -201,8 +201,8 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-			return GenerateAuthKey(username, realm, "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		ListenerConfigs: []ListenerConfig{
 			{
@@ -268,7 +268,7 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 			// Sleep needed for sending retransmission.
 			if runtime.GOOS == "windows" {
 				time.Sleep(20 * time.Millisecond)
@@ -276,7 +276,7 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 
-			return GenerateAuthKey(username, realm, "pass"), true
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		ListenerConfigs: []ListenerConfig{
 			{
@@ -337,8 +337,8 @@ func TestClientReadTimout(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-			return GenerateAuthKey(username, realm, "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		PacketConnConfigs: []PacketConnConfig{
 			{
@@ -387,8 +387,8 @@ func TestTCPClientDial(t *testing.T) {
 	require.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-			return GenerateAuthKey(username, realm, "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		ListenerConfigs: []ListenerConfig{
 			{
@@ -475,8 +475,8 @@ func TestTCPClientAccept(t *testing.T) {
 	require.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-			return GenerateAuthKey(username, realm, "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		ListenerConfigs: []ListenerConfig{
 			{
@@ -571,8 +571,8 @@ func TestClientE2E(t *testing.T) {
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-				return GenerateAuthKey(username, realm, "pass"), true
+			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+				return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 			},
 			PacketConnConfigs: []PacketConnConfig{
 				{

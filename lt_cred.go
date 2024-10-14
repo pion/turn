@@ -7,12 +7,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha1" //nolint:gosec,gci
 	"encoding/base64"
-	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v4/internal/auth"
 )
 
 // GenerateLongTermCredentials can be used to create credentials valid for [duration] time.
@@ -57,27 +57,27 @@ func NewLongTermAuthHandler(sharedSecret string, logger logging.LeveledLogger) A
 		logger = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
 
-	return func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
-		logger.Tracef("Authentication username=%q realm=%q srcAddr=%v", username, realm, srcAddr)
-		t, err := strconv.Atoi(username)
+	return func(ra *auth.RequestAttributes) (key []byte, ok bool) {
+		logger.Tracef("Authentication username=%q realm=%q srcAddr=%v", ra.Username, ra.Realm, ra.SrcAddr)
+		t, err := strconv.Atoi(ra.Username)
 		if err != nil {
-			logger.Errorf("Invalid time-windowed username %q", username)
+			logger.Errorf("Invalid time-windowed username %q", ra.Username)
 
 			return nil, false
 		}
 		if int64(t) < time.Now().Unix() {
-			logger.Errorf("Expired time-windowed username %q", username)
+			logger.Errorf("Expired time-windowed username %q", ra.Username)
 
 			return nil, false
 		}
-		password, err := longTermCredentials(username, sharedSecret)
+		password, err := longTermCredentials(ra.Username, sharedSecret)
 		if err != nil {
 			logger.Error(err.Error())
 
 			return nil, false
 		}
 
-		return GenerateAuthKey(username, realm, password), true
+		return GenerateAuthKey(ra.Username, ra.Realm, password), true
 	}
 }
 
@@ -92,27 +92,27 @@ func LongTermTURNRESTAuthHandler(sharedSecret string, logger logging.LeveledLogg
 		logger = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
 
-	return func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
-		logger.Tracef("Authentication username=%q realm=%q srcAddr=%v", username, realm, srcAddr)
-		timestamp := strings.Split(username, ":")[0]
+	return func(ra *auth.RequestAttributes) (key []byte, ok bool) {
+		logger.Tracef("Authentication username=%q realm=%q srcAddr=%v", ra.Username, ra.Realm, ra.SrcAddr)
+		timestamp := strings.Split(ra.Username, ":")[0]
 		t, err := strconv.Atoi(timestamp)
 		if err != nil {
-			logger.Errorf("Invalid time-windowed username %q", username)
+			logger.Errorf("Invalid time-windowed username %q", ra.Username)
 
 			return nil, false
 		}
 		if int64(t) < time.Now().Unix() {
-			logger.Errorf("Expired time-windowed username %q", username)
+			logger.Errorf("Expired time-windowed username %q", ra.Username)
 
 			return nil, false
 		}
-		password, err := longTermCredentials(username, sharedSecret)
+		password, err := longTermCredentials(ra.Username, sharedSecret)
 		if err != nil {
 			logger.Error(err.Error())
 
 			return nil, false
 		}
 
-		return GenerateAuthKey(username, realm, password), true
+		return GenerateAuthKey(ra.Username, ra.Realm, password), true
 	}
 }

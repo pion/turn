@@ -5,6 +5,7 @@
 package turn
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -91,7 +92,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		}
 
 		go func(cfg PacketConnConfig, am *allocation.Manager) {
-			server.readLoop(cfg.PacketConn, am)
+			server.readLoop(cfg.PacketConn, am, nil)
 
 			if err := am.Close(); err != nil {
 				server.log.Errorf("Failed to close AllocationManager: %s", err)
@@ -167,7 +168,16 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 		}
 
 		go func() {
-			s.readLoop(NewSTUNConn(conn), am)
+			var tlsConnectionState *tls.ConnectionState
+
+			// extract tls connection state if possible
+			tlsConn, ok := conn.(*tls.Conn)
+			if ok {
+				cs := tlsConn.ConnectionState()
+				tlsConnectionState = &cs
+			}
+
+			s.readLoop(NewSTUNConn(conn), am, tlsConnectionState)
 
 			// Delete allocation
 			am.DeleteAllocation(&allocation.FiveTuple{
@@ -222,7 +232,7 @@ func (s *Server) createAllocationManager(
 	return am, err
 }
 
-func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Manager) {
+func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Manager, tlsState *tls.ConnectionState) {
 	buf := make([]byte, s.inboundMTU)
 	for {
 		n, addr, err := conn.ReadFrom(buf)
@@ -241,6 +251,7 @@ func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Man
 			Conn:               conn,
 			SrcAddr:            addr,
 			Buff:               buf[:n],
+			TLS:                tlsState,
 			Log:                s.log,
 			AuthHandler:        s.authHandler,
 			QuotaHandler:       s.quotaHandler,

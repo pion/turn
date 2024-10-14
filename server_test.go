@@ -190,8 +190,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-				if pw, ok := credMap[username]; ok {
+			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+				if pw, ok := credMap[ra.Username]; ok {
 					return pw, true
 				}
 
@@ -280,8 +280,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-				if pw, ok := credMap[username]; ok {
+			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+				if pw, ok := credMap[ra.Username]; ok {
 					return pw, true
 				}
 
@@ -366,8 +366,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-				if pw, ok := credMap[username]; ok {
+			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+				if pw, ok := credMap[ra.Username]; ok {
 					return pw, true
 				}
 
@@ -521,8 +521,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		errMessage.Store("")
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-				if pw, ok := credMap[username]; ok {
+			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+				if pw, ok := credMap[ra.Username]; ok {
 					return pw, true
 				}
 
@@ -593,8 +593,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-				if pw, ok := credMap[username]; ok {
+			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+				if pw, ok := credMap[ra.Username]; ok {
 					return pw, true
 				}
 
@@ -672,7 +672,7 @@ func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 			return nil, false
 		},
 		PacketConnConfigs: []PacketConnConfig{
@@ -820,8 +820,8 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 	}
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-			if pw, ok := credMap[username]; ok {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			if pw, ok := credMap[ra.Username]; ok {
 				return pw, true
 			}
 
@@ -1307,8 +1307,8 @@ func TestQuotaReached(t *testing.T) {
 
 	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-			if pw, ok := credMap[username]; ok {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			if pw, ok := credMap[ra.Username]; ok {
 				return pw, true
 			}
 			return nil, false //nolint:nlreturn
@@ -1356,7 +1356,7 @@ func TestReservation(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 			return GenerateAuthKey("user", "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
@@ -1433,7 +1433,7 @@ func TestReservation_InvalidToken(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 			return GenerateAuthKey("user", "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
@@ -1479,7 +1479,7 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 			return GenerateAuthKey("user", "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
@@ -1550,7 +1550,7 @@ func TestDontFragment(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 			return GenerateAuthKey("user", "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
@@ -1707,8 +1707,8 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	defer serverConn.Close() //nolint:errcheck
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
-			if pw, ok := credMap[username]; ok {
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			if pw, ok := credMap[ra.Username]; ok {
 				return pw, true
 			}
 

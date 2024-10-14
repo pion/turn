@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/stun/v3"
+	"github.com/pion/turn/v4/internal/auth"
 	"github.com/pion/turn/v4/internal/proto"
 )
 
@@ -104,7 +105,12 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
-	ourKey, ok := req.AuthHandler(usernameAttr.String(), realmAttr.String(), req.SrcAddr)
+	ourKey, ok := req.AuthHandler(&auth.RequestAttributes{
+		Username: usernameAttr.String(),
+		Realm:    realmAttr.String(),
+		SrcAddr:  req.SrcAddr,
+		TLS:      req.TLS,
+	})
 	if !ok {
 		return nil, false, "", buildAndSendErr(
 			req.Conn,
