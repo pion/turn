@@ -11,6 +11,7 @@ import (
 
 	"github.com/pion/stun/v3"
 	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v4/internal/server/authz"
 )
 
 const (
@@ -66,9 +67,9 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 	realmAttr := &stun.Realm{}
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(callingMethod, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
-	// No Auth handler is set, server is running in STUN only mode
+	// No Authorizer is set, server is running in STUN only mode
 	// Respond with 400 so clients don't retry
-	if r.AuthHandler == nil {
+	if r.Authorizer == nil {
 		sendErr := buildAndSend(r.Conn, r.SrcAddr, badRequestMsg...)
 		return nil, false, sendErr
 	}
@@ -88,7 +89,12 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	ourKey, ok := r.AuthHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr)
+	ourKey, ok := r.Authorizer.Authorize(&authz.RequestAttributes{
+		Username: usernameAttr.String(),
+		Realm:    realmAttr.String(),
+		SrcAddr:  r.SrcAddr,
+		TLS:      r.TLS,
+	})
 	if !ok {
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()), badRequestMsg...)
 	}
