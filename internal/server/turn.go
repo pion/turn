@@ -127,11 +127,23 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    client to a different server.  The use of this error code and
 	//    attribute follow the specification in [RFC5389].
 	lifetimeDuration := allocationLifeTime(m)
+	usernameAttr := &stun.Username{}
+	realmAttr := &stun.Realm{}
+	if err := realmAttr.GetFrom(m); err != nil {
+		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
+	}
+	if err := usernameAttr.GetFrom(m); err != nil {
+		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
+	}
+
 	a, err := r.AllocationManager.CreateAllocation(
 		fiveTuple,
 		r.Conn,
 		requestedPort,
-		lifetimeDuration)
+		lifetimeDuration,
+		usernameAttr.String(),
+		realmAttr.String(),
+	)
 	if err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}
