@@ -120,7 +120,7 @@ type EventHandlers struct {
 	// OnAllocationDeleted is called after an allocation has been removed.
 	OnAllocationDeleted func(srcAddr, dstAddr net.Addr, protocol, username, realm string)
 	// OnAllocationError is called when the readloop hdndling an allocation exits with an
-	// error wtih an error message.
+	// error with an error message.
 	OnAllocationError func(srcAddr, dstAddr net.Addr, protocol, message string)
 	// OnPermissionCreated is called after a new permission has been made to an IP address.
 	OnPermissionCreated func(srcAddr, dstAddr net.Addr, protocol, username, realm string, peer net.IP)
@@ -173,6 +173,7 @@ func genericEventHandler(handlers EventHandlers) allocation.EventHandler {
 				handlers.OnChannelDeleted(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
 					arg.Username, arg.Realm, arg.PeerAddr, arg.ChannelNumber)
 			}
+		default:
 		}
 	}
 }

@@ -26,6 +26,7 @@ const (
 	timeout  = 200 * time.Millisecond
 	interval = 50 * time.Millisecond
 	stunAddr = "1.2.3.4:3478"
+	turnAddr = "1.2.3.4:3478"
 )
 
 func TestServer(t *testing.T) {
@@ -513,11 +514,11 @@ func buildVNetWithServerEventHandlers(handlers *EventHandlers) (*VNet, error) {
 	}, nil
 }
 
-func expectEvent(ch chan allocation.EventHandlerArgs, d time.Duration) (allocation.EventHandlerArgs, bool) {
+func expectEvent(ch chan allocation.EventHandlerArgs) (allocation.EventHandlerArgs, bool) {
 	select {
 	case res := <-ch:
 		return res, true
-	case <-time.After(d):
+	case <-time.After(timeout):
 		return allocation.EventHandlerArgs{}, false
 	}
 }
@@ -589,8 +590,6 @@ func TestServerVNet(t *testing.T) {
 			assert.NoError(t, lconn.Close())
 		}()
 
-		turnAddr := "1.2.3.4:3478"
-
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
 			TURNServerAddr: turnAddr,
@@ -608,7 +607,7 @@ func TestServerVNet(t *testing.T) {
 		relayConn, err := client.Allocate()
 		assert.NoError(t, err, "should succeed")
 
-		event, ok := expectEvent(events, timeout)
+		event, ok := expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
 		udpAddr, ok := event.SrcAddr.(*net.UDPAddr)
@@ -623,7 +622,7 @@ func TestServerVNet(t *testing.T) {
 		assert.Equal(t, "Allocate", event.Method)
 		assert.True(t, event.Verdict)
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnAllocationCreated, event.Type, "should receive an OnAllocationCreated event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -649,7 +648,7 @@ func TestServerVNet(t *testing.T) {
 		_, err = relayConn.WriteTo([]byte("test"), peerAddr)
 		assert.NoError(t, err, "should succeed")
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -664,7 +663,7 @@ func TestServerVNet(t *testing.T) {
 		assert.Equal(t, "CreatePermission", event.Method)
 		assert.True(t, event.Verdict)
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnPermissionCreated, event.Type, "should receive an OnPermissionCreated event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -682,7 +681,7 @@ func TestServerVNet(t *testing.T) {
 		_, err = relayConn.WriteTo([]byte("test"), peerAddr)
 		assert.NoError(t, err, "should succeed")
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -697,7 +696,7 @@ func TestServerVNet(t *testing.T) {
 		assert.Equal(t, "ChannelBind", event.Method)
 		assert.True(t, event.Verdict)
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnChannelCreated, event.Type, "should receive an OnChannelCreated event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -724,7 +723,7 @@ func TestServerVNet(t *testing.T) {
 		log.Debug("Closing relay connection")
 		assert.NoError(t, relayConn.Close(), "relay conn close should succeed")
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -739,7 +738,7 @@ func TestServerVNet(t *testing.T) {
 		assert.Equal(t, "Refresh", event.Method)
 		assert.True(t, event.Verdict)
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnPermissionDeleted, event.Type, "should receive an OnPermissionDeleted event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -753,7 +752,7 @@ func TestServerVNet(t *testing.T) {
 		assert.Equal(t, "pion.ly", event.Realm)
 		assert.True(t, net.ParseIP("1.2.3.5").Equal(event.PeerIP))
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnChannelDeleted, event.Type, "should receive an OnChannelDeleted event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -767,7 +766,7 @@ func TestServerVNet(t *testing.T) {
 		assert.Equal(t, "pion.ly", event.Realm)
 		assert.Equal(t, channelBind.Number, proto.ChannelNumber(event.ChannelNumber))
 
-		event, ok = expectEvent(events, timeout)
+		event, ok = expectEvent(events)
 		assert.True(t, ok, "should receive an event")
 		assert.Equal(t, allocation.OnAllocationDeleted, event.Type, "should receive an OnAllocationDeleted event")
 		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
@@ -818,8 +817,6 @@ func TestServerVNet(t *testing.T) {
 			assert.NoError(t, lconn.Close())
 		}()
 
-		turnAddr := "1.2.3.4:3478"
-
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
 			TURNServerAddr: turnAddr,
@@ -856,8 +853,6 @@ func TestServerVNet(t *testing.T) {
 		defer func() {
 			assert.NoError(t, lconn.Close())
 		}()
-
-		turnAddr := "1.2.3.4:3478"
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
@@ -906,15 +901,19 @@ func TestServerVNet(t *testing.T) {
 			},
 			OnChannelCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, peer net.Addr, channelNumber uint16) {
 				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
-				assert.True(t, net.ParseIP("1.2.3.5").Equal(peerAddr.IP))
-				assert.Equal(t, 80, peerAddr.Port)
+				addr, ok := peer.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, addr.IP.Equal(peerAddr.IP))
+				assert.Equal(t, peerAddr.Port, addr.Port)
 				assert.NotZero(t, channelNumber)
 				channelCreated.Add(1)
 			},
 			OnChannelDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, peer net.Addr, channelNumber uint16) {
 				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
-				assert.True(t, net.ParseIP("1.2.3.5").Equal(peerAddr.IP))
-				assert.Equal(t, 80, peerAddr.Port)
+				addr, ok := peer.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, addr.IP.Equal(peerAddr.IP))
+				assert.Equal(t, peerAddr.Port, addr.Port)
 				assert.NotZero(t, channelNumber)
 				channelDeleted.Add(1)
 			},
@@ -931,8 +930,6 @@ func TestServerVNet(t *testing.T) {
 		defer func() {
 			assert.NoError(t, lconn.Close())
 		}()
-
-		turnAddr := "1.2.3.4:3478"
 
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
