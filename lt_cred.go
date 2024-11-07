@@ -79,7 +79,7 @@ func LongTermTURNRESTAuthHandler(sharedSecret string, l logging.LeveledLogger) A
 		l = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
 	return func(username, realm string, srcAddr net.Addr) (key []byte, ok bool) {
-		l.Tracef("Authentication username=%q realm=%q srcAddr=%v\n", username, realm, srcAddr)
+		l.Tracef("Authentication username=%q realm=%q srcAddr=%v", username, realm, srcAddr)
 		timestamp := strings.Split(username, ":")[0]
 		t, err := strconv.Atoi(timestamp)
 		if err != nil {

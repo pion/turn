@@ -37,7 +37,7 @@ type NonceHash struct {
 // Generate a nonce
 func (n *NonceHash) Generate() (string, error) {
 	nonce := make([]byte, 8, nonceLength)
-	binary.BigEndian.PutUint64(nonce, uint64(time.Now().UnixMilli()))
+	binary.BigEndian.PutUint64(nonce, uint64(time.Now().UnixMilli())) //nolint:gosec
 
 	hash := hmac.New(sha256.New, n.key)
 	if _, err := hash.Write(nonce[:8]); err != nil {
@@ -55,7 +55,7 @@ func (n *NonceHash) Validate(nonce string) error {
 		return fmt.Errorf("%w: %v", errInvalidNonce, err) //nolint:errorlint
 	}
 
-	if ts := time.UnixMilli(int64(binary.BigEndian.Uint64(b))); time.Since(ts) > nonceLifetime {
+	if ts := time.UnixMilli(int64(binary.BigEndian.Uint64(b))); time.Since(ts) > nonceLifetime { //nolint:gosec
 		return errInvalidNonce
 	}
 
