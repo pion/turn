@@ -259,9 +259,13 @@ func subTestAllocationClose(t *testing.T) {
 }
 
 func subTestPacketHandler(t *testing.T) {
-	network := "udp"
+	const (
+		network      = "udp"
+		testRealm    = "test_realm_2"
+		testUsername = "test_user_2"
+	)
 
-	m, _ := newTestManager()
+	m, _ := newTestManager(testRealm, testUsername)
 
 	// TURN server initialization
 	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0")
@@ -292,7 +296,7 @@ func subTestPacketHandler(t *testing.T) {
 	a, err := m.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, 0, proto.DefaultLifetime)
+	}, turnSocket, 0, proto.DefaultLifetime, Metadata{Realm: testRealm, Username: testUsername})
 
 	assert.Nil(t, err, "should succeed")
 

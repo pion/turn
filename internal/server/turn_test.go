@@ -7,6 +7,7 @@
 package server
 
 import (
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -16,6 +17,11 @@ import (
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
+)
+
+var (
+	errUnexpectedTestRealm    = errors.New("unexpected test realm")
+	errUnexpectedTestUsername = errors.New("unexpected user name")
 )
 
 func TestAllocationLifeTime(t *testing.T) {
@@ -63,16 +69,28 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
+		const (
+			realm    = "test"
+			username = "tester"
+		)
+
 		allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-			AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+			AllocatePacketConn: func(network string, _ int, metadata allocation.Metadata) (net.PacketConn, net.Addr, error) {
 				conn, listenErr := net.ListenPacket(network, "0.0.0.0:0")
 				if err != nil {
 					return nil, nil, listenErr
 				}
 
+				if metadata.Realm != realm {
+					return nil, nil, errUnexpectedTestRealm
+				}
+				if metadata.Username != username {
+					return nil, nil, errUnexpectedTestUsername
+				}
+
 				return conn, conn.LocalAddr(), nil
 			},
-			AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
+			AllocateConn: func(string, int, allocation.Metadata) (net.Conn, net.Addr, error) {
 				return nil, nil, nil
 			},
 			LeveledLogger: logger,
@@ -97,7 +115,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour)
+		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour, allocation.Metadata{Realm: realm, Username: username})
 		assert.NoError(t, err)
 
 		assert.NotNil(t, r.AllocationManager.GetAllocation(fiveTuple))

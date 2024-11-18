@@ -10,6 +10,7 @@ import (
 	"github.com/pion/randutil"
 	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/stdnet"
+	"github.com/pion/turn/v4/internal/allocation"
 )
 
 // RelayAddressGeneratorPortRange can be used to only allocate connections inside a defined port range.
@@ -68,7 +69,7 @@ func (r *RelayAddressGeneratorPortRange) Validate() error {
 }
 
 // AllocatePacketConn generates a new PacketConn to receive traffic on and the IP/Port to populate the allocation response with
-func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requestedPort int, _ allocation.Metadata) (net.PacketConn, net.Addr, error) {
 	if requestedPort != 0 {
 		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, requestedPort))
 		if err != nil {
@@ -103,6 +104,6 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 }
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
-func (r *RelayAddressGeneratorPortRange) AllocateConn(string, int) (net.Conn, net.Addr, error) {
+func (r *RelayAddressGeneratorPortRange) AllocateConn(string, int, allocation.Metadata) (net.Conn, net.Addr, error) {
 	return nil, nil, errTODO
 }

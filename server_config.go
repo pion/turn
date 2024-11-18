@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v4/internal/allocation"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -20,10 +21,10 @@ type RelayAddressGenerator interface {
 	Validate() error
 
 	// Allocate a PacketConn (UDP) RelayAddress
-	AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error)
+	AllocatePacketConn(network string, requestedPort int, metadata allocation.Metadata) (net.PacketConn, net.Addr, error)
 
 	// Allocate a Conn (TCP) RelayAddress
-	AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocateConn(network string, requestedPort int, metadata allocation.Metadata) (net.Conn, net.Addr, error)
 }
 
 // PermissionHandler is a callback to filter incoming CreatePermission and ChannelBindRequest

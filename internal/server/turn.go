@@ -25,9 +25,13 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodAllocate)
-	if !hasAuth {
+	authResult, err := authenticateRequest(r, m, stun.MethodAllocate)
+	if !authResult.hasAuth {
 		return err
+	}
+	metadata := allocation.Metadata{
+		Realm:    authResult.realm,
+		Username: authResult.username,
 	}
 
 	fiveTuple := &allocation.FiveTuple{
@@ -51,7 +55,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 			return buildAndSendErr(r.Conn, r.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
 		}
 		// A retry allocation
-		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(attrs, messageIntegrity)...)
+		msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(attrs, authResult.messageIntegrity)...)
 		return buildAndSend(r.Conn, r.SrcAddr, msg...)
 	}
 
@@ -104,7 +108,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	var evenPort proto.EvenPort
 	if err = evenPort.GetFrom(m); err == nil {
 		var randomPort int
-		randomPort, err = r.AllocationManager.GetRandomEvenPort()
+		randomPort, err = r.AllocationManager.GetRandomEvenPort(metadata)
 		if err != nil {
 			return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 		}
@@ -131,7 +135,8 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		fiveTuple,
 		r.Conn,
 		requestedPort,
-		lifetimeDuration)
+		lifetimeDuration,
+		metadata)
 	if err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}
@@ -177,7 +182,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		responseAttrs = append(responseAttrs, proto.ReservationToken([]byte(reservationToken)))
 	}
 
-	msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(responseAttrs, messageIntegrity)...)
+	msg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassSuccessResponse), append(responseAttrs, authResult.messageIntegrity)...)
 	a.SetResponseCache(m.TransactionID, responseAttrs)
 	return buildAndSend(r.Conn, r.SrcAddr, msg...)
 }
@@ -185,8 +190,8 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 func handleRefreshRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("Received RefreshRequest from %s", r.SrcAddr)
 
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
-	if !hasAuth {
+	authResult, err := authenticateRequest(r, m, stun.MethodRefresh)
+	if !authResult.hasAuth {
 		return err
 	}
 
@@ -212,7 +217,7 @@ func handleRefreshRequest(r Request, m *stun.Message) error {
 		&proto.Lifetime{
 			Duration: lifetimeDuration,
 		},
-		messageIntegrity,
+		authResult.messageIntegrity,
 	}...)...)
 }
 
@@ -228,8 +233,8 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
 
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodCreatePermission)
-	if !hasAuth {
+	authResult, err := authenticateRequest(r, m, stun.MethodCreatePermission)
+	if !authResult.hasAuth {
 		return err
 	}
 
@@ -267,7 +272,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		respClass = stun.ClassErrorResponse
 	}
 
-	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodCreatePermission, respClass), []stun.Setter{messageIntegrity}...)...)
+	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodCreatePermission, respClass), []stun.Setter{authResult.messageIntegrity}...)...)
 }
 
 func handleSendIndication(r Request, m *stun.Message) error {
@@ -317,8 +322,8 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodChannelBind)
-	if !hasAuth {
+	authResult, err := authenticateRequest(r, m, stun.MethodChannelBind)
+	if !authResult.hasAuth {
 		return err
 	}
 
@@ -351,7 +356,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
-	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse), []stun.Setter{messageIntegrity}...)...)
+	return buildAndSend(r.Conn, r.SrcAddr, buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse), []stun.Setter{authResult.messageIntegrity}...)...)
 }
 
 func handleChannelData(r Request, c *proto.ChannelData) error {
