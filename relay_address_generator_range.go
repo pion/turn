@@ -106,3 +106,43 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 func (r *RelayAddressGeneratorPortRange) AllocateConn(string, int) (net.Conn, net.Addr, error) {
 	return nil, nil, errTODO
 }
+
+// AllocatePacketConnForUser generates a new PacketConn to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorPortRange) AllocatePacketConnForUser(network string, requestedPort int, username string) (net.PacketConn, net.Addr, error) {
+	if requestedPort != 0 {
+		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, requestedPort))
+		if err != nil {
+			return nil, nil, err
+		}
+		relayAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+		if !ok {
+			return nil, nil, errNilConn
+		}
+
+		relayAddr.IP = r.RelayAddress
+		return conn, relayAddr, nil
+	}
+
+	for try := 0; try < r.MaxRetries; try++ {
+		port := r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort)))
+		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, port))
+		if err != nil {
+			continue
+		}
+
+		relayAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+		if !ok {
+			return nil, nil, errNilConn
+		}
+
+		relayAddr.IP = r.RelayAddress
+		return conn, relayAddr, nil
+	}
+
+	return nil, nil, errMaxRetriesExceeded
+}
+
+// AllocateConnForUser generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorPortRange) AllocateConnForUser(string, int, string) (net.Conn, net.Addr, error) {
+	return nil, nil, errTODO
+}

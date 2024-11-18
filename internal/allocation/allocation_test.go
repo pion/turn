@@ -46,7 +46,7 @@ func TestAllocation(t *testing.T) {
 }
 
 func subTestGetPermission(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -88,7 +88,7 @@ func subTestGetPermission(t *testing.T) {
 }
 
 func subTestAddPermission(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -107,7 +107,7 @@ func subTestAddPermission(t *testing.T) {
 }
 
 func subTestRemovePermission(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -130,7 +130,7 @@ func subTestRemovePermission(t *testing.T) {
 }
 
 func subTestAddChannelBind(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -154,7 +154,7 @@ func subTestAddChannelBind(t *testing.T) {
 }
 
 func subTestGetChannelByNumber(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -173,7 +173,7 @@ func subTestGetChannelByNumber(t *testing.T) {
 }
 
 func subTestGetChannelByAddr(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -193,7 +193,7 @@ func subTestGetChannelByAddr(t *testing.T) {
 }
 
 func subTestRemoveChannelBind(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	if err != nil {
@@ -214,7 +214,7 @@ func subTestRemoveChannelBind(t *testing.T) {
 }
 
 func subTestAllocationRefresh(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -236,7 +236,7 @@ func subTestAllocationClose(t *testing.T) {
 		panic(err)
 	}
 
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 	a.RelaySocket = l
 	// Add mock lifetimeTimer
 	a.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
@@ -261,7 +261,7 @@ func subTestAllocationClose(t *testing.T) {
 func subTestPacketHandler(t *testing.T) {
 	network := "udp"
 
-	m, _ := newTestManager()
+	m, _ := newTestManager(testManagerModeUseAllocatePacketConnForUser)
 
 	// TURN server initialization
 	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0")
@@ -292,7 +292,7 @@ func subTestPacketHandler(t *testing.T) {
 	a, err := m.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, 0, proto.DefaultLifetime)
+	}, turnSocket, 0, proto.DefaultLifetime, testUsername)
 
 	assert.Nil(t, err, "should succeed")
 
@@ -357,7 +357,7 @@ func subTestPacketHandler(t *testing.T) {
 }
 
 func subTestResponseCache(t *testing.T) {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, "", nil)
 	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
 	responseAttrs := []stun.Setter{
 		&proto.Lifetime{

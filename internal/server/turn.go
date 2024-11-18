@@ -25,7 +25,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodAllocate)
+	messageIntegrity, username, hasAuth, err := authenticateRequest(r, m, stun.MethodAllocate)
 	if !hasAuth {
 		return err
 	}
@@ -104,7 +104,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 	var evenPort proto.EvenPort
 	if err = evenPort.GetFrom(m); err == nil {
 		var randomPort int
-		randomPort, err = r.AllocationManager.GetRandomEvenPort()
+		randomPort, err = r.AllocationManager.GetRandomEvenPort(username)
 		if err != nil {
 			return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 		}
@@ -131,7 +131,8 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		fiveTuple,
 		r.Conn,
 		requestedPort,
-		lifetimeDuration)
+		lifetimeDuration,
+		username)
 	if err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}
@@ -185,7 +186,7 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 func handleRefreshRequest(r Request, m *stun.Message) error {
 	r.Log.Debugf("Received RefreshRequest from %s", r.SrcAddr)
 
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
+	messageIntegrity, _, hasAuth, err := authenticateRequest(r, m, stun.MethodRefresh)
 	if !hasAuth {
 		return err
 	}
@@ -228,7 +229,7 @@ func handleCreatePermissionRequest(r Request, m *stun.Message) error {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, r.SrcAddr, r.Conn.LocalAddr())
 	}
 
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodCreatePermission)
+	messageIntegrity, _, hasAuth, err := authenticateRequest(r, m, stun.MethodCreatePermission)
 	if !hasAuth {
 		return err
 	}
@@ -317,7 +318,7 @@ func handleChannelBindRequest(r Request, m *stun.Message) error {
 
 	badRequestMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeBadRequest})
 
-	messageIntegrity, hasAuth, err := authenticateRequest(r, m, stun.MethodChannelBind)
+	messageIntegrity, _, hasAuth, err := authenticateRequest(r, m, stun.MethodChannelBind)
 	if !hasAuth {
 		return err
 	}

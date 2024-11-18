@@ -52,3 +52,18 @@ func (r *RelayAddressGeneratorNone) AllocatePacketConn(network string, requested
 func (r *RelayAddressGeneratorNone) AllocateConn(string, int) (net.Conn, net.Addr, error) {
 	return nil, nil, errTODO
 }
+
+// AllocatePacketConnForUser generates a new PacketConn to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorNone) AllocatePacketConnForUser(network string, requestedPort int, _ string) (net.PacketConn, net.Addr, error) {
+	conn, err := r.Net.ListenPacket(network, r.Address+":"+strconv.Itoa(requestedPort))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return conn, conn.LocalAddr(), nil
+}
+
+// AllocateConnForUser generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorNone) AllocateConnForUser(string, int, string) (net.Conn, net.Addr, error) {
+	return nil, nil, errTODO
+}

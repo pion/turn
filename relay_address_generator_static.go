@@ -66,3 +66,26 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, request
 func (r *RelayAddressGeneratorStatic) AllocateConn(string, int) (net.Conn, net.Addr, error) {
 	return nil, nil, errTODO
 }
+
+// AllocatePacketConnForUser generates a new PacketConn to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorStatic) AllocatePacketConnForUser(network string, requestedPort int, _ string) (net.PacketConn, net.Addr, error) {
+	conn, err := r.Net.ListenPacket(network, r.Address+":"+strconv.Itoa(requestedPort))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Replace actual listening IP with the user requested one of RelayAddressGeneratorStatic
+	relayAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return nil, nil, errNilConn
+	}
+
+	relayAddr.IP = r.RelayAddress
+
+	return conn, relayAddr, nil
+}
+
+// AllocateConnForUser generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
+func (r *RelayAddressGeneratorStatic) AllocateConnForUser(string, int, string) (net.Conn, net.Addr, error) {
+	return nil, nil, errTODO
+}

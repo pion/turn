@@ -28,6 +28,7 @@ type Allocation struct {
 	Protocol            Protocol
 	TurnSocket          net.PacketConn
 	RelaySocket         net.PacketConn
+	Username            string
 	fiveTuple           *FiveTuple
 	permissionsLock     sync.RWMutex
 	permissions         map[string]*Permission
@@ -45,10 +46,11 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new instance of NewAllocation.
-func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
+func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, username string, log logging.LeveledLogger) *Allocation {
 	return &Allocation{
 		TurnSocket:  turnSocket,
 		fiveTuple:   fiveTuple,
+		Username:    username,
 		permissions: make(map[string]*Permission, 64),
 		closed:      make(chan interface{}),
 		log:         log,

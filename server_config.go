@@ -24,6 +24,12 @@ type RelayAddressGenerator interface {
 
 	// Allocate a Conn (TCP) RelayAddress
 	AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error)
+
+	// Allocate a PacketConn (UDP) RelayAddress with a user name
+	AllocatePacketConnForUser(network string, requestedPort int, username string) (net.PacketConn, net.Addr, error)
+
+	// Allocate a Conn (TCP) RelayAddress with a user name
+	AllocateConnForUser(network string, requestedPort int, username string) (net.Conn, net.Addr, error)
 }
 
 // PermissionHandler is a callback to filter incoming CreatePermission and ChannelBindRequest

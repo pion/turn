@@ -15,9 +15,12 @@ import (
 // ManagerConfig a bag of config params for Manager.
 type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
-	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error) // Deprecated: Use AllocatePacketConnForUser instead
+	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)       // Deprecated: Use AllocateConnForUser instead
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+
+	AllocatePacketConnForUser func(network string, requestedPort int, username string) (net.PacketConn, net.Addr, error)
+	AllocateConnForUser       func(network string, requestedPort int, username string) (net.Conn, net.Addr, error)
 }
 
 type reservation struct {
@@ -36,14 +39,17 @@ type Manager struct {
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+
+	allocatePacketConnForUser func(network string, requestedPort int, username string) (net.PacketConn, net.Addr, error)
+	allocateConnForUser       func(network string, requestedPort int, username string) (net.Conn, net.Addr, error)
 }
 
 // NewManager creates a new instance of Manager.
 func NewManager(config ManagerConfig) (*Manager, error) {
 	switch {
-	case config.AllocatePacketConn == nil:
+	case config.AllocatePacketConn == nil && config.AllocatePacketConnForUser == nil:
 		return nil, errAllocatePacketConnMustBeSet
-	case config.AllocateConn == nil:
+	case config.AllocateConn == nil && config.AllocateConnForUser == nil:
 		return nil, errAllocateConnMustBeSet
 	case config.LeveledLogger == nil:
 		return nil, errLeveledLoggerMustBeSet
@@ -55,6 +61,9 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
+
+		allocatePacketConnForUser: config.AllocatePacketConnForUser,
+		allocateConnForUser:       config.AllocateConnForUser,
 	}, nil
 }
 
@@ -86,7 +95,7 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration, username string) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
 		return nil, errNilFiveTuple
@@ -103,9 +112,17 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	if a := m.GetAllocation(fiveTuple); a != nil {
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
-	a := NewAllocation(turnSocket, fiveTuple, m.log)
+	a := NewAllocation(turnSocket, fiveTuple, username, m.log)
 
-	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
+	var conn net.PacketConn
+	var relayAddr net.Addr
+	var err error
+
+	if m.allocatePacketConnForUser != nil {
+		conn, relayAddr, err = m.allocatePacketConnForUser("udp4", requestedPort, username)
+	} else {
+		conn, relayAddr, err = m.allocatePacketConn("udp4", requestedPort) // fallback
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -180,9 +197,21 @@ func (m *Manager) GetReservation(reservationToken string) (int, bool) {
 }
 
 // GetRandomEvenPort returns a random un-allocated udp4 port
-func (m *Manager) GetRandomEvenPort() (int, error) {
+func (m *Manager) GetRandomEvenPort(username string) (int, error) {
 	for i := 0; i < 128; i++ {
-		conn, addr, err := m.allocatePacketConn("udp4", 0)
+		var conn net.PacketConn
+		var addr net.Addr
+		var err error
+
+		if m.allocatePacketConnForUser != nil {
+			conn, addr, err = m.allocatePacketConnForUser("udp4", 0, username)
+		} else {
+			conn, addr, err = m.allocatePacketConn("udp4", 0)
+		}
+		if err != nil {
+			return 0, err
+		}
+
 		if err != nil {
 			return 0, err
 		}

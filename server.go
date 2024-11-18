@@ -179,6 +179,14 @@ func (n *nilAddressGenerator) AllocateConn(string, int) (net.Conn, net.Addr, err
 	return nil, nil, errRelayAddressGeneratorNil
 }
 
+func (n *nilAddressGenerator) AllocatePacketConnForUser(string, int, string) (net.PacketConn, net.Addr, error) {
+	return nil, nil, errRelayAddressGeneratorNil
+}
+
+func (n *nilAddressGenerator) AllocateConnForUser(string, int, string) (net.Conn, net.Addr, error) {
+	return nil, nil, errRelayAddressGeneratorNil
+}
+
 func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, handler PermissionHandler) (*allocation.Manager, error) {
 	if handler == nil {
 		handler = DefaultPermissionHandler
