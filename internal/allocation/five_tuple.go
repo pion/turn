@@ -16,6 +16,17 @@ const (
 	TCP
 )
 
+func (p Protocol) String() string {
+	switch p {
+	case UDP:
+		return "UDP"
+	case TCP:
+		return "TCP"
+	default:
+		return ""
+	}
+}
+
 // FiveTuple is the combination (client IP address and port, server IP
 // address and port, and transport protocol (currently one of UDP,
 // TCP, or TLS)) used to communicate between the client and the
@@ -54,9 +65,9 @@ func (f *FiveTuple) Fingerprint() (fp FiveTupleFingerprint) {
 func netAddrIPAndPort(addr net.Addr) (net.IP, uint16) {
 	switch a := addr.(type) {
 	case *net.UDPAddr:
-		return a.IP.To16(), uint16(a.Port)
+		return a.IP.To16(), uint16(a.Port) //nolint:gosec
 	case *net.TCPAddr:
-		return a.IP.To16(), uint16(a.Port)
+		return a.IP.To16(), uint16(a.Port) //nolint:gosec
 	default:
 		return nil, 0
 	}

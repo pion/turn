@@ -84,7 +84,7 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(network string, requ
 	}
 
 	for try := 0; try < r.MaxRetries; try++ {
-		port := r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort)))
+		port := r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort))) //nolint:gosec
 		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, port))
 		if err != nil {
 			continue
