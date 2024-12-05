@@ -24,6 +24,7 @@ const (
 type Server struct {
 	log                logging.LeveledLogger
 	authHandler        AuthHandler
+	quotaHandler       QuotaHandler
 	realm              string
 	channelBindTimeout time.Duration
 	nonceHash          *server.NonceHash
@@ -61,6 +62,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	s := &Server{
 		log:                loggerFactory.NewLogger("turn"),
 		authHandler:        config.AuthHandler,
+		quotaHandler:       config.QuotaHandler,
 		realm:              config.Realm,
 		channelBindTimeout: config.ChannelBindTimeout,
 		packetConnConfigs:  config.PacketConnConfigs,
@@ -224,6 +226,7 @@ func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manage
 			Buff:               buf[:n],
 			Log:                s.log,
 			AuthHandler:        s.authHandler,
+			QuotaHandler:       s.quotaHandler,
 			Realm:              s.realm,
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,
