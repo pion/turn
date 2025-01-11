@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestServer(t *testing.T) {
+func TestServer(t *testing.T) { // nolint:funlen,maintidx
 	lim := test.TimeOut(time.Second * 30)
 	defer lim.Stop()
 
@@ -43,6 +43,7 @@ func TestServer(t *testing.T) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
+
 				return nil, false
 			},
 			PacketConnConfigs: []PacketConnConfig{
@@ -132,6 +133,7 @@ func TestServer(t *testing.T) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
+
 				return nil, false
 			},
 			ListenerConfigs: []ListenerConfig{
@@ -217,6 +219,7 @@ func TestServer(t *testing.T) {
 				if pw, ok := credMap[username]; ok {
 					return pw, true
 				}
+
 				return nil, false
 			},
 			PacketConnConfigs: []PacketConnConfig{
@@ -374,10 +377,11 @@ func (v *VNet) Close() error {
 	if err := v.server.Close(); err != nil {
 		return err
 	}
+
 	return v.wan.Stop()
 }
 
-func buildVNet() (*VNet, error) {
+func buildVNet() (*VNet, error) { // nolint:cyclop,funlen
 	loggerFactory := logging.NewDefaultLoggerFactory()
 
 	// WAN
@@ -457,6 +461,7 @@ func buildVNet() (*VNet, error) {
 			if pw, ok := credMap[username]; ok {
 				return pw, true
 			}
+
 			return nil, false
 		},
 		Realm: "pion.ly",
@@ -552,10 +557,24 @@ func TestConsumeSingleTURNFrame(t *testing.T) {
 		err  error
 	}
 	cases := map[string]testCase{
-		"channel data":                          {data: []byte{0x40, 0x01, 0x00, 0x08, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, err: nil},
-		"partial data less than channel header": {data: []byte{1}, err: errIncompleteTURNFrame},
-		"partial stun message":                  {data: []byte{0x0, 0x16, 0x02, 0xDC, 0x21, 0x12, 0xA4, 0x42, 0x0, 0x0, 0x0}, err: errIncompleteTURNFrame},
-		"stun message":                          {data: []byte{0x0, 0x16, 0x00, 0x02, 0x21, 0x12, 0xA4, 0x42, 0xf7, 0x43, 0x81, 0xa3, 0xc9, 0xcd, 0x88, 0x89, 0x70, 0x58, 0xac, 0x73, 0x0, 0x0}},
+		"channel data": {
+			data: []byte{0x40, 0x01, 0x00, 0x08, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+			err:  nil,
+		},
+		"partial data less than channel header": {
+			data: []byte{1},
+			err:  errIncompleteTURNFrame,
+		},
+		"partial stun message": {
+			data: []byte{0x0, 0x16, 0x02, 0xDC, 0x21, 0x12, 0xA4, 0x42, 0x0, 0x0, 0x0},
+			err:  errIncompleteTURNFrame,
+		},
+		"stun message": {
+			data: []byte{
+				0x00, 0x16, 0x00, 0x02, 0x21, 0x12, 0xA4, 0x42, 0xf7, 0x43, 0x81,
+				0xa3, 0xc9, 0xcd, 0x88, 0x89, 0x70, 0x58, 0xac, 0x73, 0x00, 0x00,
+			},
+		},
 	}
 
 	for name, cs := range cases {
@@ -616,7 +635,9 @@ func TestSTUNOnly(t *testing.T) {
 	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
 }
 
-func RunBenchmarkServer(b *testing.B, clientNum int) {
+func RunBenchmarkServer(b *testing.B, clientNum int) { // nolint:cyclop,funlen
+	b.Helper()
+
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	credMap := map[string][]byte{
 		"user": GenerateAuthKey("user", "pion.ly", "pass"),
@@ -641,6 +662,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 			if pw, ok := credMap[username]; ok {
 				return pw, true
 			}
+
 			return nil, false
 		},
 		PacketConnConfigs: []PacketConnConfig{{
@@ -729,7 +751,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) {
 	}
 }
 
-// BenchmarkServer will benchmark the server with multiple simultaneous client connections
+// BenchmarkServer will benchmark the server with multiple simultaneous client connections.
 func BenchmarkServer(b *testing.B) {
 	for i := 1; i <= 4; i++ {
 		b.Run(fmt.Sprintf("client_num_%d", i), func(b *testing.B) {

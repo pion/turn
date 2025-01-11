@@ -34,7 +34,13 @@ func TestPeriodicTimer(t *testing.T) {
 		time.Sleep(120 * time.Millisecond)
 		rt.Stop()
 		assert.False(t, rt.IsRunning(), "should not be running")
-		assert.Equal(t, 4, int(atomic.LoadUint64(&nCbs)), "should be called 4 times (actual: %d)", atomic.LoadUint64(&nCbs))
+		assert.Equal(
+			t,
+			uint64(4),
+			atomic.LoadUint64(&nCbs),
+			"should be called 4 times (actual: %d)",
+			atomic.LoadUint64(&nCbs),
+		)
 	})
 
 	t.Run("stop inside handler", func(t *testing.T) {

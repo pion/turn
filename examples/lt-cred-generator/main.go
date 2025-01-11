@@ -25,6 +25,7 @@ func main() {
 	if showHelp != nil && *showHelp {
 		log.Println("Usage:")
 		log.Println("$ lt-cred-generator | xargs go run examples/turn-client/udp/main.go -host localhost -ping=true -user=")
+
 		return
 	}
 

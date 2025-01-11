@@ -18,11 +18,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageType, additional ...stun.Setter) []stun.Setter {
+func buildMsg(
+	transactionID [stun.TransactionIDSize]byte,
+	msgType stun.MessageType,
+	additional ...stun.Setter,
+) []stun.Setter {
 	return append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
 }
 
 func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, net.PacketConn, bool) {
+	t.Helper()
+
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
@@ -37,7 +43,12 @@ func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory
 	return c, conn, true
 }
 
-func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, net.PacketConn, bool) {
+func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.LoggerFactory) ( // nolint:lll
+	*Client, net.PacketConn,
+	bool,
+) {
+	t.Helper()
+
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 	assert.NoError(t, err)
 
@@ -54,30 +65,30 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 	return c, conn, true
 }
 
-func TestClientWithSTUN(t *testing.T) {
+func TestClientWithSTUN(t *testing.T) { // nolint:funlen
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	log := loggerFactory.NewLogger("test")
 
 	t.Run("SendBindingRequest", func(t *testing.T) {
-		c, pc, ok := createListeningTestClientWithSTUNServ(t, loggerFactory)
+		client, pc, ok := createListeningTestClientWithSTUNServ(t, loggerFactory)
 		if !ok {
 			return
 		}
-		defer c.Close()
+		defer client.Close()
 
-		resp, err := c.SendBindingRequest()
+		resp, err := client.SendBindingRequest()
 		assert.NoError(t, err, "should succeed")
 		log.Debugf("mapped-addr: %s", resp)
-		assert.Equal(t, 0, c.trMap.Size(), "should be no transaction left")
+		assert.Equal(t, 0, client.trMap.Size(), "should be no transaction left")
 		assert.NoError(t, pc.Close())
 	})
 
 	t.Run("SendBindingRequestTo Parallel", func(t *testing.T) {
-		c, pc, ok := createListeningTestClient(t, loggerFactory)
+		client, pc, ok := createListeningTestClient(t, loggerFactory)
 		if !ok {
 			return
 		}
-		defer c.Close()
+		defer client.Close()
 
 		// Simple channel fo go routine start signaling
 		started := make(chan struct{})
@@ -90,14 +101,14 @@ func TestClientWithSTUN(t *testing.T) {
 		// stun1.l.google.com:19302, more at https://gist.github.com/zziuni/3741933#file-stuns-L5
 		go func() {
 			close(started)
-			_, err1 = c.SendBindingRequestTo(to)
+			_, err1 = client.SendBindingRequestTo(to)
 			close(finished)
 		}()
 
 		// Block until go routine is started to make two almost parallel requests
 		<-started
 
-		if _, err = c.SendBindingRequestTo(to); err != nil {
+		if _, err = client.SendBindingRequestTo(to); err != nil {
 			t.Fatal(err)
 		}
 
@@ -136,7 +147,7 @@ func TestClientWithSTUN(t *testing.T) {
 
 // Create an allocation, and then delete all nonces
 // The subsequent Write on the allocation will cause a CreatePermission
-// which will be forced to handle a stale nonce response
+// which will be forced to handle a stale nonce response.
 func TestClientNonceExpiration(t *testing.T) {
 	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
 	assert.NoError(t, err)
@@ -186,8 +197,8 @@ func TestClientNonceExpiration(t *testing.T) {
 	assert.NoError(t, server.Close())
 }
 
-// Create a TCP-based allocation and verify allocation can be created
-func TestTCPClient(t *testing.T) {
+// Create a TCP-based allocation and verify allocation can be created.
+func TestTCPClient(t *testing.T) { // nolint:funlen
 	// Setup server
 	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
 	require.NoError(t, err)

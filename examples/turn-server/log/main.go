@@ -20,7 +20,7 @@ import (
 )
 
 // stunLogger wraps a PacketConn and prints incoming/outgoing STUN packets
-// This pattern could be used to capture/inspect/modify data as well
+// This pattern could be used to capture/inspect/modify data as well.
 type stunLogger struct {
 	net.PacketConn
 }
@@ -51,7 +51,7 @@ func (s *stunLogger) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	return
 }
 
-func main() {
+func main() { // nolint:funlen
 	publicIP := flag.String("public-ip", "", "IP Address that TURN can be contacted by.")
 	port := flag.Int("port", 3478, "Listening port.")
 	users := flag.String("users", "", "List of username and password (e.g. \"user=pass,user=pass\")")
@@ -79,7 +79,7 @@ func main() {
 		usersMap[kv[1]] = turn.GenerateAuthKey(kv[1], *realm, kv[2])
 	}
 
-	s, err := turn.NewServer(turn.ServerConfig{
+	server, err := turn.NewServer(turn.ServerConfig{
 		Realm: *realm,
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
@@ -88,6 +88,7 @@ func main() {
 			if key, ok := usersMap[username]; ok {
 				return key, true
 			}
+
 			return nil, false
 		},
 		// PacketConnConfigs is a list of UDP Listeners and the configuration around them
@@ -95,8 +96,10 @@ func main() {
 			{
 				PacketConn: &stunLogger{udpListener},
 				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP(*publicIP), // Claim that we are listening on IP passed by user (This should be your Public IP)
-					Address:      "0.0.0.0",              // But actually be listening on every interface
+					// Claim that we are listening on IP passed by user (This should be your Public IP)
+					RelayAddress: net.ParseIP(*publicIP),
+					// But actually be listening on every interface
+					Address: "0.0.0.0",
 				},
 			},
 		},
@@ -110,7 +113,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
-	if err = s.Close(); err != nil {
+	if err = server.Close(); err != nil {
 		log.Panic(err)
 	}
 }

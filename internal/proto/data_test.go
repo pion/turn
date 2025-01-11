@@ -34,13 +34,13 @@ func BenchmarkData(b *testing.B) {
 
 func TestData(t *testing.T) {
 	t.Run("NoAlloc", func(t *testing.T) {
-		m := new(stun.Message)
+		stunMsg := new(stun.Message)
 		v := []byte{1, 2, 3, 4}
 		if wasAllocs(func() {
 			// On stack.
 			d := Data(v)
-			d.AddTo(m) //nolint
-			m.Reset()
+			d.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
@@ -48,16 +48,16 @@ func TestData(t *testing.T) {
 		d := &Data{1, 2, 3, 4}
 		if wasAllocs(func() {
 			// On heap.
-			d.AddTo(m) //nolint
-			m.Reset()
+			d.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		m := new(stun.Message)
-		d := Data{1, 2, 33, 44, 0x13, 0xaf}
-		if err := d.AddTo(m); err != nil {
+		data := Data{1, 2, 33, 44, 0x13, 0xaf}
+		if err := data.AddTo(m); err != nil {
 			t.Fatal(err)
 		}
 		m.WriteHeader()
@@ -70,8 +70,8 @@ func TestData(t *testing.T) {
 			if err := dataDecoded.GetFrom(decoded); err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(dataDecoded, d) {
-				t.Error(dataDecoded, "!=", d, "(expected)")
+			if !bytes.Equal(dataDecoded, data) {
+				t.Error(dataDecoded, "!=", data, "(expected)")
 			}
 			if wasAllocs(func() {
 				var dataDecoded Data

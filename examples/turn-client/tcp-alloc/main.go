@@ -18,7 +18,7 @@ import (
 
 func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string) {
 	addr := "127.0.0.1:5000"
-	if signaling {
+	if signaling { // nolint:nestif
 		go func() {
 			listener, err := net.Listen("tcp", addr)
 			if err != nil {
@@ -61,7 +61,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 	}
 }
 
-func main() {
+func main() { // nolint:funlen,cyclop
 	host := flag.String("host", "", "TURN Server name.")
 	port := flag.Int("port", 3478, "Listening port.")
 	user := flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
@@ -147,7 +147,7 @@ func main() {
 
 	buf := make([]byte, 4096)
 	var n int
-	if *signaling {
+	if *signaling { // nolint:nestif
 		conn, err := allocation.DialTCP("tcp", nil, peerAddr)
 		if err != nil {
 			log.Panicf("Failed to dial: %s", err)

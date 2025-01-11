@@ -10,56 +10,56 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBindingManager(t *testing.T) {
+func TestBindingManager(t *testing.T) { // nolint:funlen
 	t.Run("number assignment", func(t *testing.T) {
-		m := newBindingManager()
-		var n uint16
+		bm := newBindingManager()
+		var chanNum uint16
 		for i := uint16(0); i < 10; i++ {
-			n = m.assignChannelNumber()
-			assert.Equal(t, minChannelNumber+i, n, "should match")
+			chanNum = bm.assignChannelNumber()
+			assert.Equal(t, minChannelNumber+i, chanNum, "should match")
 		}
 
-		m.next = uint16(0x7ff0)
+		bm.next = uint16(0x7ff0)
 		for i := uint16(0); i < 16; i++ {
-			n = m.assignChannelNumber()
-			assert.Equal(t, 0x7ff0+i, n, "should match")
+			chanNum = bm.assignChannelNumber()
+			assert.Equal(t, 0x7ff0+i, chanNum, "should match")
 		}
 
 		// Back to min
-		n = m.assignChannelNumber()
-		assert.Equal(t, minChannelNumber, n, "should match")
+		chanNum = bm.assignChannelNumber()
+		assert.Equal(t, minChannelNumber, chanNum, "should match")
 	})
 
 	t.Run("method test", func(t *testing.T) {
 		lo := net.IPv4(127, 0, 0, 1)
 		count := 100
-		m := newBindingManager()
+		bm := newBindingManager()
 		for i := 0; i < count; i++ {
 			addr := &net.UDPAddr{IP: lo, Port: 10000 + i}
-			b0 := m.create(addr)
-			b1, ok := m.findByAddr(addr)
+			b0 := bm.create(addr)
+			b1, ok := bm.findByAddr(addr)
 			assert.True(t, ok, "should succeed")
-			b2, ok := m.findByNumber(b0.number)
+			b2, ok := bm.findByNumber(b0.number)
 			assert.True(t, ok, "should succeed")
 
 			assert.Equal(t, b0, b1, "should match")
 			assert.Equal(t, b0, b2, "should match")
 		}
 
-		assert.Equal(t, count, m.size(), "should match")
-		assert.Equal(t, count, len(m.addrMap), "should match")
+		assert.Equal(t, count, bm.size(), "should match")
+		assert.Equal(t, count, len(bm.addrMap), "should match")
 
 		for i := 0; i < count; i++ {
 			addr := &net.UDPAddr{IP: lo, Port: 10000 + i}
 			if i%2 == 0 {
-				assert.True(t, m.deleteByAddr(addr), "should return true")
+				assert.True(t, bm.deleteByAddr(addr), "should return true")
 			} else {
-				assert.True(t, m.deleteByNumber(minChannelNumber+uint16(i)), "should return true")
+				assert.True(t, bm.deleteByNumber(minChannelNumber+uint16(i)), "should return true") // nolint:gosec // G115
 			}
 		}
 
-		assert.Equal(t, 0, m.size(), "should match")
-		assert.Equal(t, 0, len(m.addrMap), "should match")
+		assert.Equal(t, 0, bm.size(), "should match")
+		assert.Equal(t, 0, len(bm.addrMap), "should match")
 	})
 
 	t.Run("failure test", func(t *testing.T) {

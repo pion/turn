@@ -27,6 +27,7 @@ func (a attrs) pick(v byte) struct {
 	t stun.AttrType
 } {
 	idx := int(v) % len(a)
+
 	return a[idx]
 }
 
@@ -66,6 +67,7 @@ func FuzzSetters(f *testing.F) {
 				fmt.Println("unexpected 404") //nolint
 				panic(err)                    //nolint
 			}
+
 			return
 		}
 
@@ -90,10 +92,10 @@ func FuzzSetters(f *testing.F) {
 }
 
 func FuzzChannelData(f *testing.F) {
-	d := &ChannelData{}
+	channelData := &ChannelData{}
 
 	f.Fuzz(func(_ *testing.T, data []byte) {
-		d.Reset()
+		channelData.Reset()
 
 		if len(data) > channelDataHeaderSize {
 			// Make sure the channel id is in the proper range
@@ -104,18 +106,18 @@ func FuzzChannelData(f *testing.F) {
 			}
 		}
 
-		d.Raw = append(d.Raw, data...)
-		if d.Decode() != nil {
+		channelData.Raw = append(channelData.Raw, data...)
+		if channelData.Decode() != nil {
 			return
 		}
 
-		d.Encode()
-		if !d.Number.Valid() {
+		channelData.Encode()
+		if !channelData.Number.Valid() {
 			return
 		}
 
 		d2 := &ChannelData{}
-		d2.Raw = d.Raw
+		d2.Raw = channelData.Raw
 		if err := d2.Decode(); err != nil {
 			panic(err) //nolint
 		}

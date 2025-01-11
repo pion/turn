@@ -10,7 +10,7 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func TestRequestedAddressFamily(t *testing.T) {
+func TestRequestedAddressFamily(t *testing.T) { // nolint:cyclop,funlen
 	t.Run("String", func(t *testing.T) {
 		if RequestedFamilyIPv4.String() != "IPv4" {
 			t.Errorf("bad string %q, expected %q", RequestedFamilyIPv4,
@@ -27,47 +27,47 @@ func TestRequestedAddressFamily(t *testing.T) {
 		}
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
-		m := &stun.Message{}
+		stunMsg := &stun.Message{}
 		if wasAllocs(func() {
 			// On stack.
 			r := RequestedFamilyIPv4
-			r.AddTo(m) //nolint
-			m.Reset()
+			r.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 
-		r := new(RequestedAddressFamily)
-		*r = RequestedFamilyIPv4
+		requestFamilyAttr := new(RequestedAddressFamily)
+		*requestFamilyAttr = RequestedFamilyIPv4
 		if wasAllocs(func() {
 			// On heap.
-			r.AddTo(m) //nolint
-			m.Reset()
+			requestFamilyAttr.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
-		m := new(stun.Message)
-		r := RequestedFamilyIPv4
-		if err := r.AddTo(m); err != nil {
+		stunMsg := new(stun.Message)
+		requestFamilyAddr := RequestedFamilyIPv4
+		if err := requestFamilyAddr.AddTo(stunMsg); err != nil {
 			t.Error(err)
 		}
-		m.WriteHeader()
+		stunMsg.WriteHeader()
 		t.Run("GetFrom", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(m.Raw); err != nil {
+			if _, err := decoded.Write(stunMsg.Raw); err != nil {
 				t.Fatal("failed to decode message:", err)
 			}
 			var req RequestedAddressFamily
 			if err := req.GetFrom(decoded); err != nil {
 				t.Fatal(err)
 			}
-			if req != r {
-				t.Errorf("Decoded %q, expected %q", req, r)
+			if req != requestFamilyAddr {
+				t.Errorf("Decoded %q, expected %q", req, requestFamilyAddr)
 			}
 			if wasAllocs(func() {
-				r.GetFrom(decoded) //nolint
+				requestFamilyAddr.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}
