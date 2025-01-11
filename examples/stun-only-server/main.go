@@ -33,7 +33,7 @@ func main() {
 		log.Panicf("Failed to create STUN server listener: %s", err)
 	}
 
-	s, err := turn.NewServer(turn.ServerConfig{
+	server, err := turn.NewServer(turn.ServerConfig{
 		// PacketConnConfigs is a list of UDP Listeners and the configuration around them
 		PacketConnConfigs: []turn.PacketConnConfig{
 			{
@@ -50,7 +50,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
-	if err = s.Close(); err != nil {
+	if err = server.Close(); err != nil {
 		log.Panic(err)
 	}
 }

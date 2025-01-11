@@ -36,7 +36,7 @@ func BenchmarkLifetime(b *testing.B) {
 	})
 }
 
-func TestLifetime(t *testing.T) {
+func TestLifetime(t *testing.T) { // nolint:cyclop,funlen
 	t.Run("String", func(t *testing.T) {
 		l := Lifetime{time.Second * 10}
 		if l.String() != "10s" {
@@ -44,14 +44,14 @@ func TestLifetime(t *testing.T) {
 		}
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
-		m := &stun.Message{}
+		stunMsg := &stun.Message{}
 		if wasAllocs(func() {
 			// On stack.
 			l := Lifetime{
 				Duration: time.Minute,
 			}
-			l.AddTo(m) //nolint
-			m.Reset()
+			l.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
@@ -59,16 +59,16 @@ func TestLifetime(t *testing.T) {
 		l := &Lifetime{time.Second}
 		if wasAllocs(func() {
 			// On heap.
-			l.AddTo(m) //nolint
-			m.Reset()
+			l.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		m := new(stun.Message)
-		l := Lifetime{time.Second * 10}
-		if err := l.AddTo(m); err != nil {
+		lifetime := Lifetime{time.Second * 10}
+		if err := lifetime.AddTo(m); err != nil {
 			t.Error(err)
 		}
 		m.WriteHeader()
@@ -81,8 +81,8 @@ func TestLifetime(t *testing.T) {
 			if err := life.GetFrom(decoded); err != nil {
 				t.Fatal(err)
 			}
-			if life != l {
-				t.Errorf("Decoded %q, expected %q", life, l)
+			if life != lifetime {
+				t.Errorf("Decoded %q, expected %q", life, lifetime)
 			}
 			if wasAllocs(func() {
 				life.GetFrom(decoded) //nolint

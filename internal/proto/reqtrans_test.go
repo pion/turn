@@ -10,40 +10,40 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func TestRequestedTransport(t *testing.T) {
+func TestRequestedTransport(t *testing.T) { // nolint:cyclop,funlen
 	t.Run("String", func(t *testing.T) {
-		r := RequestedTransport{
+		transAttr := RequestedTransport{
 			Protocol: ProtoUDP,
 		}
-		if r.String() != "protocol: UDP" {
-			t.Errorf("bad string %q, expected %q", r,
+		if transAttr.String() != "protocol: UDP" {
+			t.Errorf("bad string %q, expected %q", transAttr,
 				"protocol: UDP",
 			)
 		}
-		r = RequestedTransport{
+		transAttr = RequestedTransport{
 			Protocol: ProtoTCP,
 		}
-		if r.String() != "protocol: TCP" {
-			t.Errorf("bad string %q, expected %q", r,
+		if transAttr.String() != "protocol: TCP" {
+			t.Errorf("bad string %q, expected %q", transAttr,
 				"protocol: TCP",
 			)
 		}
-		r.Protocol = 254
-		if r.String() != "protocol: 254" {
-			t.Errorf("bad string %q, expected %q", r,
+		transAttr.Protocol = 254
+		if transAttr.String() != "protocol: 254" {
+			t.Errorf("bad string %q, expected %q", transAttr,
 				"protocol: 254",
 			)
 		}
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
-		m := &stun.Message{}
+		stunMsg := &stun.Message{}
 		if wasAllocs(func() {
 			// On stack.
 			r := RequestedTransport{
 				Protocol: ProtoUDP,
 			}
-			r.AddTo(m) //nolint
-			m.Reset()
+			r.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
@@ -53,18 +53,18 @@ func TestRequestedTransport(t *testing.T) {
 		}
 		if wasAllocs(func() {
 			// On heap.
-			r.AddTo(m) //nolint
-			m.Reset()
+			r.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		m := new(stun.Message)
-		r := RequestedTransport{
+		transAttr := RequestedTransport{
 			Protocol: ProtoUDP,
 		}
-		if err := r.AddTo(m); err != nil {
+		if err := transAttr.AddTo(m); err != nil {
 			t.Error(err)
 		}
 		m.WriteHeader()
@@ -79,11 +79,11 @@ func TestRequestedTransport(t *testing.T) {
 			if err := req.GetFrom(decoded); err != nil {
 				t.Fatal(err)
 			}
-			if req != r {
-				t.Errorf("Decoded %q, expected %q", req, r)
+			if req != transAttr {
+				t.Errorf("Decoded %q, expected %q", req, transAttr)
 			}
 			if wasAllocs(func() {
-				r.GetFrom(decoded) //nolint
+				transAttr.GetFrom(decoded) //nolint
 			}) {
 				t.Error("Unexpected allocations")
 			}

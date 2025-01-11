@@ -11,15 +11,15 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func TestReservationToken(t *testing.T) {
+func TestReservationToken(t *testing.T) { // nolint:cyclop,funlen
 	t.Run("NoAlloc", func(t *testing.T) {
-		m := &stun.Message{}
+		stunMsg := &stun.Message{}
 		tok := make([]byte, 8)
 		if wasAllocs(func() {
 			// On stack.
 			tk := ReservationToken(tok)
-			tk.AddTo(m) //nolint
-			m.Reset()
+			tk.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
@@ -27,30 +27,30 @@ func TestReservationToken(t *testing.T) {
 		tk := make(ReservationToken, 8)
 		if wasAllocs(func() {
 			// On heap.
-			tk.AddTo(m) //nolint
-			m.Reset()
+			tk.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
-		m := new(stun.Message)
+		stunMsg := new(stun.Message)
 		tk := make(ReservationToken, 8)
 		tk[2] = 33
 		tk[7] = 1
-		if err := tk.AddTo(m); err != nil {
+		if err := tk.AddTo(stunMsg); err != nil {
 			t.Error(err)
 		}
-		m.WriteHeader()
+		stunMsg.WriteHeader()
 		t.Run("HandleErr", func(t *testing.T) {
 			badTk := ReservationToken{34, 45}
-			if !stun.IsAttrSizeInvalid(badTk.AddTo(m)) {
+			if !stun.IsAttrSizeInvalid(badTk.AddTo(stunMsg)) {
 				t.Error("IsAttrSizeInvalid should be true")
 			}
 		})
 		t.Run("GetFrom", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(m.Raw); err != nil {
+			if _, err := decoded.Write(stunMsg.Raw); err != nil {
 				t.Fatal("failed to decode message:", err)
 			}
 			var tok ReservationToken

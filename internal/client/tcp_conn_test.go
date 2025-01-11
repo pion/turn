@@ -19,7 +19,11 @@ type dummyTCPConn struct {
 	transport.TCPConn
 }
 
-func buildMsg(transactionID [stun.TransactionIDSize]byte, msgType stun.MessageType, additional ...stun.Setter) []stun.Setter {
+func buildMsg(
+	transactionID [stun.TransactionIDSize]byte,
+	msgType stun.MessageType,
+	additional ...stun.Setter,
+) []stun.Setter {
 	return append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
 }
 
@@ -37,10 +41,11 @@ func (c dummyTCPConn) Read(b []byte) (int, error) {
 	}
 
 	copy(b, msg.Raw)
+
 	return len(msg.Raw), nil
 }
 
-func TestTCPConn(t *testing.T) {
+func TestTCPConn(t *testing.T) { //nolint:funlen
 	t.Run("Connect()", func(t *testing.T) {
 		var cid proto.ConnectionID = 5
 		client := &mockClient{
@@ -52,8 +57,10 @@ func TestTCPConn(t *testing.T) {
 						cid,
 					)
 					assert.NoError(t, err)
+
 					return TransactionResult{Msg: msg}, nil
 				}
+
 				return TransactionResult{}, errFake
 			},
 		}
@@ -91,8 +98,10 @@ func TestTCPConn(t *testing.T) {
 						stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
 					)
 					assert.NoError(t, err)
+
 					return TransactionResult{Msg: msg}, nil
 				}
+
 				return TransactionResult{}, errFake
 			},
 		}
@@ -171,6 +180,7 @@ func TestTCPConn(t *testing.T) {
 					cid,
 				)
 				assert.NoError(t, err)
+
 				return TransactionResult{Msg: msg}, nil
 			},
 		}

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUDPConn(t *testing.T) {
+func TestUDPConn(t *testing.T) { //nolint:funlen
 	t.Run("bind()", func(t *testing.T) {
 		client := &mockClient{
 			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
