@@ -13,6 +13,7 @@ import ( //nolint:gci
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v4/internal/server/authz"
 )
 
 // GenerateLongTermCredentials can be used to create credentials valid for [duration] time
@@ -44,7 +45,7 @@ func longTermCredentials(username string, sharedSecret string) (string, error) {
 
 // NewLongTermAuthHandler returns a turn.AuthAuthHandler used with Long Term (or Time Windowed) Credentials.
 // See: https://datatracker.ietf.org/doc/html/rfc8489#section-9.2
-func NewLongTermAuthHandler(sharedSecret string, l logging.LeveledLogger) AuthHandler {
+func NewLongTermAuthHandler(sharedSecret string, l logging.LeveledLogger) authz.LegacyAuthFunc {
 	if l == nil {
 		l = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
@@ -74,7 +75,7 @@ func NewLongTermAuthHandler(sharedSecret string, l logging.LeveledLogger) AuthHa
 //
 // The supported format of is timestamp:username, where username is an arbitrary user id and the
 // timestamp specifies the expiry of the credential.
-func LongTermTURNRESTAuthHandler(sharedSecret string, l logging.LeveledLogger) AuthHandler {
+func LongTermTURNRESTAuthHandler(sharedSecret string, l logging.LeveledLogger) authz.LegacyAuthFunc {
 	if l == nil {
 		l = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}

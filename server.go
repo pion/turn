@@ -5,6 +5,7 @@
 package turn
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/pion/turn/v4/internal/server"
+	"github.com/pion/turn/v4/internal/server/authz"
 )
 
 const (
@@ -23,7 +25,7 @@ const (
 // Server is an instance of the Pion TURN Server
 type Server struct {
 	log                logging.LeveledLogger
-	authHandler        AuthHandler
+	authorizer         authz.Authorizer
 	realm              string
 	channelBindTimeout time.Duration
 	nonceHash          *server.NonceHash
@@ -57,9 +59,16 @@ func NewServer(config ServerConfig) (*Server, error) {
 		return nil, err
 	}
 
+	// determine authorizer, prioritizing the
+	// (legacy) AuthHandler if it was provided.
+	authorizer := config.Authorizer
+	if config.AuthHandler != nil {
+		authorizer = authz.NewLegacy(config.AuthHandler)
+	}
+
 	s := &Server{
 		log:                loggerFactory.NewLogger("turn"),
-		authHandler:        config.AuthHandler,
+		authorizer:         authorizer,
 		realm:              config.Realm,
 		channelBindTimeout: config.ChannelBindTimeout,
 		packetConnConfigs:  config.PacketConnConfigs,
@@ -79,7 +88,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 		}
 
 		go func(cfg PacketConnConfig, am *allocation.Manager) {
-			s.readLoop(cfg.PacketConn, am)
+			s.readLoop(cfg.PacketConn, am, nil)
 
 			if err := am.Close(); err != nil {
 				s.log.Errorf("Failed to close AllocationManager: %s", err)
@@ -151,7 +160,16 @@ func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
 		}
 
 		go func() {
-			s.readLoop(NewSTUNConn(conn), am)
+			var tlsConnectionState *tls.ConnectionState
+
+			// extract tls connection state if possible
+			tlsConn, ok := conn.(*tls.Conn)
+			if ok {
+				cs := tlsConn.ConnectionState()
+				tlsConnectionState = &cs
+			}
+
+			s.readLoop(NewSTUNConn(conn), am, tlsConnectionState)
 
 			// Delete allocation
 			am.DeleteAllocation(&allocation.FiveTuple{
@@ -202,7 +220,7 @@ func (s *Server) createAllocationManager(addrGenerator RelayAddressGenerator, ha
 	return am, err
 }
 
-func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manager) {
+func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manager, tls *tls.ConnectionState) {
 	buf := make([]byte, s.inboundMTU)
 	for {
 		n, addr, err := p.ReadFrom(buf)
@@ -219,8 +237,9 @@ func (s *Server) readLoop(p net.PacketConn, allocationManager *allocation.Manage
 			Conn:               p,
 			SrcAddr:            addr,
 			Buff:               buf[:n],
+			TLS:                tls,
 			Log:                s.log,
-			AuthHandler:        s.authHandler,
+			Authorizer:         s.authorizer,
 			Realm:              s.realm,
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,

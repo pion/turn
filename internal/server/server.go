@@ -5,6 +5,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/pion/stun/v3"
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v4/internal/server/authz"
 )
 
 // Request contains all the state needed to process a single incoming datagram
@@ -21,13 +23,14 @@ type Request struct {
 	Conn    net.PacketConn
 	SrcAddr net.Addr
 	Buff    []byte
+	TLS     *tls.ConnectionState
 
 	// Server State
 	AllocationManager *allocation.Manager
 	NonceHash         *NonceHash
 
 	// User Configuration
-	AuthHandler        func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
+	Authorizer         authz.Authorizer
 	Log                logging.LeveledLogger
 	Realm              string
 	ChannelBindTimeout time.Duration

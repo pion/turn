@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v4/internal/server/authz"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -93,9 +94,6 @@ func (c *ListenerConfig) validate() error {
 	return c.RelayAddressGenerator.Validate()
 }
 
-// AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
-type AuthHandler func(username, realm string, srcAddr net.Addr) (key []byte, ok bool)
-
 // GenerateAuthKey is a convenience function to easily generate keys in the format used by AuthHandler
 func GenerateAuthKey(username, realm, password string) []byte {
 	// #nosec
@@ -106,25 +104,28 @@ func GenerateAuthKey(username, realm, password string) []byte {
 
 // ServerConfig configures the Pion TURN Server
 type ServerConfig struct {
-	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners
-	// Each listener can have custom behavior around the creation of Relays
+	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners.
+	// Each listener can have custom behavior around the creation of Relays.
 	PacketConnConfigs []PacketConnConfig
 	ListenerConfigs   []ListenerConfig
 
 	// LoggerFactory must be set for logging from this server.
 	LoggerFactory logging.LoggerFactory
 
-	// Realm sets the realm for this server
+	// Realm sets the realm for this server.
 	Realm string
 
-	// AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
-	AuthHandler AuthHandler
+	// Authorizer is user to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior.
+	Authorizer authz.Authorizer
 
 	// ChannelBindTimeout sets the lifetime of channel binding. Defaults to 10 minutes.
 	ChannelBindTimeout time.Duration
 
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
+
+	// AuthHandler is deprecated, use Authorizer instead.
+	AuthHandler authz.LegacyAuthFunc
 }
 
 func (s *ServerConfig) validate() error {

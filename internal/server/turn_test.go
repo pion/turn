@@ -15,6 +15,7 @@ import (
 	"github.com/pion/stun/v3"
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v4/internal/server/authz"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -90,9 +91,9 @@ func TestAllocationLifeTime(t *testing.T) {
 			Conn:              l,
 			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 			Log:               logger,
-			AuthHandler: func(string, string, net.Addr) (key []byte, ok bool) {
+			Authorizer: authz.NewLegacy(func(string, string, net.Addr) (key []byte, ok bool) {
 				return []byte(staticKey), true
-			},
+			}),
 		}
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
