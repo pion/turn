@@ -18,7 +18,7 @@ import (
 	"github.com/pion/turn/v4"
 )
 
-func main() {
+func main() { // nolint:funlen
 	publicIP := flag.String("public-ip", "", "IP Address that TURN can be contacted by.")
 	port := flag.Int("port", 5349, "Listening port.")
 	users := flag.String("users", "", "List of username and password (e.g. \"user=pass,user=pass\")")
@@ -36,6 +36,7 @@ func main() {
 	cer, err := tls.LoadX509KeyPair(*certFile, *keyFile)
 	if err != nil {
 		log.Println(err)
+
 		return
 	}
 
@@ -48,6 +49,7 @@ func main() {
 	})
 	if err != nil {
 		log.Println(err)
+
 		return
 	}
 
@@ -58,7 +60,7 @@ func main() {
 		usersMap[kv[1]] = turn.GenerateAuthKey(kv[1], *realm, kv[2])
 	}
 
-	s, err := turn.NewServer(turn.ServerConfig{
+	server, err := turn.NewServer(turn.ServerConfig{
 		Realm: *realm,
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
@@ -67,6 +69,7 @@ func main() {
 			if key, ok := usersMap[username]; ok {
 				return key, true
 			}
+
 			return nil, false
 		},
 		// ListenerConfig is a list of Listeners and the configuration around them
@@ -89,7 +92,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
-	if err = s.Close(); err != nil {
+	if err = server.Close(); err != nil {
 		log.Panic(err)
 	}
 }

@@ -35,7 +35,7 @@ func BenchmarkChannelNumber(b *testing.B) {
 	})
 }
 
-func TestChannelNumber(t *testing.T) {
+func TestChannelNumber(t *testing.T) { // nolint:cyclop,funlen
 	t.Run("String", func(t *testing.T) {
 		n := ChannelNumber(112)
 		if n.String() != "112" {
@@ -43,12 +43,12 @@ func TestChannelNumber(t *testing.T) {
 		}
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
-		m := &stun.Message{}
+		stunMsg := &stun.Message{}
 		if wasAllocs(func() {
 			// Case with ChannelNumber on stack.
 			n := ChannelNumber(6)
-			n.AddTo(m) //nolint
-			m.Reset()
+			n.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
@@ -57,30 +57,30 @@ func TestChannelNumber(t *testing.T) {
 		nP := &n
 		if wasAllocs(func() {
 			// On heap.
-			nP.AddTo(m) //nolint
-			m.Reset()
+			nP.AddTo(stunMsg) //nolint
+			stunMsg.Reset()
 		}) {
 			t.Error("Unexpected allocations")
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
-		m := new(stun.Message)
-		n := ChannelNumber(6)
-		if err := n.AddTo(m); err != nil {
+		stunMsg := new(stun.Message)
+		chanNumber := ChannelNumber(6)
+		if err := chanNumber.AddTo(stunMsg); err != nil {
 			t.Error(err)
 		}
-		m.WriteHeader()
+		stunMsg.WriteHeader()
 		t.Run("GetFrom", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(m.Raw); err != nil {
+			if _, err := decoded.Write(stunMsg.Raw); err != nil {
 				t.Fatal("failed to decode message:", err)
 			}
 			var numDecoded ChannelNumber
 			if err := numDecoded.GetFrom(decoded); err != nil {
 				t.Fatal(err)
 			}
-			if numDecoded != n {
-				t.Errorf("Decoded %d, expected %d", numDecoded, n)
+			if numDecoded != chanNumber {
+				t.Errorf("Decoded %d, expected %d", numDecoded, chanNumber)
 			}
 			if wasAllocs(func() {
 				var num ChannelNumber

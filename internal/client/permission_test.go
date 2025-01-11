@@ -22,7 +22,7 @@ func TestPermission(t *testing.T) {
 	})
 }
 
-func TestPermissionMap(t *testing.T) {
+func TestPermissionMap(t *testing.T) { // nolint:funlen
 	t.Run("Basic operations", func(t *testing.T) {
 		pm := newPermissionMap()
 		assert.NotNil(t, pm)
@@ -41,20 +41,20 @@ func TestPermissionMap(t *testing.T) {
 		assert.True(t, pm.insert(tcpAddr, perm3))
 		assert.Equal(t, 3, len(pm.permMap))
 
-		p, ok := pm.find(udpAddr1)
+		perms, ok := pm.find(udpAddr1)
 		assert.True(t, ok)
-		assert.Equal(t, perm1, p)
-		assert.Equal(t, permStateIdle, p.st)
+		assert.Equal(t, perm1, perms)
+		assert.Equal(t, permStateIdle, perms.st)
 
-		p, ok = pm.find(udpAddr2)
+		perms, ok = pm.find(udpAddr2)
 		assert.True(t, ok)
-		assert.Equal(t, perm2, p)
-		assert.Equal(t, permStatePermitted, p.st)
+		assert.Equal(t, perm2, perms)
+		assert.Equal(t, permStatePermitted, perms.st)
 
-		p, ok = pm.find(tcpAddr)
+		perms, ok = pm.find(tcpAddr)
 		assert.True(t, ok)
-		assert.Equal(t, perm3, p)
-		assert.Equal(t, permStateIdle, p.st)
+		assert.Equal(t, perm3, perms)
+		assert.Equal(t, permStateIdle, perms.st)
 
 		addrs := pm.addrs()
 		ips := []net.IP{}

@@ -46,7 +46,7 @@ func main() {
 	// and process them yourself.
 	logger := logging.NewDefaultLeveledLoggerForScope("lt-creds", logging.LogLevelTrace, os.Stdout)
 
-	s, err := turn.NewServer(turn.ServerConfig{
+	server, err := turn.NewServer(turn.ServerConfig{
 		Realm: *realm,
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
@@ -57,8 +57,10 @@ func main() {
 			{
 				PacketConn: udpListener,
 				RelayAddressGenerator: &turn.RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP(*publicIP), // Claim that we are listening on IP passed by user (This should be your Public IP)
-					Address:      "0.0.0.0",              // But actually be listening on every interface
+					// Claim that we are listening on IP passed by user (This should be your Public IP).
+					RelayAddress: net.ParseIP(*publicIP),
+					// But actually be listening on every interface.
+					Address: "0.0.0.0",
 				},
 			},
 		},
@@ -72,7 +74,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
-	if err = s.Close(); err != nil {
+	if err = server.Close(); err != nil {
 		log.Panic(err)
 	}
 }

@@ -19,6 +19,7 @@ func (c *mockClient) WriteTo(data []byte, to net.Addr) (int, error) {
 	if c.writeTo != nil {
 		return c.writeTo(data, to)
 	}
+
 	return 0, nil
 }
 
@@ -26,6 +27,7 @@ func (c *mockClient) PerformTransaction(msg *stun.Message, to net.Addr, dontWait
 	if c.performTransaction != nil {
 		return c.performTransaction(msg, to, dontWait)
 	}
+
 	return TransactionResult{}, errFake
 }
 

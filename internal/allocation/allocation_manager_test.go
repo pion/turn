@@ -47,8 +47,10 @@ func TestManager(t *testing.T) {
 	}
 }
 
-// Test invalid Allocation creations
+// Test invalid Allocation creations.
 func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
+	t.Helper()
+
 	m, err := newTestManager()
 	assert.NoError(t, err)
 
@@ -63,8 +65,10 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// Test valid Allocation creations
+// Test valid Allocation creations.
 func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
+	t.Helper()
+
 	m, err := newTestManager()
 	assert.NoError(t, err)
 
@@ -78,8 +82,10 @@ func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// Test that two allocations can't be created with the same FiveTuple
+// Test that two allocations can't be created with the same FiveTuple.
 func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.PacketConn) {
+	t.Helper()
+
 	m, err := newTestManager()
 	assert.NoError(t, err)
 
@@ -94,26 +100,30 @@ func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.Pack
 }
 
 func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
-	m, err := newTestManager()
+	t.Helper()
+
+	manager, err := newTestManager()
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
-	if a := m.GetAllocation(fiveTuple); a == nil {
+	if a := manager.GetAllocation(fiveTuple); a == nil {
 		t.Errorf("Failed to get allocation right after creation")
 	}
 
-	m.DeleteAllocation(fiveTuple)
-	if a := m.GetAllocation(fiveTuple); a != nil {
+	manager.DeleteAllocation(fiveTuple)
+	if a := manager.GetAllocation(fiveTuple); a != nil {
 		t.Errorf("Get allocation with %v should be nil after delete", fiveTuple)
 	}
 }
 
-// Test that allocation should be closed if timeout
+// Test that allocation should be closed if timeout.
 func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
+	t.Helper()
+
 	m, err := newTestManager()
 	assert.NoError(t, err)
 
@@ -140,22 +150,24 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	}
 }
 
-// Test for manager close
+// Test for manager close.
 func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
-	m, err := newTestManager()
+	t.Helper()
+
+	manager, err := newTestManager()
 	assert.NoError(t, err)
 
 	allocations := make([]*Allocation, 2)
 
-	a1, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second)
+	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second)
 	allocations[0] = a1
-	a2, _ := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute)
+	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute)
 	allocations[1] = a2
 
 	// Make a1 timeout
 	time.Sleep(2 * time.Second)
 
-	if err := m.Close(); err != nil {
+	if err := manager.Close(); err != nil {
 		t.Errorf("Manager close with error: %v", err)
 	}
 
@@ -189,15 +201,19 @@ func newTestManager() (*Manager, error) {
 		},
 		AllocateConn: func(string, int) (net.Conn, net.Addr, error) { return nil, nil, nil },
 	}
+
 	return NewManager(config)
 }
 
 func isClose(conn io.Closer) bool {
 	closeErr := conn.Close()
+
 	return closeErr != nil && strings.Contains(closeErr.Error(), "use of closed network connection")
 }
 
 func subTestGetRandomEvenPort(t *testing.T, _ net.PacketConn) {
+	t.Helper()
+
 	m, err := newTestManager()
 	assert.NoError(t, err)
 

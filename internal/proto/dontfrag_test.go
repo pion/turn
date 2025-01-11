@@ -20,21 +20,21 @@ func TestDontFragment(t *testing.T) {
 		}
 	})
 	t.Run("AddTo", func(t *testing.T) {
-		m := new(stun.Message)
-		if err := dontFrag.AddTo(m); err != nil {
+		stunMsg := new(stun.Message)
+		if err := dontFrag.AddTo(stunMsg); err != nil {
 			t.Error(err)
 		}
-		m.WriteHeader()
+		stunMsg.WriteHeader()
 		t.Run("IsSet", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(m.Raw); err != nil {
+			if _, err := decoded.Write(stunMsg.Raw); err != nil {
 				t.Fatal("failed to decode message:", err)
 			}
-			if !dontFrag.IsSet(m) {
+			if !dontFrag.IsSet(stunMsg) {
 				t.Error("should be set")
 			}
 			if wasAllocs(func() {
-				dontFrag.IsSet(m)
+				dontFrag.IsSet(stunMsg)
 			}) {
 				t.Error("unexpected allocations")
 			}

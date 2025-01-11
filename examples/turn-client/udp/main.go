@@ -16,7 +16,7 @@ import (
 	"github.com/pion/turn/v4"
 )
 
-func main() {
+func main() { // nolint:funlen,cyclop
 	host := flag.String("host", "", "TURN Server name.")
 	port := flag.Int("port", 3478, "Listening port.")
 	user := flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")
@@ -96,7 +96,7 @@ func main() {
 	}
 }
 
-func doPingTest(client *turn.Client, relayConn net.PacketConn) error {
+func doPingTest(client *turn.Client, relayConn net.PacketConn) error { // nolint:cyclop,funlen
 	// Send BindingRequest to learn our external IP
 	mappedAddr, err := client.SendBindingRequest()
 	if err != nil {

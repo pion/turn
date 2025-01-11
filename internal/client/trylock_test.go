@@ -18,6 +18,7 @@ func TestTryLock(t *testing.T) {
 				return err
 			}
 			defer cl.Unlock()
+
 			return nil
 		}
 
@@ -34,6 +35,7 @@ func TestTryLock(t *testing.T) {
 			}
 			defer cl.Unlock()
 			time.Sleep(50 * time.Millisecond)
+
 			return nil
 		}
 

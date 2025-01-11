@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEvenPort(t *testing.T) {
+func TestEvenPort(t *testing.T) { // nolint:cyclop,funlen
 	t.Run("String", func(t *testing.T) {
 		p := EvenPort{}
 		if p.String() != "reserve: false" {
@@ -42,10 +42,10 @@ func TestEvenPort(t *testing.T) {
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		m := new(stun.Message)
-		p := EvenPort{
+		evenPortAttr := EvenPort{
 			ReservePort: true,
 		}
-		if err := p.AddTo(m); err != nil {
+		if err := evenPortAttr.AddTo(m); err != nil {
 			t.Error(err)
 		}
 		m.WriteHeader()
@@ -58,8 +58,8 @@ func TestEvenPort(t *testing.T) {
 			if err := port.GetFrom(decoded); err != nil {
 				t.Fatal(err)
 			}
-			if port != p {
-				t.Errorf("Decoded %q, expected %q", port.String(), p.String())
+			if port != evenPortAttr {
+				t.Errorf("Decoded %q, expected %q", port.String(), evenPortAttr.String())
 			}
 			if wasAllocs(func() {
 				port.GetFrom(decoded) //nolint

@@ -13,25 +13,25 @@ import (
 )
 
 func TestChannelData_Encode(t *testing.T) {
-	d := &ChannelData{
+	chanData := &ChannelData{
 		Data:   []byte{1, 2, 3, 4},
 		Number: MinChannelNumber + 1,
 	}
-	d.Encode()
+	chanData.Encode()
 	b := &ChannelData{}
-	b.Raw = append(b.Raw, d.Raw...)
+	b.Raw = append(b.Raw, chanData.Raw...)
 	if err := b.Decode(); err != nil {
 		t.Error(err)
 	}
-	if !b.Equal(d) {
+	if !b.Equal(chanData) {
 		t.Error("not equal")
 	}
-	if !IsChannelData(b.Raw) || !IsChannelData(d.Raw) {
+	if !IsChannelData(b.Raw) || !IsChannelData(chanData.Raw) {
 		t.Error("unexpected IsChannelData")
 	}
 }
 
-func TestChannelData_Equal(t *testing.T) {
+func TestChannelData_Equal(t *testing.T) { // nolint:funlen
 	for _, tc := range []struct {
 		name  string
 		a, b  *ChannelData
@@ -235,14 +235,14 @@ func TestChromeChannelData(t *testing.T) {
 	// All hex streams decoded to raw binary format and stored in data slice.
 	// Decoding packets to messages.
 	for i, packet := range data {
-		m := new(ChannelData)
-		m.Raw = packet
-		if err := m.Decode(); err != nil {
+		chanData := new(ChannelData)
+		chanData.Raw = packet
+		if err := chanData.Decode(); err != nil {
 			t.Errorf("Packet %d: %v", i, err)
 		}
 		encoded := &ChannelData{
-			Data:   m.Data,
-			Number: m.Number,
+			Data:   chanData.Data,
+			Number: chanData.Number,
 		}
 		encoded.Encode()
 		decoded := new(ChannelData)
@@ -250,11 +250,11 @@ func TestChromeChannelData(t *testing.T) {
 		if err := decoded.Decode(); err != nil {
 			t.Error(err)
 		}
-		if !decoded.Equal(m) {
+		if !decoded.Equal(chanData) {
 			t.Error("should be equal")
 		}
 
-		messages = append(messages, m)
+		messages = append(messages, chanData)
 	}
 	if len(messages) != 2 {
 		t.Error("unexpected message slice list")

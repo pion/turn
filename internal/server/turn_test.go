@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAllocationLifeTime(t *testing.T) {
+func TestAllocationLifeTime(t *testing.T) { // nolint:funlen
 	t.Run("Parsing", func(t *testing.T) {
 		lifetime := proto.Lifetime{
 			Duration: 5 * time.Second,
@@ -55,22 +55,22 @@ func TestAllocationLifeTime(t *testing.T) {
 	})
 
 	t.Run("DeletionZeroLifetime", func(t *testing.T) {
-		l, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
 		assert.NoError(t, err)
 		defer func() {
-			assert.NoError(t, l.Close())
+			assert.NoError(t, conn.Close())
 		}()
 
 		logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 		allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 			AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-				conn, listenErr := net.ListenPacket(network, "0.0.0.0:0")
+				con, listenErr := net.ListenPacket(network, "0.0.0.0:0")
 				if err != nil {
 					return nil, nil, listenErr
 				}
 
-				return conn, conn.LocalAddr(), nil
+				return con, con.LocalAddr(), nil
 			},
 			AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
 				return nil, nil, nil
@@ -84,10 +84,10 @@ func TestAllocationLifeTime(t *testing.T) {
 		staticKey, err := nonceHash.Generate()
 		assert.NoError(t, err)
 
-		r := Request{
+		req := Request{
 			AllocationManager: allocationManager,
 			NonceHash:         nonceHash,
-			Conn:              l,
+			Conn:              conn,
 			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 			Log:               logger,
 			AuthHandler: func(string, string, net.Addr) (key []byte, ok bool) {
@@ -95,12 +95,12 @@ func TestAllocationLifeTime(t *testing.T) {
 			},
 		}
 
-		fiveTuple := &allocation.FiveTuple{SrcAddr: r.SrcAddr, DstAddr: r.Conn.LocalAddr(), Protocol: allocation.UDP}
+		fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-		_, err = r.AllocationManager.CreateAllocation(fiveTuple, r.Conn, 0, time.Hour)
+		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour)
 		assert.NoError(t, err)
 
-		assert.NotNil(t, r.AllocationManager.GetAllocation(fiveTuple))
+		assert.NotNil(t, req.AllocationManager.GetAllocation(fiveTuple))
 
 		m := &stun.Message{}
 		assert.NoError(t, (proto.Lifetime{}).AddTo(m))
@@ -109,7 +109,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Username(staticKey)).AddTo(m))
 
-		assert.NoError(t, handleRefreshRequest(r, m))
-		assert.Nil(t, r.AllocationManager.GetAllocation(fiveTuple))
+		assert.NoError(t, handleRefreshRequest(req, m))
+		assert.Nil(t, req.AllocationManager.GetAllocation(fiveTuple))
 	})
 }

@@ -21,7 +21,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func main() {
+func main() { // nolint:funlen,cyclop
 	publicIP := flag.String("public-ip", "", "IP Address that TURN can be contacted by.")
 	port := flag.Int("port", 3478, "Listening port.")
 	users := flag.String("users", "", "List of username and password (e.g. \"user=pass,user=pass\")")
@@ -85,7 +85,7 @@ func main() {
 		log.Printf("Server %d listening on %s\n", i, conn.LocalAddr().String())
 	}
 
-	s, err := turn.NewServer(turn.ServerConfig{
+	server, err := turn.NewServer(turn.ServerConfig{
 		Realm: *realm,
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
@@ -94,6 +94,7 @@ func main() {
 			if key, ok := usersMap[username]; ok {
 				return key, true
 			}
+
 			return nil, false
 		},
 		// PacketConnConfigs is a list of UDP Listeners and the configuration around them
@@ -108,7 +109,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
-	if err = s.Close(); err != nil {
+	if err = server.Close(); err != nil {
 		log.Panicf("Failed to close TURN server: %s", err)
 	}
 }
