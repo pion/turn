@@ -18,6 +18,7 @@ type ManagerConfig struct {
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+	EventHandler       EventHandler
 }
 
 type reservation struct {
@@ -36,6 +37,7 @@ type Manager struct {
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+	EventHandler       EventHandler
 }
 
 // NewManager creates a new instance of Manager.
@@ -55,6 +57,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
+		EventHandler:       config.EventHandler,
 	}, nil
 }
 
@@ -86,7 +89,7 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying
-func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration) (*Allocation, error) {
+func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketConn, requestedPort int, lifetime time.Duration, username, realm string) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
 		return nil, errNilFiveTuple
@@ -103,7 +106,9 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	if a := m.GetAllocation(fiveTuple); a != nil {
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
-	a := NewAllocation(turnSocket, fiveTuple, m.log)
+	a := NewAllocation(turnSocket, fiveTuple, m.EventHandler, m.log)
+	a.username = username
+	a.realm = realm
 
 	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
 	if err != nil {
@@ -122,6 +127,19 @@ func (m *Manager) CreateAllocation(fiveTuple *FiveTuple, turnSocket net.PacketCo
 	m.lock.Lock()
 	m.allocations[fiveTuple.Fingerprint()] = a
 	m.lock.Unlock()
+
+	if m.EventHandler != nil {
+		m.EventHandler(EventHandlerArgs{
+			Type:          OnAllocationCreated,
+			SrcAddr:       fiveTuple.SrcAddr,
+			DstAddr:       fiveTuple.DstAddr,
+			Protocol:      UDP,
+			Username:      username,
+			Realm:         realm,
+			RelayAddr:     relayAddr,
+			RequestedPort: requestedPort,
+		})
+	}
 
 	go a.packetHandler(m)
 	return a, nil
@@ -142,6 +160,17 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 
 	if err := allocation.Close(); err != nil {
 		m.log.Errorf("Failed to close allocation: %v", err)
+	}
+
+	if m.EventHandler != nil {
+		m.EventHandler(EventHandlerArgs{
+			Type:     OnAllocationDeleted,
+			SrcAddr:  fiveTuple.SrcAddr,
+			DstAddr:  fiveTuple.DstAddr,
+			Protocol: UDP,
+			Username: allocation.username,
+			Realm:    allocation.realm,
+		})
 	}
 }
 

@@ -115,6 +115,12 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		}
 	}
 
+	// Parse realm and username (already checked in authenticateRequest)
+	realmAttr := &stun.Realm{}
+	_ = realmAttr.GetFrom(m)
+	usernameAttr := &stun.Username{}
+	_ = usernameAttr.GetFrom(m)
+
 	// 7. At any point, the server MAY choose to reject the request with a
 	//    486 (Allocation Quota Reached) error if it feels the client is
 	//    trying to exceed some locally defined allocation quota.  The
@@ -131,7 +137,10 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		fiveTuple,
 		r.Conn,
 		requestedPort,
-		lifetimeDuration)
+		lifetimeDuration,
+		usernameAttr.String(),
+		realmAttr.String(),
+	)
 	if err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}
