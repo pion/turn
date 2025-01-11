@@ -82,7 +82,7 @@ Dials the requested TURN server via TCP
 Dials the requested TURN server via UDP
 
 ```sh
-$ go udp
+$ cd udp
 $ go build
 $ ./udp -host <turn-server-name> -user=user=pass
 ```
