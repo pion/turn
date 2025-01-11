@@ -10,6 +10,7 @@ import (
 
 	"github.com/pion/transport/v3"
 	"github.com/pion/transport/v3/stdnet"
+	"github.com/pion/turn/v4/internal/allocation"
 )
 
 // RelayAddressGeneratorStatic can be used to return static IP address each time a relay is created.
@@ -45,7 +46,7 @@ func (r *RelayAddressGeneratorStatic) Validate() error {
 }
 
 // AllocatePacketConn generates a new PacketConn to receive traffic on and the IP/Port to populate the allocation response with
-func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, requestedPort int, _ allocation.Metadata) (net.PacketConn, net.Addr, error) {
 	conn, err := r.Net.ListenPacket(network, r.Address+":"+strconv.Itoa(requestedPort))
 	if err != nil {
 		return nil, nil, err
@@ -63,6 +64,6 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(network string, request
 }
 
 // AllocateConn generates a new Conn to receive traffic on and the IP/Port to populate the allocation response with
-func (r *RelayAddressGeneratorStatic) AllocateConn(string, int) (net.Conn, net.Addr, error) {
+func (r *RelayAddressGeneratorStatic) AllocateConn(string, int, allocation.Metadata) (net.Conn, net.Addr, error) {
 	return nil, nil, errTODO
 }
