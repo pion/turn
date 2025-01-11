@@ -115,12 +115,22 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		}
 	}
 
+	// Parse realm and username (already checked in authenticateRequest)
+	realmAttr := &stun.Realm{}
+	_ = realmAttr.GetFrom(m)
+	usernameAttr := &stun.Username{}
+	_ = usernameAttr.GetFrom(m)
+
 	// 7. At any point, the server MAY choose to reject the request with a
 	//    486 (Allocation Quota Reached) error if it feels the client is
 	//    trying to exceed some locally defined allocation quota.  The
 	//    server is free to define this allocation quota any way it wishes,
 	//    but SHOULD define it based on the username used to authenticate
 	//    the request, and not on the client's transport address.
+	if r.QuotaHandler != nil && !r.QuotaHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr) {
+		quotaReachedMsg := buildMsg(m.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse), &stun.ErrorCodeAttribute{Code: stun.CodeAllocQuotaReached})
+		return buildAndSend(r.Conn, r.SrcAddr, quotaReachedMsg...)
+	}
 
 	// 8. Also at any point, the server MAY choose to reject the request
 	//    with a 300 (Try Alternate) error if it wishes to redirect the
@@ -131,7 +141,10 @@ func handleAllocateRequest(r Request, m *stun.Message) error {
 		fiveTuple,
 		r.Conn,
 		requestedPort,
-		lifetimeDuration)
+		lifetimeDuration,
+		usernameAttr.String(),
+		realmAttr.String(),
+	)
 	if err != nil {
 		return buildAndSendErr(r.Conn, r.SrcAddr, err, insufficientCapacityMsg...)
 	}

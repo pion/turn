@@ -54,7 +54,7 @@ func TestBindingManager(t *testing.T) {
 			if i%2 == 0 {
 				assert.True(t, m.deleteByAddr(addr), "should return true")
 			} else {
-				assert.True(t, m.deleteByNumber(minChannelNumber+uint16(i)), "should return true")
+				assert.True(t, m.deleteByNumber(minChannelNumber+uint16(i)), "should return true") //nolint:gosec
 			}
 		}
 

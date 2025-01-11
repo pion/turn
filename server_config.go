@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v4/internal/allocation"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -104,6 +105,85 @@ func GenerateAuthKey(username, realm, password string) []byte {
 	return h.Sum(nil)
 }
 
+// EventHandlers is a set of callbacks that the server will call at certain hook points during an
+// allocation's lifecycle. All events are reported with the context that identifies the allocation
+// triggering the event (source and destination address, protocol, username and realm used for
+// authenticating the allocation). It is OK to handle only a subset of the callbacks.
+type EventHandlers struct {
+	// OnAuth is called after an authentication request has been processed with the TURN method
+	// triggering the authentication request (either "Allocate", "Refresh" "CreatePermission",
+	// or "ChannelBind"), and the verdict is the authentication result.
+	OnAuth func(srcAddr, dstAddr net.Addr, protocol, username, realm string, method string, verdict bool)
+	// OnAllocationCreated is called after a new allocation has been made. The relayAddr
+	// argument specifies the relay address and requestedPort is the port requested by the
+	// client (if any).
+	OnAllocationCreated func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int)
+	// OnAllocationDeleted is called after an allocation has been removed.
+	OnAllocationDeleted func(srcAddr, dstAddr net.Addr, protocol, username, realm string)
+	// OnAllocationError is called when the readloop hdndling an allocation exits with an
+	// error with an error message.
+	OnAllocationError func(srcAddr, dstAddr net.Addr, protocol, message string)
+	// OnPermissionCreated is called after a new permission has been made to an IP address.
+	OnPermissionCreated func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, peer net.IP)
+	// OnPermissionDeleted is called after a permission for a given IP address has been
+	// removed.
+	OnPermissionDeleted func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, peer net.IP)
+	// OnChannelCreated is called after a new channel has been made. The relay address, the
+	// peer address and the channel number can be used to uniquely identify the channel
+	// created.
+	OnChannelCreated func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr, peer net.Addr, channelNumber uint16)
+	// OnChannelDeleted is called after a channel has been removed from the server. The relay
+	// address, the peer address and the channel number can be used to uniquely identify the
+	// channel deleted.
+	OnChannelDeleted func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr, peer net.Addr, channelNumber uint16)
+}
+
+func genericEventHandler(handlers EventHandlers) allocation.EventHandler {
+	return func(arg allocation.EventHandlerArgs) {
+		switch arg.Type {
+		case allocation.OnAuth:
+			if handlers.OnAuth != nil {
+				handlers.OnAuth(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm, arg.Method, arg.Verdict)
+			}
+		case allocation.OnAllocationCreated:
+			if handlers.OnAllocationCreated != nil {
+				handlers.OnAllocationCreated(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm, arg.RelayAddr, arg.RequestedPort)
+			}
+		case allocation.OnAllocationDeleted:
+			if handlers.OnAllocationDeleted != nil {
+				handlers.OnAllocationDeleted(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm)
+			}
+		case allocation.OnPermissionCreated:
+			if handlers.OnPermissionCreated != nil {
+				handlers.OnPermissionCreated(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm, arg.RelayAddr, arg.PeerIP)
+			}
+		case allocation.OnPermissionDeleted:
+			if handlers.OnPermissionDeleted != nil {
+				handlers.OnPermissionDeleted(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm, arg.RelayAddr, arg.PeerIP)
+			}
+		case allocation.OnChannelCreated:
+			if handlers.OnChannelCreated != nil {
+				handlers.OnChannelCreated(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm, arg.RelayAddr, arg.PeerAddr, arg.ChannelNumber)
+			}
+		case allocation.OnChannelDeleted:
+			if handlers.OnChannelDeleted != nil {
+				handlers.OnChannelDeleted(arg.SrcAddr, arg.DstAddr, arg.Protocol.String(),
+					arg.Username, arg.Realm, arg.RelayAddr, arg.PeerAddr, arg.ChannelNumber)
+			}
+		default:
+		}
+	}
+}
+
+// QuotaHandler is a callback allows allocations to be rejected when a per-user quota is exceeded. If the callback returns true the allocation request is accepted, otherwise it is rejected and a 486 (Allocation Quota Reached) error is returned to the user.
+type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
+
 // ServerConfig configures the Pion TURN Server
 type ServerConfig struct {
 	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners
@@ -119,6 +199,12 @@ type ServerConfig struct {
 
 	// AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
 	AuthHandler AuthHandler
+
+	// AuthHandler is a callback used to handle incoming auth requests, allowing users to customize Pion TURN with custom behavior
+	QuotaHandler QuotaHandler
+
+	// EventHandlers is a set of callbacks for tracking allocation lifecycle.
+	EventHandlers EventHandlers
 
 	// ChannelBindTimeout sets the lifetime of channel binding. Defaults to 10 minutes.
 	ChannelBindTimeout time.Duration

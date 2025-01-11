@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/stun/v3"
+	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 )
 
@@ -90,14 +91,44 @@ func authenticateRequest(r Request, m *stun.Message, callingMethod stun.Method) 
 
 	ourKey, ok := r.AuthHandler(usernameAttr.String(), realmAttr.String(), r.SrcAddr)
 	if !ok {
+		genAuthEvent(r, m, callingMethod, false)
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()), badRequestMsg...)
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(m); err != nil {
+		genAuthEvent(r, m, callingMethod, false)
 		return nil, false, buildAndSendErr(r.Conn, r.SrcAddr, err, badRequestMsg...)
 	}
 
+	genAuthEvent(r, m, callingMethod, true)
 	return stun.MessageIntegrity(ourKey), true, nil
+}
+
+func genAuthEvent(r Request, m *stun.Message, callingMethod stun.Method, verdict bool) {
+	if r.AllocationManager.EventHandler == nil {
+		return
+	}
+
+	realmAttr := &stun.Realm{}
+	if err := realmAttr.GetFrom(m); err != nil {
+		return
+	}
+
+	usernameAttr := &stun.Username{}
+	if err := usernameAttr.GetFrom(m); err != nil {
+		return
+	}
+
+	r.AllocationManager.EventHandler(allocation.EventHandlerArgs{
+		Type:     allocation.OnAuth,
+		SrcAddr:  r.SrcAddr,
+		DstAddr:  r.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+		Username: usernameAttr.String(),
+		Realm:    realmAttr.String(),
+		Method:   callingMethod.String(),
+		Verdict:  verdict,
+	})
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {

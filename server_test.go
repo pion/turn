@@ -9,6 +9,7 @@ package turn
 import (
 	"fmt"
 	"net"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -19,6 +20,13 @@ import (
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
+)
+
+const (
+	timeout  = 200 * time.Millisecond
+	interval = 50 * time.Millisecond
+	stunAddr = "1.2.3.4:3478"
+	turnAddr = "1.2.3.4:3478"
 )
 
 func TestServer(t *testing.T) {
@@ -378,7 +386,14 @@ func (v *VNet) Close() error {
 }
 
 func buildVNet() (*VNet, error) {
+	return buildVNetWithServerEventHandlers(nil)
+}
+
+func buildVNetWithServerEventHandlers(handlers *EventHandlers) (*VNet, error) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
+	if handlers == nil {
+		handlers = &EventHandlers{}
+	}
 
 	// WAN
 	wan, err := vnet.NewRouter(&vnet.RouterConfig{
@@ -447,7 +462,7 @@ func buildVNet() (*VNet, error) {
 	// Start server...
 	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
 
-	udpListener, err := net0.ListenPacket("udp4", "0.0.0.0:3478")
+	udpListener, err := net0.ListenPacket("udp4", "1.2.3.4:3478")
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +474,8 @@ func buildVNet() (*VNet, error) {
 			}
 			return nil, false
 		},
-		Realm: "pion.ly",
+		Realm:         "pion.ly",
+		EventHandlers: *handlers,
 		PacketConnConfigs: []PacketConnConfig{
 			{
 				PacketConn: udpListener,
@@ -498,6 +514,15 @@ func buildVNet() (*VNet, error) {
 	}, nil
 }
 
+func expectEvent(ch chan allocation.EventHandlerArgs) (allocation.EventHandlerArgs, bool) {
+	select {
+	case res := <-ch:
+		return res, true
+	case <-time.After(timeout):
+		return allocation.EventHandlerArgs{}, false
+	}
+}
+
 func TestServerVNet(t *testing.T) {
 	lim := test.TimeOut(time.Second * 30)
 	defer lim.Stop()
@@ -521,8 +546,6 @@ func TestServerVNet(t *testing.T) {
 			assert.NoError(t, lconn.Close())
 		}()
 
-		stunAddr := "1.2.3.4:3478"
-
 		log.Debug("creating a client.")
 		client, err := NewClient(&ClientConfig{
 			STUNServerAddr: stunAddr,
@@ -543,6 +566,439 @@ func TestServerVNet(t *testing.T) {
 		// The mapped-address should have IP address that was assigned
 		// to the LAN router.
 		assert.True(t, udpAddr.IP.Equal(net.IPv4(5, 6, 7, 8)), "should match")
+	})
+
+	t.Run("AllocationLifecycle", func(t *testing.T) {
+		v, err := buildVNet()
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, v.Close())
+		}()
+
+		// Inject an fake event handler so that we can track the succession of callbacks
+		events := make(chan allocation.EventHandlerArgs, 5)
+		defer close(events)
+		assert.Len(t, v.server.allocationManagers, 1)
+		v.server.allocationManagers[0].EventHandler = func(arg allocation.EventHandlerArgs) {
+			log.Info(fmt.Sprintf("%#v", arg))
+			events <- arg
+		}
+
+		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		assert.NoError(t, err, "should succeed")
+		defer func() {
+			assert.NoError(t, lconn.Close())
+		}()
+
+		log.Debug("creating a client.")
+		client, err := NewClient(&ClientConfig{
+			TURNServerAddr: turnAddr,
+			Conn:           lconn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err, "should succeed")
+		assert.NoError(t, client.Listen(), "should succeed")
+		defer client.Close()
+
+		log.Debug("sending an allocate request.")
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err, "should succeed")
+
+		event, ok := expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
+		udpAddr, ok := event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.Equal(t, "Allocate", event.Method)
+		assert.True(t, event.Verdict)
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnAllocationCreated, event.Type, "should receive an OnAllocationCreated event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.Equal(t, 0, event.RequestedPort)
+
+		relayNetAddr := relayConn.LocalAddr()
+		log.Debugf("relay-address: %s", relayNetAddr.String())
+		relayAddr, ok := relayNetAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		udpAddr, ok = event.RelayAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, relayAddr.IP.Equal(udpAddr.IP))
+		assert.Equal(t, relayAddr.Port, udpAddr.Port)
+		// The transport relay address should have IP address that was assigned to the server.
+		assert.True(t, udpAddr.IP.Equal(net.IPv4(1, 2, 3, 4)), "should match")
+
+		log.Debug("Sending test packet")
+		peerAddr := &net.UDPAddr{IP: net.ParseIP("1.2.3.5"), Port: 80}
+		_, err = relayConn.WriteTo([]byte("test"), peerAddr)
+		assert.NoError(t, err, "should succeed")
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.Equal(t, "CreatePermission", event.Method)
+		assert.True(t, event.Verdict)
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnPermissionCreated, event.Type, "should receive an OnPermissionCreated event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.True(t, net.ParseIP("1.2.3.5").Equal(event.PeerIP))
+
+		log.Debug("Forcing the creation of a channel")
+		_, err = relayConn.WriteTo([]byte("test"), peerAddr)
+		assert.NoError(t, err, "should succeed")
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.Equal(t, "ChannelBind", event.Method)
+		assert.True(t, event.Verdict)
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnChannelCreated, event.Type, "should receive an OnChannelCreated event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		udpAddr, ok = event.RelayAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, relayAddr.IP.Equal(udpAddr.IP))
+		assert.Equal(t, relayAddr.Port, udpAddr.Port)
+
+		// obtain the channel id
+		a := v.server.allocationManagers[0].GetAllocation(&allocation.FiveTuple{
+			Protocol: allocation.UDP,
+			SrcAddr:  event.SrcAddr,
+			DstAddr:  event.DstAddr,
+		})
+		assert.NotNil(t, a)
+		channelBind := a.GetChannelByAddr(peerAddr)
+		assert.NotNil(t, channelBind)
+		assert.Equal(t, channelBind.Number, proto.ChannelNumber(event.ChannelNumber))
+
+		log.Debug("Closing relay connection")
+		assert.NoError(t, relayConn.Close(), "relay conn close should succeed")
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnAuth, event.Type, "should receive an OnAuth event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.Equal(t, "Refresh", event.Method)
+		assert.True(t, event.Verdict)
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnPermissionDeleted, event.Type, "should receive an OnPermissionDeleted event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		assert.True(t, net.ParseIP("1.2.3.5").Equal(event.PeerIP))
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnChannelDeleted, event.Type, "should receive an OnChannelDeleted event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+		udpAddr, ok = event.RelayAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, relayAddr.IP.Equal(udpAddr.IP))
+		assert.Equal(t, relayAddr.Port, udpAddr.Port)
+		assert.Equal(t, channelBind.Number, proto.ChannelNumber(event.ChannelNumber))
+
+		event, ok = expectEvent(events)
+		assert.True(t, ok, "should receive an event")
+		assert.Equal(t, allocation.OnAllocationDeleted, event.Type, "should receive an OnAllocationDeleted event")
+		udpAddr, ok = event.SrcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = event.DstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP, event.Protocol)
+		assert.Equal(t, "user", event.Username)
+		assert.Equal(t, "pion.ly", event.Realm)
+	})
+
+	checkAllocation := func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
+		udpAddr, ok := srcAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("5.6.7.8").Equal(udpAddr.IP))
+		udpAddr, ok = dstAddr.(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.True(t, net.ParseIP("1.2.3.4").Equal(udpAddr.IP))
+		assert.Equal(t, allocation.UDP.String(), protocol)
+		assert.Equal(t, "user", username)
+		assert.Equal(t, "pion.ly", realm)
+	}
+	authEventHandler := func(expectedVerdict bool) (*EventHandlers, *atomic.Int32) {
+		counter := &atomic.Int32{}
+		return &EventHandlers{
+			OnAuth: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, method string, verdict bool) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				assert.True(t, method == "Allocate" || method == "Refresh") // close calls refresh with 0 lifetime
+				assert.Equal(t, expectedVerdict, verdict)
+				counter.Add(1)
+			},
+		}, counter
+	}
+
+	t.Run("AuthEventHandlerSuccess", func(t *testing.T) {
+		authCallback, counter := authEventHandler(true)
+		v, err := buildVNetWithServerEventHandlers(authCallback)
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, v.Close())
+		}()
+
+		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		assert.NoError(t, err, "should succeed")
+		defer func() {
+			assert.NoError(t, lconn.Close())
+		}()
+
+		log.Debug("creating a client.")
+		client, err := NewClient(&ClientConfig{
+			TURNServerAddr: turnAddr,
+			Conn:           lconn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err, "should succeed")
+		assert.NoError(t, client.Listen(), "should succeed")
+		defer client.Close()
+
+		log.Debug("sending an allocate request.")
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err, "should succeed")
+
+		log.Debug("Closing relay connection")
+		assert.NoError(t, relayConn.Close(), "relay conn close should succeed")
+
+		assert.Eventually(t, func() bool { return counter.Load() == 2 }, timeout, interval)
+	})
+
+	t.Run("AuthEventHandlerFailure", func(t *testing.T) {
+		authCallback, counter := authEventHandler(false)
+		v, err := buildVNetWithServerEventHandlers(authCallback)
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, v.Close())
+		}()
+
+		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		assert.NoError(t, err, "should succeed")
+		defer func() {
+			assert.NoError(t, lconn.Close())
+		}()
+
+		log.Debug("creating a client.")
+		client, err := NewClient(&ClientConfig{
+			TURNServerAddr: turnAddr,
+			Conn:           lconn,
+			Username:       "user",
+			Password:       "wrong-pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err, "should succeed")
+		assert.NoError(t, client.Listen(), "should succeed")
+		defer client.Close()
+
+		log.Debug("sending an allocate request.")
+		_, err = client.Allocate()
+		assert.Error(t, err, "should not succeed")
+
+		assert.Eventually(t, func() bool { return counter.Load() == 1 }, timeout, interval)
+	})
+
+	t.Run("AllocationEventHandlers", func(t *testing.T) {
+		peerAddr := &net.UDPAddr{IP: net.ParseIP("1.2.3.5"), Port: 80}
+		relayAddrIP := net.ParseIP("1.2.3.4")
+		allocCreated, allocDeleted := &atomic.Int32{}, &atomic.Int32{}
+		permissionCreated, permissionDeleted := &atomic.Int32{}, &atomic.Int32{}
+		channelCreated, channelDeleted := &atomic.Int32{}, &atomic.Int32{}
+		allocCallback := &EventHandlers{
+			OnAllocationCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, requestedPort int) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				assert.Equal(t, 0, requestedPort)
+				udpAddr, ok := relayAddr.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, relayAddrIP.Equal(udpAddr.IP))
+				allocCreated.Add(1)
+			},
+			OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				allocDeleted.Add(1)
+			},
+			OnPermissionCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, peer net.IP) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				udpAddr, ok := relayAddr.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, relayAddrIP.Equal(udpAddr.IP))
+				assert.True(t, net.ParseIP("1.2.3.5").Equal(peer))
+				permissionCreated.Add(1)
+			},
+			OnPermissionDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr net.Addr, peer net.IP) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				udpAddr, ok := relayAddr.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, relayAddrIP.Equal(udpAddr.IP))
+				assert.True(t, net.ParseIP("1.2.3.5").Equal(peer))
+				permissionDeleted.Add(1)
+			},
+			OnChannelCreated: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr, peer net.Addr, channelNumber uint16) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				addr, ok := peer.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, addr.IP.Equal(peerAddr.IP))
+				assert.Equal(t, peerAddr.Port, addr.Port)
+				udpAddr, ok := relayAddr.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, relayAddrIP.Equal(udpAddr.IP))
+				assert.NotZero(t, channelNumber)
+				channelCreated.Add(1)
+			},
+			OnChannelDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string, relayAddr, peer net.Addr, channelNumber uint16) {
+				checkAllocation(srcAddr, dstAddr, protocol, username, realm)
+				addr, ok := peer.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, addr.IP.Equal(peerAddr.IP))
+				assert.Equal(t, peerAddr.Port, addr.Port)
+				udpAddr, ok := relayAddr.(*net.UDPAddr)
+				assert.True(t, ok)
+				assert.True(t, relayAddrIP.Equal(udpAddr.IP))
+				assert.NotZero(t, channelNumber)
+				channelDeleted.Add(1)
+			},
+		}
+
+		v, err := buildVNetWithServerEventHandlers(allocCallback)
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, v.Close())
+		}()
+
+		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		assert.NoError(t, err, "should succeed")
+		defer func() {
+			assert.NoError(t, lconn.Close())
+		}()
+
+		log.Debug("creating a client.")
+		client, err := NewClient(&ClientConfig{
+			TURNServerAddr: turnAddr,
+			Conn:           lconn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err, "should succeed")
+		assert.NoError(t, client.Listen(), "should succeed")
+		defer client.Close()
+
+		log.Debug("sending an allocate request.")
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err, "should succeed")
+
+		assert.Eventually(t, func() bool { return allocCreated.Load() == 1 }, timeout, interval)
+
+		log.Debug("Sending test packet")
+		_, err = relayConn.WriteTo([]byte("test"), peerAddr)
+		assert.NoError(t, err, "should succeed")
+
+		assert.Eventually(t, func() bool { return permissionCreated.Load() == 1 }, timeout, interval)
+
+		log.Debug("Forcing the creation of a channel")
+		_, err = relayConn.WriteTo([]byte("test"), peerAddr)
+		assert.NoError(t, err, "should succeed")
+
+		assert.Eventually(t, func() bool { return channelCreated.Load() == 1 }, timeout, interval)
+
+		log.Debug("Closing relay connection")
+		assert.NoError(t, relayConn.Close(), "relay conn close should succeed")
+
+		assert.Eventually(t, func() bool { return permissionDeleted.Load() == 1 }, timeout, interval)
+		assert.Eventually(t, func() bool { return allocCreated.Load() == 1 }, timeout, interval)
+		assert.Eventually(t, func() bool { return allocDeleted.Load() == 1 }, timeout, interval)
+		assert.Eventually(t, func() bool { return permissionCreated.Load() == 1 }, timeout, interval)
+		assert.Eventually(t, func() bool { return permissionDeleted.Load() == 1 }, timeout, interval)
+		assert.Eventually(t, func() bool { return channelCreated.Load() == 1 }, timeout, interval)
+		assert.Eventually(t, func() bool { return channelDeleted.Load() == 1 }, timeout, interval)
 	})
 }
 
@@ -614,6 +1070,58 @@ func TestSTUNOnly(t *testing.T) {
 
 	_, err = client.Allocate()
 	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
+}
+
+func TestQuotaReached(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	assert.NoError(t, err)
+
+	defer serverConn.Close() //nolint:errcheck
+
+	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			if pw, ok := credMap[username]; ok {
+				return pw, true
+			}
+			return nil, false
+		},
+		QuotaHandler: func(_, _ string, _ net.Addr) (ok bool) { return false },
+		Realm:        "pion.ly",
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	defer server.Close() //nolint:errcheck
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           conn,
+		STUNServerAddr: "127.0.0.1:3478",
+		TURNServerAddr: "127.0.0.1:3478",
+		Username:       "user",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+	defer client.Close()
+
+	_, err = client.Allocate()
+	assert.Equal(t, err.Error(), "Allocate error response (error 486: )")
 }
 
 func RunBenchmarkServer(b *testing.B, clientNum int) {
