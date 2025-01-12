@@ -35,7 +35,7 @@ type Server struct {
 }
 
 // NewServer creates the Pion TURN server.
-func NewServer(config ServerConfig) (*Server, error) { // nolint:gocognit,cyclop,funlen
+func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 	if err := config.validate(); err != nil {
 		return nil, err
 	}

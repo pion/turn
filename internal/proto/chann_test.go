@@ -35,7 +35,7 @@ func BenchmarkChannelNumber(b *testing.B) {
 	})
 }
 
-func TestChannelNumber(t *testing.T) { // nolint:cyclop,funlen
+func TestChannelNumber(t *testing.T) { //nolint:cyclop
 	t.Run("String", func(t *testing.T) {
 		n := ChannelNumber(112)
 		if n.String() != "112" {

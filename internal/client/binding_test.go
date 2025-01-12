@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBindingManager(t *testing.T) { // nolint:funlen
+func TestBindingManager(t *testing.T) {
 	t.Run("number assignment", func(t *testing.T) {
 		bm := newBindingManager()
 		var chanNum uint16

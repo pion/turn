@@ -10,7 +10,7 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func TestRequestedTransport(t *testing.T) { // nolint:cyclop,funlen
+func TestRequestedTransport(t *testing.T) { //nolint:cyclop
 	t.Run("String", func(t *testing.T) {
 		transAttr := RequestedTransport{
 			Protocol: ProtoUDP,

@@ -36,7 +36,7 @@ func BenchmarkLifetime(b *testing.B) {
 	})
 }
 
-func TestLifetime(t *testing.T) { // nolint:cyclop,funlen
+func TestLifetime(t *testing.T) { //nolint:cyclop
 	t.Run("String", func(t *testing.T) {
 		l := Lifetime{time.Second * 10}
 		if l.String() != "10s" {

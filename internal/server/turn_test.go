@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAllocationLifeTime(t *testing.T) { // nolint:funlen
+func TestAllocationLifeTime(t *testing.T) {
 	t.Run("Parsing", func(t *testing.T) {
 		lifetime := proto.Lifetime{
 			Duration: 5 * time.Second,

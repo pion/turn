@@ -276,7 +276,7 @@ func subTestAllocationClose(t *testing.T) {
 	assert.True(t, isClose(alloc.RelaySocket), "should be closed")
 }
 
-func subTestPacketHandler(t *testing.T) { // nolint:funlen
+func subTestPacketHandler(t *testing.T) {
 	t.Helper()
 
 	network := "udp"

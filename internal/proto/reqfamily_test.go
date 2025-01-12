@@ -10,7 +10,7 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func TestRequestedAddressFamily(t *testing.T) { // nolint:cyclop,funlen
+func TestRequestedAddressFamily(t *testing.T) { //nolint:cyclop
 	t.Run("String", func(t *testing.T) {
 		if RequestedFamilyIPv4.String() != "IPv4" {
 			t.Errorf("bad string %q, expected %q", RequestedFamilyIPv4,

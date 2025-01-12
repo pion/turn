@@ -61,7 +61,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 	}
 }
 
-func main() { // nolint:funlen,cyclop
+func main() { //nolint:cyclop
 	host := flag.String("host", "", "TURN Server name.")
 	port := flag.Int("port", 3478, "Listening port.")
 	user := flag.String("user", "", "A pair of username and password (e.g. \"user=pass\")")

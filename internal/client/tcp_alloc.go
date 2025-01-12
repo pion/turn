@@ -220,7 +220,7 @@ func (a *TCPAllocation) DialTCPWithConn(conn net.Conn, _ string, rAddr *net.TCPA
 }
 
 // BindConnection associates the provided connection.
-func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID) error { // nolint:cyclop,funlen
+func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID) error { //nolint:cyclop
 	msg, err := stun.Build(
 		stun.TransactionID,
 		stun.NewType(stun.MethodConnectionBind, stun.ClassRequest),

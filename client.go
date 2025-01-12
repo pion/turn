@@ -240,7 +240,7 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 	return c.SendBindingRequestTo(c.stunServerAddr)
 }
 
-func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( // nolint:cyclop,funlen
+func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	proto.RelayedAddress,
 	proto.Lifetime,
 	stun.Nonce,
@@ -507,7 +507,7 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	return false, nil
 }
 
-func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { // nolint:cyclop,funlen
+func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:cyclop
 	raw := make([]byte, len(data))
 	copy(raw, data)
 

@@ -22,7 +22,7 @@ func TestPermission(t *testing.T) {
 	})
 }
 
-func TestPermissionMap(t *testing.T) { // nolint:funlen
+func TestPermissionMap(t *testing.T) {
 	t.Run("Basic operations", func(t *testing.T) {
 		pm := newPermissionMap()
 		assert.NotNil(t, pm)
