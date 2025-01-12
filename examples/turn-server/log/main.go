@@ -51,7 +51,7 @@ func (s *stunLogger) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	return
 }
 
-func main() { // nolint:funlen
+func main() {
 	publicIP := flag.String("public-ip", "", "IP Address that TURN can be contacted by.")
 	port := flag.Int("port", 3478, "Listening port.")
 	users := flag.String("users", "", "List of username and password (e.g. \"user=pass,user=pass\")")

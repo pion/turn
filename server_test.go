@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestServer(t *testing.T) { // nolint:funlen,maintidx
+func TestServer(t *testing.T) { //nolint:maintidx
 	lim := test.TimeOut(time.Second * 30)
 	defer lim.Stop()
 
@@ -381,7 +381,7 @@ func (v *VNet) Close() error {
 	return v.wan.Stop()
 }
 
-func buildVNet() (*VNet, error) { // nolint:cyclop,funlen
+func buildVNet() (*VNet, error) { //nolint:cyclop
 	loggerFactory := logging.NewDefaultLoggerFactory()
 
 	// WAN
@@ -635,7 +635,7 @@ func TestSTUNOnly(t *testing.T) {
 	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
 }
 
-func RunBenchmarkServer(b *testing.B, clientNum int) { // nolint:cyclop,funlen
+func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	b.Helper()
 
 	loggerFactory := logging.NewDefaultLoggerFactory()

@@ -31,7 +31,7 @@ func TestChannelData_Encode(t *testing.T) {
 	}
 }
 
-func TestChannelData_Equal(t *testing.T) { // nolint:funlen
+func TestChannelData_Equal(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		a, b  *ChannelData

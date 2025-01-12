@@ -149,7 +149,7 @@ func (a *allocation) createPermission(perm *permission, addr net.Addr) error {
 // an Error with Timeout() == true after a fixed time limit;
 // see SetDeadline and SetWriteDeadline.
 // On packet-oriented connections, write timeouts are rare.
-func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint:gocognit,cyclop,funlen
+func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint:gocognit,cyclop
 	var err error
 	_, ok := addr.(*net.UDPAddr)
 	if !ok {

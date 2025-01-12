@@ -48,7 +48,7 @@ func buildMsg(
 	return append([]stun.Setter{&stun.Message{TransactionID: transactionID}, msgType}, additional...)
 }
 
-func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.Method) ( // nolint:funlen
+func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.Method) (
 	stun.MessageIntegrity,
 	bool,
 	error,

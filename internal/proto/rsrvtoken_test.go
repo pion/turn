@@ -11,7 +11,7 @@ import (
 	"github.com/pion/stun/v3"
 )
 
-func TestReservationToken(t *testing.T) { // nolint:cyclop,funlen
+func TestReservationToken(t *testing.T) { //nolint:cyclop
 	t.Run("NoAlloc", func(t *testing.T) {
 		stunMsg := &stun.Message{}
 		tok := make([]byte, 8)

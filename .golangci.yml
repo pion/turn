@@ -59,7 +59,6 @@ linters:
     - exportloopref    # checks for pointers to enclosing loop variables
     - forbidigo        # Forbids identifiers
     - forcetypeassert  # finds forced type assertions
-    - funlen           # Tool for detection of long functions
     - gci              # Gci control golang package import order and make it always deterministic.
     - gochecknoglobals # Checks that no globals are present in Go code
     - gocognit         # Computes and checks the cognitive complexity of functions
@@ -106,6 +105,7 @@ linters:
     - whitespace       # Tool for detection of leading and trailing whitespace
   disable:
     - depguard         # Go linter that checks if package imports are in a list of acceptable packages
+    - funlen           # Tool for detection of long functions
     - gochecknoinits   # Checks that no init functions are present in Go code
     - gomodguard       # Allow and block list linter for direct Go module dependencies. This is different from depguard where there are different block types for example version constraints and module recommendations.
     - interfacebloat   # A linter that checks length of interface.

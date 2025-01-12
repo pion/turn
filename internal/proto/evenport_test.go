@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEvenPort(t *testing.T) { // nolint:cyclop,funlen
+func TestEvenPort(t *testing.T) { //nolint:cyclop
 	t.Run("String", func(t *testing.T) {
 		p := EvenPort{}
 		if p.String() != "reserve: false" {

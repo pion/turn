@@ -45,7 +45,7 @@ func (c dummyTCPConn) Read(b []byte) (int, error) {
 	return len(msg.Raw), nil
 }
 
-func TestTCPConn(t *testing.T) { //nolint:funlen
+func TestTCPConn(t *testing.T) {
 	t.Run("Connect()", func(t *testing.T) {
 		var cid proto.ConnectionID = 5
 		client := &mockClient{

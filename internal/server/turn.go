@@ -18,7 +18,7 @@ const runesAlpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
 // .
-func handleAllocateRequest(req Request, stunMsg *stun.Message) error { // nolint:cyclop,funlen
+func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:cyclop
 	req.Log.Debugf("Received AllocateRequest from %s", req.SrcAddr)
 
 	// 1. The server MUST require that the request be authenticated.  This

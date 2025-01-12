@@ -65,7 +65,7 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 	return c, conn, true
 }
 
-func TestClientWithSTUN(t *testing.T) { // nolint:funlen
+func TestClientWithSTUN(t *testing.T) {
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	log := loggerFactory.NewLogger("test")
 
@@ -198,7 +198,7 @@ func TestClientNonceExpiration(t *testing.T) {
 }
 
 // Create a TCP-based allocation and verify allocation can be created.
-func TestTCPClient(t *testing.T) { // nolint:funlen
+func TestTCPClient(t *testing.T) {
 	// Setup server
 	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
 	require.NoError(t, err)
