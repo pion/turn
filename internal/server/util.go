@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/stun/v3"
+	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 )
 
@@ -84,12 +85,11 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 	// Respond with 400 so clients don't retry.
 	if req.AuthHandler == nil {
 		sendErr := buildAndSend(req.Conn, req.SrcAddr, badRequestMsg...)
-
-		return nil, false, sendErr
+		return nil, false, sendErr // nolint:nlreturn
 	}
 
 	if err := nonceAttr.GetFrom(stunMsg); err != nil {
-		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...) // nolint:nlreturn
 	}
 
 	// Assert Nonce is signed and is not expired.
@@ -114,10 +114,40 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(stunMsg); err != nil {
-		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		genAuthEvent(req, stunMsg, callingMethod, false)
+		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...) // nolint:nlreturn
 	}
 
+	genAuthEvent(req, stunMsg, callingMethod, true)
+
 	return stun.MessageIntegrity(ourKey), true, nil
+}
+
+func genAuthEvent(req Request, stunMsg *stun.Message, callingMethod stun.Method, verdict bool) {
+	if req.AllocationManager.EventHandler == nil {
+		return
+	}
+
+	realmAttr := &stun.Realm{}
+	if err := realmAttr.GetFrom(stunMsg); err != nil {
+		return
+	}
+
+	usernameAttr := &stun.Username{}
+	if err := usernameAttr.GetFrom(stunMsg); err != nil {
+		return
+	}
+
+	req.AllocationManager.EventHandler(allocation.EventHandlerArgs{
+		Type:     allocation.OnAuth,
+		SrcAddr:  req.SrcAddr,
+		DstAddr:  req.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+		Username: usernameAttr.String(),
+		Realm:    realmAttr.String(),
+		Method:   callingMethod.String(),
+		Verdict:  verdict,
+	})
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {
