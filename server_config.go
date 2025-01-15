@@ -190,6 +190,11 @@ func genericEventHandler(handlers EventHandlers) allocation.EventHandler { //nol
 	}
 }
 
+// QuotaHandler is a callback allows allocations to be rejected when a per-user quota is
+// exceeded. If the callback returns true the allocation request is accepted, otherwise it is
+// rejected and a 486 (Allocation Quota Reached) error is returned to the user.
+type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
+
 // ServerConfig configures the Pion TURN Server.
 type ServerConfig struct {
 	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners
@@ -206,6 +211,10 @@ type ServerConfig struct {
 	// AuthHandler is a callback used to handle incoming auth requests,
 	// allowing users to customize Pion TURN with custom behavior
 	AuthHandler AuthHandler
+
+	// AuthHandler is a callback used to handle incoming auth requests, allowing users to
+	// customize Pion TURN with custom behavior
+	QuotaHandler QuotaHandler
 
 	// EventHandlers is a set of callbacks for tracking allocation lifecycle.
 	EventHandlers EventHandlers
