@@ -54,13 +54,13 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
 
-	if a, err := m.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime); a != nil || err == nil {
+	if a, err := m.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime, "", ""); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil FiveTuple")
 	}
-	if a, err := m.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime); a != nil || err == nil {
+	if a, err := m.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime, "", ""); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with nil turnSocket")
 	}
-	if a, err := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0); a != nil || err == nil {
+	if a, err := m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0, "", ""); a != nil || err == nil {
 		t.Errorf("Illegally created allocation with 0 lifetime")
 	}
 }
@@ -73,7 +73,7 @@ func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", ""); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
@@ -90,11 +90,11 @@ func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.Pack
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", ""); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
-	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a != nil || err == nil {
+	if a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", ""); a != nil || err == nil {
 		t.Errorf("Was able to create allocation with same FiveTuple twice")
 	}
 }
@@ -106,7 +106,8 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	if a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime); a == nil || err != nil {
+	if a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime,
+		"", ""); a == nil || err != nil {
 		t.Errorf("Failed to create allocation %v %v", a, err)
 	}
 
@@ -133,7 +134,7 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	for index := range allocations {
 		fiveTuple := randomFiveTuple()
 
-		a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, lifetime)
+		a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, lifetime, "", "")
 		if err != nil {
 			t.Errorf("Failed to create allocation with %v", fiveTuple)
 		}
@@ -159,9 +160,9 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 
 	allocations := make([]*Allocation, 2)
 
-	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second)
+	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second, "", "")
 	allocations[0] = a1
-	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute)
+	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute, "", "")
 	allocations[1] = a2
 
 	// Make a1 timeout
