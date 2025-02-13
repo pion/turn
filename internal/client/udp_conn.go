@@ -240,7 +240,7 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 		if bound.state() == bindingStateReady && time.Since(bound.refreshedAt()) > 5*time.Minute {
 			bound.setState(bindingStateRefresh)
 			go func() {
-				err = c.bind(bound)
+				err := c.bind(bound)
 				if err != nil {
 					c.log.Warnf("Failed to bind() for refresh: %s", err)
 					bound.setState(bindingStateFailed)

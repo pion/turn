@@ -92,7 +92,7 @@ func TestTCPConn(t *testing.T) {
 		client = &mockClient{
 			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool) (TransactionResult, error) {
 				if msg.Type.Class == stun.ClassRequest && msg.Type.Method == stun.MethodConnect {
-					msg, err = stun.Build(
+					msg, err := stun.Build(
 						stun.TransactionID,
 						stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
 						stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
@@ -174,7 +174,7 @@ func TestTCPConn(t *testing.T) {
 					typ = stun.NewType(stun.MethodCreatePermission, stun.ClassSuccessResponse)
 				}
 
-				msg, err = stun.Build(
+				msg, err := stun.Build(
 					stun.TransactionID,
 					typ,
 					cid,
