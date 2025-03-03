@@ -16,6 +16,17 @@ const (
 	TCP
 )
 
+func (p Protocol) String() string {
+	switch p {
+	case UDP:
+		return "UDP"
+	case TCP:
+		return "TCP"
+	default:
+		return ""
+	}
+}
+
 // FiveTuple is the combination (client IP address and port, server IP
 // address and port, and transport protocol (currently one of UDP,
 // TCP, or TLS)) used to communicate between the client and the
