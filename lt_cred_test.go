@@ -21,9 +21,7 @@ func TestLtCredMech(t *testing.T) {
 
 	expectedPassword := "Tpz/nKkyvX/vMSLKvL4sbtBt8Vs=" //nolint:gosec
 	actualPassword, _ := longTermCredentials(username, sharedSecret)
-	if expectedPassword != actualPassword {
-		t.Errorf("Expected %q, got %q", expectedPassword, actualPassword)
-	}
+	assert.Equal(t, expectedPassword, actualPassword)
 }
 
 func TestNewLongTermAuthHandler(t *testing.T) {

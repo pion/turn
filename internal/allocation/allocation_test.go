@@ -51,19 +51,13 @@ func subTestGetPermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	addr2, err := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	addr3, err := net.ResolveUDPAddr("udp", "127.0.0.2:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	perms := &Permission{
 		Addr: addr,
@@ -95,9 +89,7 @@ func subTestAddPermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	p := &Permission{
 		Addr: addr,
@@ -116,9 +108,7 @@ func subTestRemovePermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	p := &Permission{
 		Addr: addr,
@@ -141,9 +131,7 @@ func subTestAddChannelBind(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
@@ -167,9 +155,7 @@ func subTestGetChannelByNumber(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
@@ -188,9 +174,7 @@ func subTestGetChannelByAddr(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
@@ -210,9 +194,7 @@ func subTestRemoveChannelBind(t *testing.T) {
 	alloc := NewAllocation(nil, nil, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
@@ -250,9 +232,7 @@ func subTestAllocationClose(t *testing.T) {
 	network := "udp"
 
 	l, err := net.ListenPacket(network, "0.0.0.0:0")
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	alloc := NewAllocation(nil, nil, nil)
 	alloc.RelaySocket = l
@@ -261,9 +241,7 @@ func subTestAllocationClose(t *testing.T) {
 
 	// Add channel
 	addr, err := net.ResolveUDPAddr(network, "127.0.0.1:3478")
-	if err != nil {
-		t.Fatalf("failed to resolve: %s", err)
-	}
+	assert.NoError(t, err)
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 	_ = alloc.AddChannelBind(c, proto.DefaultLifetime)
@@ -271,8 +249,7 @@ func subTestAllocationClose(t *testing.T) {
 	// Add permission
 	alloc.AddPermission(NewPermission(addr, nil))
 
-	err = alloc.Close()
-	assert.Nil(t, err, "should succeed")
+	assert.Nil(t, alloc.Close(), "should succeed")
 	assert.True(t, isClose(alloc.RelaySocket), "should be closed")
 }
 
@@ -285,15 +262,11 @@ func subTestPacketHandler(t *testing.T) {
 
 	// TURN server initialization
 	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0")
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	// Client listener initialization
 	clientListener, err := net.ListenPacket(network, "127.0.0.1:0")
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	dataCh := make(chan []byte)
 	// Client listener read data
@@ -314,17 +287,13 @@ func subTestPacketHandler(t *testing.T) {
 		DstAddr: turnSocket.LocalAddr(),
 	}, turnSocket, 0, proto.DefaultLifetime)
 
-	assert.Nil(t, err, "should succeed")
+	assert.NoError(t, err, "should succeed")
 
 	peerListener1, err := net.ListenPacket(network, "127.0.0.1:0")
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	peerListener2, err := net.ListenPacket(network, "127.0.0.1:0")
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	// Add permission with peer1 address
 	alloc.AddPermission(NewPermission(peerListener1.LocalAddr(), manager.log))
@@ -345,12 +314,10 @@ func subTestPacketHandler(t *testing.T) {
 	assert.True(t, stun.IsMessage(data), "should be stun message")
 
 	var msg stun.Message
-	err = stun.Decode(data, &msg)
-	assert.Nil(t, err, "decode data to stun message failed")
+	assert.NoError(t, stun.Decode(data, &msg), "decode data to stun message failed")
 
 	var msgData proto.Data
-	err = msgData.GetFrom(&msg)
-	assert.Nil(t, err, "get data from stun message failed")
+	assert.NoError(t, msgData.GetFrom(&msg), "get data from stun message failed")
 	assert.Equal(t, targetText, string(msgData), "get message doesn't equal the target text")
 
 	// Test for channel bind and channel data
@@ -364,8 +331,7 @@ func subTestPacketHandler(t *testing.T) {
 	channelData := proto.ChannelData{
 		Raw: data,
 	}
-	err = channelData.Decode()
-	assert.Nil(t, err, fmt.Sprintf("channel data decode with error: %v", err))
+	assert.NoError(t, channelData.Decode(), fmt.Sprintf("channel data decode with error: %v", err))
 	assert.Equal(t, channelBind.Number, channelData.Number, "get channel data's number is invalid")
 	assert.Equal(t, targetText2, string(channelData.Data), "get data doesn't equal the target text.")
 

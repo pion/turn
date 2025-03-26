@@ -4,8 +4,6 @@
 package proto
 
 import (
-	"bytes"
-	"errors"
 	"testing"
 
 	"github.com/pion/stun/v3"
@@ -36,55 +34,47 @@ func TestData(t *testing.T) {
 	t.Run("NoAlloc", func(t *testing.T) {
 		stunMsg := new(stun.Message)
 		v := []byte{1, 2, 3, 4}
-		if wasAllocs(func() {
+		allocated := wasAllocs(func() {
 			// On stack.
 			d := Data(v)
-			d.AddTo(stunMsg) //nolint
+			assert.NoError(t, d.AddTo(stunMsg))
 			stunMsg.Reset()
-		}) {
-			t.Error("Unexpected allocations")
-		}
+		})
+		assert.False(t, allocated)
 
 		d := &Data{1, 2, 3, 4}
-		if wasAllocs(func() {
+		allocated = wasAllocs(func() {
 			// On heap.
-			d.AddTo(stunMsg) //nolint
+			assert.NoError(t, d.AddTo(stunMsg))
 			stunMsg.Reset()
-		}) {
-			t.Error("Unexpected allocations")
-		}
+		})
+		assert.False(t, allocated)
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		m := new(stun.Message)
 		data := Data{1, 2, 33, 44, 0x13, 0xaf}
-		if err := data.AddTo(m); err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, data.AddTo(m))
+
 		m.WriteHeader()
 		t.Run("GetFrom", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(m.Raw); err != nil {
-				t.Fatal("failed to decode message:", err)
-			}
+			_, err := decoded.Write(m.Raw)
+			assert.NoError(t, err)
+
 			var dataDecoded Data
-			if err := dataDecoded.GetFrom(decoded); err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(dataDecoded, data) {
-				t.Error(dataDecoded, "!=", data, "(expected)")
-			}
-			if wasAllocs(func() {
+			assert.NoError(t, dataDecoded.GetFrom(decoded))
+			assert.Equal(t, data, dataDecoded)
+
+			allocated := wasAllocs(func() {
 				var dataDecoded Data
-				dataDecoded.GetFrom(decoded) //nolint
-			}) {
-				t.Error("Unexpected allocations")
-			}
+				assert.NoError(t, dataDecoded.GetFrom(decoded))
+			})
+			assert.False(t, allocated)
+
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				var handle Data
-				if err := handle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
-					t.Errorf("%v should be not found", err)
-				}
+				assert.ErrorIs(t, handle.GetFrom(m), stun.ErrAttributeNotFound)
 			})
 		})
 	})

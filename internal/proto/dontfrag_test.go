@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun/v3"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDontFragment(t *testing.T) {
@@ -15,29 +16,23 @@ func TestDontFragment(t *testing.T) {
 	t.Run("False", func(t *testing.T) {
 		m := new(stun.Message)
 		m.WriteHeader()
-		if dontFrag.IsSet(m) {
-			t.Error("should not be set")
-		}
+		assert.False(t, dontFrag.IsSet(m))
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		stunMsg := new(stun.Message)
-		if err := dontFrag.AddTo(stunMsg); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, dontFrag.AddTo(stunMsg))
+
 		stunMsg.WriteHeader()
 		t.Run("IsSet", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(stunMsg.Raw); err != nil {
-				t.Fatal("failed to decode message:", err)
-			}
-			if !dontFrag.IsSet(stunMsg) {
-				t.Error("should be set")
-			}
-			if wasAllocs(func() {
+			_, err := decoded.Write(stunMsg.Raw)
+			assert.NoError(t, err)
+			assert.True(t, dontFrag.IsSet(stunMsg))
+
+			allocated := wasAllocs(func() {
 				dontFrag.IsSet(stunMsg)
-			}) {
-				t.Error("unexpected allocations")
-			}
+			})
+			assert.False(t, allocated)
 		})
 	})
 }

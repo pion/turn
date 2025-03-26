@@ -6,19 +6,15 @@ package allocation
 import (
 	"net"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFiveTupleProtocol(t *testing.T) {
 	udpExpect := Protocol(0)
 	tcpExpect := Protocol(1)
-
-	if udpExpect != UDP {
-		t.Errorf("Invalid UDP Protocol value, expect %d but %d", udpExpect, UDP)
-	}
-
-	if tcpExpect != TCP {
-		t.Errorf("Invalid TCP Protocol value, expect %d but %d", tcpExpect, TCP)
-	}
+	assert.Equal(t, UDP, udpExpect)
+	assert.Equal(t, TCP, tcpExpect)
 }
 
 func TestFiveTupleEqual(t *testing.T) {
@@ -67,10 +63,7 @@ func TestFiveTupleEqual(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			fact := a.Equal(b)
-
-			if expect != fact {
-				t.Errorf("%v, %v equal check should be %t, but %t", a, b, expect, fact)
-			}
+			assert.Equalf(t, expect, fact, "%v, %v equal check should be %t, but %t", a, b, expect, fact)
 		})
 	}
 }

@@ -4,7 +4,6 @@
 package proto
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -18,9 +17,7 @@ func BenchmarkLifetime(b *testing.B) {
 		m := new(stun.Message)
 		for i := 0; i < b.N; i++ {
 			l := Lifetime{time.Second}
-			if err := l.AddTo(m); err != nil {
-				b.Fatal(err)
-			}
+			assert.NoError(b, l.AddTo(m))
 			m.Reset()
 		}
 	})
@@ -29,76 +26,62 @@ func BenchmarkLifetime(b *testing.B) {
 		assert.NoError(b, Lifetime{time.Minute}.AddTo(m))
 		for i := 0; i < b.N; i++ {
 			l := Lifetime{}
-			if err := l.GetFrom(m); err != nil {
-				b.Fatal(err)
-			}
+			assert.NoError(b, l.GetFrom(m))
 		}
 	})
 }
 
-func TestLifetime(t *testing.T) { //nolint:cyclop
+func TestLifetime(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
 		l := Lifetime{time.Second * 10}
-		if l.String() != "10s" {
-			t.Errorf("bad string %s, expedted 10s", l)
-		}
+		assert.Equal(t, "10s", l.String())
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
 		stunMsg := &stun.Message{}
-		if wasAllocs(func() {
+		allocated := wasAllocs(func() {
 			// On stack.
 			l := Lifetime{
 				Duration: time.Minute,
 			}
-			l.AddTo(stunMsg) //nolint
+			assert.NoError(t, l.AddTo(stunMsg))
 			stunMsg.Reset()
-		}) {
-			t.Error("Unexpected allocations")
-		}
+		})
+		assert.False(t, allocated)
 
 		l := &Lifetime{time.Second}
-		if wasAllocs(func() {
+		allocated = wasAllocs(func() {
 			// On heap.
-			l.AddTo(stunMsg) //nolint
+			assert.NoError(t, l.AddTo(stunMsg))
 			stunMsg.Reset()
-		}) {
-			t.Error("Unexpected allocations")
-		}
+		})
+		assert.False(t, allocated)
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		m := new(stun.Message)
 		lifetime := Lifetime{time.Second * 10}
-		if err := lifetime.AddTo(m); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, lifetime.AddTo(m))
 		m.WriteHeader()
 		t.Run("GetFrom", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(m.Raw); err != nil {
-				t.Fatal("failed to decode message:", err)
-			}
+			_, err := decoded.Write(m.Raw)
+			assert.NoError(t, err)
+
 			life := Lifetime{}
-			if err := life.GetFrom(decoded); err != nil {
-				t.Fatal(err)
-			}
-			if life != lifetime {
-				t.Errorf("Decoded %q, expected %q", life, lifetime)
-			}
-			if wasAllocs(func() {
-				life.GetFrom(decoded) //nolint
-			}) {
-				t.Error("Unexpected allocations")
-			}
+			assert.NoError(t, life.GetFrom(decoded))
+			assert.Equal(t, lifetime, life)
+
+			allocated := wasAllocs(func() {
+				assert.NoError(t, life.GetFrom(decoded))
+			})
+			assert.False(t, allocated)
+
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				nHandle := new(Lifetime)
-				if err := nHandle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
-					t.Errorf("%v should be not found", err)
-				}
+				assert.ErrorIs(t, nHandle.GetFrom(m), stun.ErrAttributeNotFound)
+
 				m.Add(stun.AttrLifetime, []byte{1, 2, 3})
-				if !stun.IsAttrSizeInvalid(nHandle.GetFrom(m)) {
-					t.Error("IsAttrSizeInvalid should be true")
-				}
+				assert.True(t, stun.IsAttrSizeInvalid(nHandle.GetFrom(m)))
 			})
 		})
 	})

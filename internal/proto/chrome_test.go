@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pion/stun/v3"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestChromeAllocRequest(t *testing.T) {
@@ -23,21 +24,16 @@ func TestChromeAllocRequest(t *testing.T) {
 	// Decoding hex data into binary.
 	for s.Scan() {
 		b, err := hex.DecodeString(s.Text())
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 		data = append(data, b)
 	}
 	// All hex streams decoded to raw binary format and stored in data slice.
 	// Decoding packets to messages.
 	for i, packet := range data {
 		m := new(stun.Message)
-		if _, err := m.Write(packet); err != nil {
-			t.Errorf("Packet %d: %v", i, err)
-		}
+		_, err := m.Write(packet)
+		assert.NoErrorf(t, err, "Packet %d: %v", i, err)
 		messages = append(messages, m)
 	}
-	if len(messages) != 4 {
-		t.Error("unexpected message slice list")
-	}
+	assert.Equal(t, 4, len(messages), "unexpected number of messages")
 }

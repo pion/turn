@@ -4,7 +4,6 @@
 package proto
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/pion/stun/v3"
@@ -17,9 +16,7 @@ func BenchmarkChannelNumber(b *testing.B) {
 		m := new(stun.Message)
 		for i := 0; i < b.N; i++ {
 			n := ChannelNumber(12)
-			if err := n.AddTo(m); err != nil {
-				b.Fatal(err)
-			}
+			assert.NoError(b, n.AddTo(m))
 			m.Reset()
 		}
 	})
@@ -28,76 +25,64 @@ func BenchmarkChannelNumber(b *testing.B) {
 		assert.NoError(b, ChannelNumber(12).AddTo(m))
 		for i := 0; i < b.N; i++ {
 			var n ChannelNumber
-			if err := n.GetFrom(m); err != nil {
-				b.Fatal(err)
-			}
+			assert.NoError(b, n.GetFrom(m))
 		}
 	})
 }
 
-func TestChannelNumber(t *testing.T) { //nolint:cyclop
+func TestChannelNumber(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
 		n := ChannelNumber(112)
-		if n.String() != "112" {
-			t.Errorf("bad string %s, expected 112", n.String())
-		}
+		assert.Equal(t, "112", n.String())
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
 		stunMsg := &stun.Message{}
-		if wasAllocs(func() {
+		allocated := wasAllocs(func() {
 			// Case with ChannelNumber on stack.
 			n := ChannelNumber(6)
-			n.AddTo(stunMsg) //nolint
+			assert.NoError(t, n.AddTo(stunMsg))
 			stunMsg.Reset()
-		}) {
-			t.Error("Unexpected allocations")
-		}
+		})
+		assert.False(t, allocated)
 
 		n := ChannelNumber(12)
 		nP := &n
-		if wasAllocs(func() {
+		allocated = wasAllocs(func() {
 			// On heap.
-			nP.AddTo(stunMsg) //nolint
+			assert.NoError(t, nP.AddTo(stunMsg))
 			stunMsg.Reset()
-		}) {
-			t.Error("Unexpected allocations")
-		}
+		})
+		assert.False(t, allocated)
 	})
 	t.Run("AddTo", func(t *testing.T) {
 		stunMsg := new(stun.Message)
 		chanNumber := ChannelNumber(6)
-		if err := chanNumber.AddTo(stunMsg); err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, chanNumber.AddTo(stunMsg))
+
 		stunMsg.WriteHeader()
 		t.Run("GetFrom", func(t *testing.T) {
 			decoded := new(stun.Message)
-			if _, err := decoded.Write(stunMsg.Raw); err != nil {
-				t.Fatal("failed to decode message:", err)
-			}
+			_, err := decoded.Write(stunMsg.Raw)
+			assert.NoError(t, err)
+
 			var numDecoded ChannelNumber
-			if err := numDecoded.GetFrom(decoded); err != nil {
-				t.Fatal(err)
-			}
-			if numDecoded != chanNumber {
-				t.Errorf("Decoded %d, expected %d", numDecoded, chanNumber)
-			}
-			if wasAllocs(func() {
+			err = numDecoded.GetFrom(decoded)
+			assert.NoError(t, err)
+			assert.Equal(t, chanNumber, numDecoded)
+
+			allocated := wasAllocs(func() {
 				var num ChannelNumber
-				num.GetFrom(decoded) //nolint
-			}) {
-				t.Error("Unexpected allocations")
-			}
+				assert.NoError(t, num.GetFrom(decoded))
+			})
+			assert.False(t, allocated)
+
 			t.Run("HandleErr", func(t *testing.T) {
 				m := new(stun.Message)
 				nHandle := new(ChannelNumber)
-				if err := nHandle.GetFrom(m); !errors.Is(err, stun.ErrAttributeNotFound) {
-					t.Errorf("%v should be not found", err)
-				}
+				assert.ErrorIs(t, nHandle.GetFrom(m), stun.ErrAttributeNotFound)
+
 				m.Add(stun.AttrChannelNumber, []byte{1, 2, 3})
-				if !stun.IsAttrSizeInvalid(nHandle.GetFrom(m)) {
-					t.Error("IsAttrSizeInvalid should be true")
-				}
+				assert.True(t, stun.IsAttrSizeInvalid(nHandle.GetFrom(m)))
 			})
 		})
 	})
@@ -114,8 +99,7 @@ func TestChannelNumber_Valid(t *testing.T) {
 		{MaxChannelNumber, true},
 		{MaxChannelNumber + 1, false},
 	} {
-		if v := tc.n.Valid(); v != tc.value {
-			t.Errorf("unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)
-		}
+		v := tc.n.Valid()
+		assert.Equalf(t, tc.value, v, "unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)
 	}
 }

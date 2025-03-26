@@ -26,17 +26,13 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		m := &stun.Message{}
 		lifetimeDuration := allocationLifeTime(m)
-
-		if lifetimeDuration != proto.DefaultLifetime {
-			t.Errorf("Allocation lifetime should be default time duration")
-		}
-
+		assert.Equal(t, proto.DefaultLifetime, lifetimeDuration,
+			"Allocation lifetime should be default time duration")
 		assert.NoError(t, lifetime.AddTo(m))
 
 		lifetimeDuration = allocationLifeTime(m)
-		if lifetimeDuration != lifetime.Duration {
-			t.Errorf("Expect lifetimeDuration is %s, but %s", lifetime.Duration, lifetimeDuration)
-		}
+		assert.Equal(t, lifetime.Duration, lifetimeDuration,
+			"Allocation lifetime should be equal to the one set in the message")
 	})
 
 	// If lifetime is bigger than maximumLifetime
@@ -49,9 +45,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		_ = lifetime.AddTo(m2)
 
 		lifetimeDuration := allocationLifeTime(m2)
-		if lifetimeDuration != proto.DefaultLifetime {
-			t.Errorf("Expect lifetimeDuration is %s, but %s", proto.DefaultLifetime, lifetimeDuration)
-		}
+		assert.Equal(t, proto.DefaultLifetime, lifetimeDuration)
 	})
 
 	t.Run("DeletionZeroLifetime", func(t *testing.T) {

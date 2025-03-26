@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAddr_FromUDPAddr(t *testing.T) {
@@ -16,12 +18,10 @@ func TestAddr_FromUDPAddr(t *testing.T) {
 	}
 	a := new(Addr)
 	a.FromUDPAddr(u)
-	if !u.IP.Equal(a.IP) || u.Port != a.Port || u.String() != a.String() {
-		t.Error("not equal")
-	}
-	if a.Network() != "turn" {
-		t.Error("unexpected network")
-	}
+	assert.True(t, u.IP.Equal(a.IP))
+	assert.Equal(t, u.Port, a.Port)
+	assert.Equal(t, u.String(), a.String())
+	assert.Equal(t, "turn", a.Network())
 }
 
 func TestAddr_EqualIP(t *testing.T) {
@@ -33,12 +33,8 @@ func TestAddr_EqualIP(t *testing.T) {
 		IP:   net.IPv4(127, 0, 0, 1),
 		Port: 1338,
 	}
-	if a.Equal(b) {
-		t.Error("a != b")
-	}
-	if !a.EqualIP(b) {
-		t.Error("a.IP should equal to b.IP")
-	}
+	assert.False(t, a.Equal(b))
+	assert.True(t, a.EqualIP(b))
 }
 
 func TestFiveTuple_Equal(t *testing.T) {
@@ -74,11 +70,7 @@ func TestFiveTuple_Equal(t *testing.T) {
 			},
 		},
 	} {
-		if v := tc.a.Equal(tc.b); v != tc.v {
-			t.Errorf("(%s) %s [%v!=%v] %s",
-				tc.name, tc.a, v, tc.v, tc.b,
-			)
-		}
+		assert.Equal(t, tc.v, tc.a.Equal(tc.b), "(%s) %s [%v!=%v] %s", tc.name, tc.a, tc.v, tc.b, tc.b)
 	}
 }
 
@@ -94,7 +86,5 @@ func TestFiveTuple_String(t *testing.T) {
 			IP:   net.IPv4(127, 0, 0, 1),
 		},
 	})
-	if s != "127.0.0.1:200->127.0.0.1:100 (UDP)" {
-		t.Error("unexpected stringer output")
-	}
+	assert.Equal(t, "127.0.0.1:200->127.0.0.1:100 (UDP)", s, "unexpected stringer output")
 }

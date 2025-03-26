@@ -9,24 +9,21 @@ import (
 	"time"
 
 	"github.com/pion/turn/v4/internal/proto"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestChannelBind(t *testing.T) {
 	c := newChannelBind(2 * time.Second)
-
-	if c.allocation.GetChannelByNumber(c.Number) != c {
-		t.Errorf("GetChannelByNumber(%d) shouldn't be nil after added to allocation", c.Number)
-	}
+	assert.Equalf(t, c, c.allocation.GetChannelByNumber(c.Number),
+		"GetChannelByNumber(%d) shouldn't be nil after added to allocation", c.Number)
 }
 
 func TestChannelBindStart(t *testing.T) {
 	c := newChannelBind(2 * time.Second)
 
 	time.Sleep(3 * time.Second)
-
-	if c.allocation.GetChannelByNumber(c.Number) != nil {
-		t.Errorf("GetChannelByNumber(%d) should be nil if timeout", c.Number)
-	}
+	assert.Nil(t, c.allocation.GetChannelByNumber(c.Number),
+		"GetChannelByNumber(%d) should be nil after timeout", c.Number)
 }
 
 func TestChannelBindReset(t *testing.T) {
@@ -35,10 +32,8 @@ func TestChannelBindReset(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	c.refresh(3 * time.Second)
 	time.Sleep(2 * time.Second)
-
-	if c.allocation.GetChannelByNumber(c.Number) == nil {
-		t.Errorf("GetChannelByNumber(%d) shouldn't be nil after refresh", c.Number)
-	}
+	assert.NotNil(t, c.allocation.GetChannelByNumber(c.Number),
+		"GetChannelByNumber(%d) shouldn't be nil after refresh", c.Number)
 }
 
 func newChannelBind(lifetime time.Duration) *ChannelBind {

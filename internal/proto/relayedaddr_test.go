@@ -18,14 +18,11 @@ func TestRelayedAddress(t *testing.T) {
 		Port: 333,
 	}
 	t.Run("String", func(t *testing.T) {
-		if a.String() != "111.11.1.2:333" {
-			t.Error("invalid string")
-		}
+		assert.Equal(t, "111.11.1.2:333", a.String())
 	})
 	m := new(stun.Message)
-	if err := a.AddTo(m); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, a.AddTo(m))
+
 	m.WriteHeader()
 	decoded := new(stun.Message)
 

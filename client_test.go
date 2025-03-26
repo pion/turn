@@ -108,15 +108,11 @@ func TestClientWithSTUN(t *testing.T) {
 		// Block until go routine is started to make two almost parallel requests
 		<-started
 
-		if _, err = client.SendBindingRequestTo(to); err != nil {
-			t.Fatal(err)
-		}
+		_, err = client.SendBindingRequestTo(to)
+		assert.NoError(t, err)
 
 		<-finished
-		if err1 != nil {
-			t.Fatal(err)
-		}
-
+		assert.NoErrorf(t, err1, "should succeed: %v", err)
 		assert.NoError(t, pc.Close())
 	})
 
@@ -244,8 +240,7 @@ func TestTCPClient(t *testing.T) {
 
 	peerAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:12345")
 	require.NoError(t, err)
-	err = client.CreatePermission(peerAddr)
-	require.NoError(t, err)
+	require.NoError(t, client.CreatePermission(peerAddr))
 
 	var cid proto.ConnectionID = 5
 	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
@@ -259,8 +254,7 @@ func TestTCPClient(t *testing.T) {
 	msg, err := stun.Build(attrs...)
 	require.NoError(t, err)
 
-	err = client.handleSTUNMessage(msg.Raw, peerAddr)
-	require.NoError(t, err)
+	require.NoError(t, client.handleSTUNMessage(msg.Raw, peerAddr))
 
 	// Shutdown
 	require.NoError(t, allocation.Close())

@@ -7,9 +7,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestChannelData_Encode(t *testing.T) {
@@ -20,15 +21,9 @@ func TestChannelData_Encode(t *testing.T) {
 	chanData.Encode()
 	b := &ChannelData{}
 	b.Raw = append(b.Raw, chanData.Raw...)
-	if err := b.Decode(); err != nil {
-		t.Error(err)
-	}
-	if !b.Equal(chanData) {
-		t.Error("not equal")
-	}
-	if !IsChannelData(b.Raw) || !IsChannelData(chanData.Raw) {
-		t.Error("unexpected IsChannelData")
-	}
+	assert.NoError(t, b.Decode())
+	assert.True(t, b.Equal(chanData))
+	assert.True(t, IsChannelData(b.Raw) && IsChannelData(chanData.Raw))
 }
 
 func TestChannelData_Equal(t *testing.T) {
@@ -91,9 +86,7 @@ func TestChannelData_Equal(t *testing.T) {
 			},
 		},
 	} {
-		if v := tc.a.Equal(tc.b); v != tc.value {
-			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.value, v)
-		}
+		assert.Equal(t, tc.value, tc.a.Equal(tc.b))
 	}
 }
 
@@ -131,9 +124,7 @@ func TestChannelData_Decode(t *testing.T) {
 		m := &ChannelData{
 			Raw: tc.buf,
 		}
-		if err := m.Decode(); !errors.Is(err, tc.err) {
-			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.err, err)
-		}
+		assert.ErrorIs(t, m.Decode(), tc.err)
 	}
 }
 
@@ -147,9 +138,7 @@ func TestChannelData_Reset(t *testing.T) {
 	copy(buf, d.Raw)
 	d.Reset()
 	d.Raw = buf
-	if err := d.Decode(); err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, d.Decode())
 }
 
 func TestIsChannelData(t *testing.T) {
@@ -170,9 +159,7 @@ func TestIsChannelData(t *testing.T) {
 			buf:  []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		},
 	} {
-		if v := IsChannelData(tc.buf); v != tc.value {
-			t.Errorf("unexpected: (%s) %v != %v", tc.name, tc.value, v)
-		}
+		assert.Equal(t, tc.value, IsChannelData(tc.buf))
 	}
 }
 
@@ -210,9 +197,7 @@ func BenchmarkChannelData_Decode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		d.Reset()
 		d.Raw = buf
-		if err := d.Decode(); err != nil {
-			b.Error(err)
-		}
+		assert.NoError(b, d.Decode())
 	}
 }
 
@@ -227,9 +212,7 @@ func TestChromeChannelData(t *testing.T) {
 	// Decoding hex data into binary.
 	for s.Scan() {
 		b, err := hex.DecodeString(s.Text())
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 		data = append(data, b)
 	}
 	// All hex streams decoded to raw binary format and stored in data slice.
@@ -237,9 +220,8 @@ func TestChromeChannelData(t *testing.T) {
 	for i, packet := range data {
 		chanData := new(ChannelData)
 		chanData.Raw = packet
-		if err := chanData.Decode(); err != nil {
-			t.Errorf("Packet %d: %v", i, err)
-		}
+		assert.NoError(t, chanData.Decode(), "Packet %d errored", i)
+
 		encoded := &ChannelData{
 			Data:   chanData.Data,
 			Number: chanData.Number,
@@ -247,16 +229,10 @@ func TestChromeChannelData(t *testing.T) {
 		encoded.Encode()
 		decoded := new(ChannelData)
 		decoded.Raw = encoded.Raw
-		if err := decoded.Decode(); err != nil {
-			t.Error(err)
-		}
-		if !decoded.Equal(chanData) {
-			t.Error("should be equal")
-		}
+		assert.NoError(t, decoded.Decode())
+		assert.True(t, decoded.Equal(chanData))
 
 		messages = append(messages, chanData)
 	}
-	if len(messages) != 2 {
-		t.Error("unexpected message slice list")
-	}
+	assert.Equal(t, 2, len(messages), "unexpected number of messages")
 }
