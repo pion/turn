@@ -221,7 +221,6 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 
 	serverAddr := "127.0.0.1:13478"
-	require.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
 		Conn:           NewSTUNConn(conn),
@@ -260,4 +259,69 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, allocation.Close())
 	require.NoError(t, conn.Close())
 	require.NoError(t, server.Close())
+}
+
+func TestTCPClientWithoutAddress(t *testing.T) {
+	// Setup server
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
+			// Sleep needed for sending retransmission.
+			time.Sleep(time.Millisecond)
+
+			return GenerateAuthKey(username, realm, "pass"), true
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: tcpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	assert.NoError(t, err)
+
+	// Test tcp client without turn server address with small RTO.
+	conn, err := net.Dial("tcp", "127.0.0.1:13478")
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:     NewSTUNConn(conn),
+		Username: "foo",
+		Password: "pass",
+		RTO:      time.Nanosecond,
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+	defer client.Close()
+
+	_, err = client.Allocate()
+	// Due to small RTO all retrasmissions fail.
+	assert.ErrorIs(t, err, errAllRetransmissionsFailed)
+	assert.NoError(t, conn.Close())
+
+	// Test tcp client without turn server with successful allocation.
+	conn, err = net.Dial("tcp", "127.0.0.1:13478")
+	assert.NoError(t, err)
+
+	client, err = NewClient(&ClientConfig{
+		Conn:     NewSTUNConn(conn),
+		Username: "foo",
+		Password: "pass",
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	relayConn, err := client.Allocate()
+	assert.NoError(t, err)
+
+	// Shutdown
+	assert.NoError(t, relayConn.Close())
+	assert.NoError(t, conn.Close())
+	assert.NoError(t, server.Close())
 }

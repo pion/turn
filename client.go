@@ -662,7 +662,7 @@ func (c *Client) onRtxTimeout(trKey string, nRtx int) {
 	}
 
 	c.log.Tracef("Retransmitting transaction %s to %s (nRtx=%d)",
-		trKey, tr.To.String(), nRtx)
+		trKey, tr.To, nRtx)
 	_, err := c.conn.WriteTo(tr.Raw, tr.To)
 	if err != nil {
 		c.trMap.Delete(trKey)
