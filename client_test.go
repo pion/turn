@@ -291,13 +291,10 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
-		TURNServerAddr: "unresolvable.turn.server.address:13478",
-		Conn:           NewSTUNConn(conn),
-		Username:       "foo",
-		Password:       "pass",
-		RTO:            time.Nanosecond,
-
-		IgnoreTURNResolveErrors: true,
+		Conn:     NewSTUNConn(conn),
+		Username: "foo",
+		Password: "pass",
+		RTO:      time.Nanosecond,
 	})
 	assert.NoError(t, err)
 	assert.NoError(t, client.Listen())
@@ -327,4 +324,28 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, relayConn.Close())
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, server.Close())
+}
+
+func TestClientTURNResolving(t *testing.T) {
+	listener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
+	assert.NoError(t, err)
+
+	conn, err := net.Dial("tcp", "127.0.0.1:13478")
+	assert.NoError(t, err)
+
+	_, err = NewClient(&ClientConfig{
+		TURNServerAddr: "unresolvable.turn.server.address:13478",
+		Conn:           NewSTUNConn(conn),
+	})
+	assert.Error(t, err)
+
+	_, err = NewClient(&ClientConfig{
+		TURNServerAddr:          "unresolvable.turn.server.address:13478",
+		Conn:                    NewSTUNConn(conn),
+		IgnoreTURNResolveErrors: true,
+	})
+	assert.NoError(t, err)
+
+	assert.NoError(t, conn.Close())
+	assert.NoError(t, listener.Close())
 }
