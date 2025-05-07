@@ -291,10 +291,13 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
-		Conn:     NewSTUNConn(conn),
-		Username: "foo",
-		Password: "pass",
-		RTO:      time.Nanosecond,
+		TURNServerAddr: "unresolvable.turn.server.address:13478",
+		Conn:           NewSTUNConn(conn),
+		Username:       "foo",
+		Password:       "pass",
+		RTO:            time.Nanosecond,
+
+		IgnoreTURNResolveErrors: true,
 	})
 	assert.NoError(t, err)
 	assert.NoError(t, client.Listen())

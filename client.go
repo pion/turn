@@ -47,6 +47,8 @@ type ClientConfig struct {
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
 	Net            transport.Net
 	LoggerFactory  logging.LoggerFactory
+
+	IgnoreTURNResolveErrors bool // TURN server address is not required for some configurations (e.g. proxy)
 }
 
 // Client is a STUN server client.
@@ -114,10 +116,13 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	if len(config.TURNServerAddr) > 0 {
 		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
 		if err != nil {
-			return nil, err
+			if !config.IgnoreTURNResolveErrors {
+				return nil, err
+			}
+			log.Debugf("Failed to resolve TURN server %s: %s", config.TURNServerAddr, err)
+		} else {
+			log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 		}
-
-		log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 	}
 
 	client := &Client{
