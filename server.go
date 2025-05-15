@@ -233,7 +233,7 @@ func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Man
 			ChannelBindTimeout: s.channelBindTimeout,
 			NonceHash:          s.nonceHash,
 		}); err != nil {
-			s.log.Errorf("Failed to handle datagram: %v", err)
+			s.log.Debugf("Failed to handle datagram: %v", err)
 		}
 	}
 }
