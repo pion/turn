@@ -18,7 +18,7 @@ import (
 
 const (
 	maxReadQueueSize    = 1024
-	permRefreshInterval = 20 * time.Second
+	permRefreshInterval = 15 * time.Second
 	maxRetryAttempts    = 3
 )
 
