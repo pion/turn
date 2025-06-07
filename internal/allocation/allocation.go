@@ -34,7 +34,7 @@ type Allocation struct {
 	channelBindingsLock sync.RWMutex
 	channelBindings     []*ChannelBind
 	lifetimeTimer       *time.Timer
-	closed              chan interface{}
+	closed              chan any
 	log                 logging.LeveledLogger
 
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
@@ -50,7 +50,7 @@ func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.
 		TurnSocket:  turnSocket,
 		fiveTuple:   fiveTuple,
 		permissions: make(map[string]*Permission, 64),
-		closed:      make(chan interface{}),
+		closed:      make(chan any),
 		log:         log,
 	}
 }
