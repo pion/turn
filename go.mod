@@ -3,7 +3,7 @@ module github.com/pion/turn/v4
 go 1.20
 
 require (
-	github.com/pion/logging v0.2.3
+	github.com/pion/logging v0.2.4
 	github.com/pion/randutil v0.1.0
 	github.com/pion/stun/v3 v3.0.0
 	github.com/pion/transport/v3 v3.0.7
