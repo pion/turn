@@ -36,6 +36,7 @@ type Allocation struct {
 	lifetimeTimer       *time.Timer
 	closed              chan any
 	log                 logging.LeveledLogger
+	username            string
 
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
@@ -45,13 +46,14 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new instance of NewAllocation.
-func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
+func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger, username string) *Allocation {
 	return &Allocation{
 		TurnSocket:  turnSocket,
 		fiveTuple:   fiveTuple,
 		permissions: make(map[string]*Permission, 64),
 		closed:      make(chan any),
 		log:         log,
+		username:    username,
 	}
 }
 

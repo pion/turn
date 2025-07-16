@@ -18,6 +18,7 @@ type ManagerConfig struct {
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+	UserQuota          int
 }
 
 type reservation struct {
@@ -32,6 +33,9 @@ type Manager struct {
 
 	allocations  map[FiveTupleFingerprint]*Allocation
 	reservations []*reservation
+
+	userCounts map[string]int
+	userQuota  int
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
@@ -55,6 +59,8 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
+		userCounts:         make(map[string]int),
+		userQuota:          config.UserQuota,
 	}, nil
 }
 
@@ -94,6 +100,7 @@ func (m *Manager) CreateAllocation(
 	turnSocket net.PacketConn,
 	requestedPort int,
 	lifetime time.Duration,
+	username string,
 ) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
@@ -111,7 +118,7 @@ func (m *Manager) CreateAllocation(
 	if alloc := m.GetAllocation(fiveTuple); alloc != nil {
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
-	alloc := NewAllocation(turnSocket, fiveTuple, m.log)
+	alloc := NewAllocation(turnSocket, fiveTuple, m.log, username)
 
 	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
 	if err != nil {
@@ -142,6 +149,12 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 
 	m.lock.Lock()
 	allocation := m.allocations[fingerprint]
+	if m.userCounts != nil && allocation != nil {
+		m.userCounts[allocation.username] -= 1
+		if m.userCounts[allocation.username] == 0 {
+			delete(m.userCounts, allocation.username)
+		}
+	}
 	delete(m.allocations, fingerprint)
 	m.lock.Unlock()
 
@@ -227,4 +240,26 @@ func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
 	}
 
 	return errAdminProhibited
+}
+
+// IsQuotaAllowed checks if number of allocation exceeds the configured quota
+func (m *Manager) IsQuotaAllowed(username string) bool {
+	if username == "" || m.userQuota <= 0 {
+		return true
+	}
+	// check if quota exceeds
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	currentQuota := 0
+	if quota, ok := m.userCounts[username]; ok {
+		if quota >= m.userQuota {
+			m.log.Warnf("User quota exceeded for user: %s", username)
+			return false
+		}
+		currentQuota = quota
+	}
+	m.userCounts[username] = currentQuota + 1
+
+	return true
 }
