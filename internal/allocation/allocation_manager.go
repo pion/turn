@@ -151,7 +151,7 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 	allocation := m.allocations[fingerprint]
 	if m.userCounts != nil && allocation != nil {
 		m.userCounts[allocation.username] -= 1
-		if m.userCounts[allocation.username] == 0 {
+		if m.userCounts[allocation.username] < 1 {
 			delete(m.userCounts, allocation.username)
 		}
 	}
@@ -242,7 +242,7 @@ func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
 	return errAdminProhibited
 }
 
-// IsQuotaAllowed checks if number of allocation exceeds the configured quota
+// IsQuotaAllowed checks if number of allocation exceeds the configured quota.
 func (m *Manager) IsQuotaAllowed(username string) bool {
 	if username == "" || m.userQuota <= 0 {
 		return true
@@ -255,6 +255,7 @@ func (m *Manager) IsQuotaAllowed(username string) bool {
 	if quota, ok := m.userCounts[username]; ok {
 		if quota >= m.userQuota {
 			m.log.Warnf("User quota exceeded for user: %s", username)
+
 			return false
 		}
 		currentQuota = quota

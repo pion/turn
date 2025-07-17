@@ -138,5 +138,6 @@ func getUsernameFromStunMessage(m *stun.Message) string {
 	if err := usernameAttr.GetFrom(m); err == nil {
 		return usernameAttr.String()
 	}
+
 	return ""
 }

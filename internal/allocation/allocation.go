@@ -46,7 +46,12 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new instance of NewAllocation.
-func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger, username string) *Allocation {
+func NewAllocation(
+	turnSocket net.PacketConn,
+	fiveTuple *FiveTuple,
+	log logging.LeveledLogger,
+	username string,
+) *Allocation {
 	return &Allocation{
 		TurnSocket:  turnSocket,
 		fiveTuple:   fiveTuple,

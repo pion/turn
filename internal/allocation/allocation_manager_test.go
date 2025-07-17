@@ -28,6 +28,7 @@ func TestManager(t *testing.T) {
 		{"CreateAllocation", subTestCreateAllocation},
 		{"CreateAllocationDuplicateFiveTuple", subTestCreateAllocationDuplicateFiveTuple},
 		{"DeleteAllocation", subTestDeleteAllocation},
+		{"QuotaAllocation", subTestUserQuotaAllocation},
 		{"AllocationTimeout", subTestAllocationTimeout},
 		{"Close", subTestManagerClose},
 		{"GetRandomEvenPort", subTestGetRandomEvenPort},
@@ -115,6 +116,35 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	manager.DeleteAllocation(fiveTuple)
 	a = manager.GetAllocation(fiveTuple)
 	assert.Nilf(t, a, "Failed to delete allocation %v", fiveTuple)
+}
+
+func subTestUserQuotaAllocation(t *testing.T, turnSocket net.PacketConn) {
+	t.Helper()
+
+	manager, err := newTestManager()
+	manager.userQuota = 1
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	manager.IsQuotaAllowed("user")
+	allocationResponse, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "user")
+	assert.NotNil(t, allocationResponse, "Failed to create allocation")
+	assert.NoError(t, err, "Failed to create allocation")
+
+	// multiple quota check should fail
+	for i := 0; i < 5; i++ {
+		assert.False(t, manager.IsQuotaAllowed("user"), "User quota should not be allowed")
+	}
+
+	allocationResponse = manager.GetAllocation(fiveTuple)
+	assert.NotNil(t, allocationResponse, "Failed to get allocation right after creation")
+
+	manager.DeleteAllocation(fiveTuple)
+	allocationResponse = manager.GetAllocation(fiveTuple)
+	assert.Nilf(t, allocationResponse, "Failed to delete allocation %v", fiveTuple)
+	assert.Equal(t, 0, len(manager.userCounts), "Failed to delete user from user quota map")
+
+	assert.True(t, manager.IsQuotaAllowed("user"), "User quota should be allowed")
 }
 
 // Test that allocation should be closed if timeout.
