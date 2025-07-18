@@ -132,3 +132,12 @@ func allocationLifeTime(m *stun.Message) time.Duration {
 
 	return lifetimeDuration
 }
+
+func getUsernameFromStunMessage(m *stun.Message) string {
+	usernameAttr := &stun.Username{}
+	if err := usernameAttr.GetFrom(m); err == nil {
+		return usernameAttr.String()
+	}
+
+	return ""
+}

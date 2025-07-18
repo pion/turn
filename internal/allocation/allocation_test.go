@@ -48,7 +48,7 @@ func TestAllocation(t *testing.T) {
 func subTestGetPermission(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -86,7 +86,7 @@ func subTestGetPermission(t *testing.T) {
 func subTestAddPermission(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -105,7 +105,7 @@ func subTestAddPermission(t *testing.T) {
 func subTestRemovePermission(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -128,7 +128,7 @@ func subTestRemovePermission(t *testing.T) {
 func subTestAddChannelBind(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -152,7 +152,7 @@ func subTestAddChannelBind(t *testing.T) {
 func subTestGetChannelByNumber(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -171,7 +171,7 @@ func subTestGetChannelByNumber(t *testing.T) {
 func subTestGetChannelByAddr(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -191,7 +191,7 @@ func subTestGetChannelByAddr(t *testing.T) {
 func subTestRemoveChannelBind(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
@@ -212,7 +212,7 @@ func subTestRemoveChannelBind(t *testing.T) {
 func subTestAllocationRefresh(t *testing.T) {
 	t.Helper()
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -234,7 +234,7 @@ func subTestAllocationClose(t *testing.T) {
 	l, err := net.ListenPacket(network, "0.0.0.0:0")
 	assert.NoError(t, err)
 
-	alloc := NewAllocation(nil, nil, nil)
+	alloc := NewAllocation(nil, nil, nil, "")
 	alloc.RelaySocket = l
 	// Add mock lifetimeTimer
 	alloc.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
@@ -285,7 +285,7 @@ func subTestPacketHandler(t *testing.T) {
 	alloc, err := manager.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, 0, proto.DefaultLifetime)
+	}, turnSocket, 0, proto.DefaultLifetime, "user")
 
 	assert.NoError(t, err, "should succeed")
 
@@ -345,7 +345,7 @@ func subTestPacketHandler(t *testing.T) {
 func subTestResponseCache(t *testing.T) {
 	t.Helper()
 
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, nil, "")
 	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
 	responseAttrs := []stun.Setter{
 		&proto.Lifetime{

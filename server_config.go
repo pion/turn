@@ -130,6 +130,10 @@ type ServerConfig struct {
 
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
+
+	// Sets user-quota for a turn allocation.
+	// Default to 0 i.e no limit on number of allocations
+	UserQuota int
 }
 
 func (s *ServerConfig) validate() error {

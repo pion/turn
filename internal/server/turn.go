@@ -49,6 +49,11 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
 		&stun.ErrorCodeAttribute{Code: stun.CodeInsufficientCapacity},
 	)
+	quotaReachedMessage := buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+		&stun.ErrorCodeAttribute{Code: stun.CodeAllocQuotaReached},
+	)
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
@@ -145,6 +150,16 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		}
 	}
 
+	// 6.1 The server checks for allowed user-quota for number of allocations.
+	//     If the number of allocations exceeds the configured user-quota,
+	//     then it won't allow further allocation. If it configured user-quota is 0
+	//     or actual allocations are below or equal to user-quota, then
+	//     allocations will be allowed.
+	username := getUsernameFromStunMessage(stunMsg)
+	if !req.AllocationManager.IsQuotaAllowed(username) {
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, quotaReachedMessage...)
+	}
+
 	// 7. At any point, the server MAY choose to reject the request with a
 	//    486 (Allocation Quota Reached) error if it feels the client is
 	//    trying to exceed some locally defined allocation quota.  The
@@ -161,7 +176,8 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		fiveTuple,
 		req.Conn,
 		requestedPort,
-		lifetimeDuration)
+		lifetimeDuration,
+		username)
 	if err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, insufficientCapacityMsg...)
 	}

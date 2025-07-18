@@ -28,6 +28,7 @@ func TestManager(t *testing.T) {
 		{"CreateAllocation", subTestCreateAllocation},
 		{"CreateAllocationDuplicateFiveTuple", subTestCreateAllocationDuplicateFiveTuple},
 		{"DeleteAllocation", subTestDeleteAllocation},
+		{"QuotaAllocation", subTestUserQuotaAllocation},
 		{"AllocationTimeout", subTestAllocationTimeout},
 		{"Close", subTestManagerClose},
 		{"GetRandomEvenPort", subTestGetRandomEvenPort},
@@ -52,15 +53,15 @@ func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
 	m, err := newTestManager()
 	assert.NoError(t, err)
 
-	a, err := m.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime)
+	a, err := m.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime, "")
 	assert.Nil(t, a, "Illegally created allocation with nil FiveTuple")
 	assert.Error(t, err, "Illegally created allocation with nil FiveTuple")
 
-	a, err = m.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime)
+	a, err = m.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime, "")
 	assert.Nil(t, a, "Illegally created allocation with nil turnSocket")
 	assert.Error(t, err, "Illegally created allocation with nil turnSocket")
 
-	a, err = m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0)
+	a, err = m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0, "")
 	assert.Nil(t, a, "Illegally created allocation with 0 lifetime")
 	assert.Error(t, err, "Illegally created allocation with 0 lifetime")
 }
@@ -73,7 +74,7 @@ func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime)
+	a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "user")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
@@ -89,11 +90,11 @@ func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.Pack
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime)
+	a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "user")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
-	a, err = m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime)
+	a, err = m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "user")
 	assert.Nil(t, a, "Was able to create allocation with same FiveTuple twice")
 	assert.Error(t, err, "Was able to create allocation with same FiveTuple twice")
 }
@@ -105,7 +106,7 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime)
+	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "user")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
@@ -115,6 +116,35 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	manager.DeleteAllocation(fiveTuple)
 	a = manager.GetAllocation(fiveTuple)
 	assert.Nilf(t, a, "Failed to delete allocation %v", fiveTuple)
+}
+
+func subTestUserQuotaAllocation(t *testing.T, turnSocket net.PacketConn) {
+	t.Helper()
+
+	manager, err := newTestManager()
+	manager.userQuota = 1
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	manager.IsQuotaAllowed("user")
+	allocationResponse, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "user")
+	assert.NotNil(t, allocationResponse, "Failed to create allocation")
+	assert.NoError(t, err, "Failed to create allocation")
+
+	// multiple quota check should fail
+	for i := 0; i < 5; i++ {
+		assert.False(t, manager.IsQuotaAllowed("user"), "User quota should not be allowed")
+	}
+
+	allocationResponse = manager.GetAllocation(fiveTuple)
+	assert.NotNil(t, allocationResponse, "Failed to get allocation right after creation")
+
+	manager.DeleteAllocation(fiveTuple)
+	allocationResponse = manager.GetAllocation(fiveTuple)
+	assert.Nilf(t, allocationResponse, "Failed to delete allocation %v", fiveTuple)
+	assert.Equal(t, 0, len(manager.userCounts), "Failed to delete user from user quota map")
+
+	assert.True(t, manager.IsQuotaAllowed("user"), "User quota should be allowed")
 }
 
 // Test that allocation should be closed if timeout.
@@ -130,7 +160,7 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	for index := range allocations {
 		fiveTuple := randomFiveTuple()
 
-		a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, lifetime)
+		a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, lifetime, "")
 		assert.NoErrorf(t, err, "Failed to create allocation with %v", fiveTuple)
 
 		allocations[index] = a
@@ -152,9 +182,9 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 
 	allocations := make([]*Allocation, 2)
 
-	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second)
+	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second, "")
 	allocations[0] = a1
-	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute)
+	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute, "")
 	allocations[1] = a2
 
 	// Make a1 timeout

@@ -71,7 +71,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 	}
 
 	for _, cfg := range server.packetConnConfigs {
-		am, err := server.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
+		am, err := server.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler, config.UserQuota)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
@@ -86,7 +86,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 	}
 
 	for _, cfg := range server.listenerConfigs {
-		am, err := server.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler)
+		am, err := server.createAllocationManager(cfg.RelayAddressGenerator, cfg.PermissionHandler, config.UserQuota)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create AllocationManager: %w", err)
 		}
@@ -184,6 +184,7 @@ func (n *nilAddressGenerator) AllocateConn(string, int) (net.Conn, net.Addr, err
 func (s *Server) createAllocationManager(
 	addrGenerator RelayAddressGenerator,
 	handler PermissionHandler,
+	userQuota int,
 ) (*allocation.Manager, error) {
 	if handler == nil {
 		handler = DefaultPermissionHandler
@@ -197,6 +198,7 @@ func (s *Server) createAllocationManager(
 		AllocateConn:       addrGenerator.AllocateConn,
 		PermissionHandler:  handler,
 		LeveledLogger:      s.log,
+		UserQuota:          userQuota,
 	})
 	if err != nil {
 		return am, err
