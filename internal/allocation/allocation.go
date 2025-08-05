@@ -35,6 +35,8 @@ type Allocation struct {
 	channelBindings     []*ChannelBind
 	lifetimeTimer       *time.Timer
 	closed              chan any
+	username, realm     string
+	eventHandler        EventHandler
 	log                 logging.LeveledLogger
 
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
@@ -45,13 +47,19 @@ type Allocation struct {
 }
 
 // NewAllocation creates a new instance of NewAllocation.
-func NewAllocation(turnSocket net.PacketConn, fiveTuple *FiveTuple, log logging.LeveledLogger) *Allocation {
+func NewAllocation(
+	turnSocket net.PacketConn,
+	fiveTuple *FiveTuple,
+	eventHandler EventHandler,
+	log logging.LeveledLogger,
+) *Allocation {
 	return &Allocation{
-		TurnSocket:  turnSocket,
-		fiveTuple:   fiveTuple,
-		permissions: make(map[string]*Permission, 64),
-		closed:      make(chan any),
-		log:         log,
+		TurnSocket:   turnSocket,
+		fiveTuple:    fiveTuple,
+		permissions:  make(map[string]*Permission, 64),
+		closed:       make(chan any),
+		eventHandler: eventHandler,
+		log:          log,
 	}
 }
 
@@ -82,6 +90,14 @@ func (a *Allocation) AddPermission(perms *Permission) {
 	a.permissions[fingerprint] = perms
 	a.permissionsLock.Unlock()
 
+	if a.eventHandler.OnPermissionCreated != nil {
+		if u, ok := perms.Addr.(*net.UDPAddr); ok {
+			a.eventHandler.OnPermissionCreated(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
+				a.fiveTuple.Protocol.String(), a.username, a.realm,
+				a.RelayAddr, u.IP)
+		}
+	}
+
 	perms.start(permissionTimeout)
 }
 
@@ -90,6 +106,26 @@ func (a *Allocation) RemovePermission(addr net.Addr) {
 	a.permissionsLock.Lock()
 	defer a.permissionsLock.Unlock()
 	delete(a.permissions, ipnet.FingerprintAddr(addr))
+
+	if a.eventHandler.OnPermissionDeleted != nil {
+		if u, ok := addr.(*net.UDPAddr); ok {
+			a.eventHandler.OnPermissionDeleted(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
+				a.fiveTuple.Protocol.String(), a.username, a.realm,
+				a.RelayAddr, u.IP)
+		}
+	}
+}
+
+// ListPermissions returns the permissions associated with an allocation.
+func (a *Allocation) ListPermissions() []*Permission {
+	ps := []*Permission{}
+	a.permissionsLock.RLock()
+	defer a.permissionsLock.RUnlock()
+	for _, p := range a.permissions {
+		ps = append(ps, p)
+	}
+
+	return ps
 }
 
 // AddChannelBind adds a new ChannelBind to the allocation, it also updates the
@@ -114,6 +150,12 @@ func (a *Allocation) AddChannelBind(chanBind *ChannelBind, lifetime time.Duratio
 
 		// Channel binds also refresh permissions.
 		a.AddPermission(NewPermission(chanBind.Peer, a.log))
+
+		if a.eventHandler.OnChannelCreated != nil {
+			a.eventHandler.OnChannelCreated(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
+				a.fiveTuple.Protocol.String(), a.username, a.realm,
+				a.RelayAddr, chanBind.Peer, uint16(chanBind.Number))
+		}
 	} else {
 		channelByNumber.refresh(lifetime)
 
@@ -131,6 +173,12 @@ func (a *Allocation) RemoveChannelBind(number proto.ChannelNumber) bool {
 
 	for i := len(a.channelBindings) - 1; i >= 0; i-- {
 		if a.channelBindings[i].Number == number {
+			if a.eventHandler.OnChannelDeleted != nil {
+				a.eventHandler.OnChannelDeleted(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
+					a.fiveTuple.Protocol.String(), a.username, a.realm,
+					a.RelayAddr, a.channelBindings[i].Peer, uint16(a.channelBindings[i].Number))
+			}
+
 			a.channelBindings = append(a.channelBindings[:i], a.channelBindings[i+1:]...)
 
 			return true
@@ -164,6 +212,16 @@ func (a *Allocation) GetChannelByAddr(addr net.Addr) *ChannelBind {
 	}
 
 	return nil
+}
+
+// ListChannelBindings returns the channel bindings associated with an allocation.
+func (a *Allocation) ListChannelBindings() []*ChannelBind {
+	cs := []*ChannelBind{}
+	a.channelBindingsLock.RLock()
+	defer a.channelBindingsLock.RUnlock()
+	cs = append(cs, a.channelBindings...)
+
+	return cs
 }
 
 // Refresh updates the allocations lifetime.
@@ -201,17 +259,15 @@ func (a *Allocation) Close() error {
 
 	a.lifetimeTimer.Stop()
 
-	a.permissionsLock.RLock()
-	for _, p := range a.permissions {
+	for _, p := range a.ListPermissions() {
+		a.RemovePermission(p.Addr)
 		p.lifetimeTimer.Stop()
 	}
-	a.permissionsLock.RUnlock()
 
-	a.channelBindingsLock.RLock()
-	for _, c := range a.channelBindings {
+	for _, c := range a.ListChannelBindings() {
+		a.RemoveChannelBind(c.Number)
 		c.lifetimeTimer.Stop()
 	}
-	a.channelBindingsLock.RUnlock()
 
 	return a.RelaySocket.Close()
 }

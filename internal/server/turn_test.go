@@ -91,7 +91,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour)
+		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour, "", "")
 		assert.NoError(t, err)
 
 		assert.NotNil(t, req.AllocationManager.GetAllocation(fiveTuple))

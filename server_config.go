@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v4/internal/allocation"
 )
 
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
@@ -108,6 +109,10 @@ func GenerateAuthKey(username, realm, password string) []byte {
 	return h.Sum(nil)
 }
 
+// EventHandler is a set of callbacks that the server will call at certain hook points during an
+// allocation's lifecycle.
+type EventHandler = allocation.EventHandler
+
 // ServerConfig configures the Pion TURN Server.
 type ServerConfig struct {
 	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners
@@ -124,6 +129,9 @@ type ServerConfig struct {
 	// AuthHandler is a callback used to handle incoming auth requests,
 	// allowing users to customize Pion TURN with custom behavior
 	AuthHandler AuthHandler
+
+	// EventHandlers is a set of callbacks for tracking allocation lifecycle.
+	EventHandler EventHandler
 
 	// ChannelBindTimeout sets the lifetime of channel binding. Defaults to 10 minutes.
 	ChannelBindTimeout time.Duration

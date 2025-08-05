@@ -18,6 +18,7 @@ type ManagerConfig struct {
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+	EventHandler       EventHandler
 }
 
 type reservation struct {
@@ -36,6 +37,7 @@ type Manager struct {
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
+	EventHandler       EventHandler
 }
 
 // NewManager creates a new instance of Manager.
@@ -55,6 +57,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
+		EventHandler:       config.EventHandler,
 	}, nil
 }
 
@@ -94,6 +97,7 @@ func (m *Manager) CreateAllocation(
 	turnSocket net.PacketConn,
 	requestedPort int,
 	lifetime time.Duration,
+	username, realm string,
 ) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
@@ -111,7 +115,9 @@ func (m *Manager) CreateAllocation(
 	if alloc := m.GetAllocation(fiveTuple); alloc != nil {
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
-	alloc := NewAllocation(turnSocket, fiveTuple, m.log)
+	alloc := NewAllocation(turnSocket, fiveTuple, m.EventHandler, m.log)
+	alloc.username = username
+	alloc.realm = realm
 
 	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
 	if err != nil {
@@ -130,6 +136,11 @@ func (m *Manager) CreateAllocation(
 	m.lock.Lock()
 	m.allocations[fiveTuple.Fingerprint()] = alloc
 	m.lock.Unlock()
+
+	if m.EventHandler.OnAllocationCreated != nil {
+		m.EventHandler.OnAllocationCreated(fiveTuple.SrcAddr, fiveTuple.DstAddr,
+			fiveTuple.Protocol.String(), username, realm, relayAddr, requestedPort)
+	}
 
 	go alloc.packetHandler(m)
 
@@ -151,6 +162,11 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 
 	if err := allocation.Close(); err != nil {
 		m.log.Errorf("Failed to close allocation: %v", err)
+	}
+
+	if m.EventHandler.OnAllocationDeleted != nil {
+		m.EventHandler.OnAllocationDeleted(fiveTuple.SrcAddr, fiveTuple.DstAddr,
+			fiveTuple.Protocol.String(), allocation.username, allocation.realm)
 	}
 }
 

@@ -37,7 +37,7 @@ func TestChannelBindReset(t *testing.T) {
 }
 
 func newChannelBind(lifetime time.Duration) *ChannelBind {
-	a := NewAllocation(nil, nil, nil)
+	a := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, _ := net.ResolveUDPAddr("udp", "0.0.0.0:0")
 	c := &ChannelBind{

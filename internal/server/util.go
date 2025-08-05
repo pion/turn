@@ -114,10 +114,39 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(stunMsg); err != nil {
+		genAuthEvent(req, stunMsg, callingMethod, false)
+
 		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
+	genAuthEvent(req, stunMsg, callingMethod, true)
+
 	return stun.MessageIntegrity(ourKey), true, nil
+}
+
+func genAuthEvent(req Request, stunMsg *stun.Message, callingMethod stun.Method, verdict bool) {
+	if req.AllocationManager.EventHandler.OnAuth == nil {
+		return
+	}
+
+	realmAttr := &stun.Realm{}
+	if err := realmAttr.GetFrom(stunMsg); err != nil {
+		return
+	}
+
+	usernameAttr := &stun.Username{}
+	if err := usernameAttr.GetFrom(stunMsg); err != nil {
+		return
+	}
+
+	transportAttr := &proto.RequestedTransport{}
+	if err := transportAttr.GetFrom(stunMsg); err != nil {
+		transportAttr = &proto.RequestedTransport{Protocol: proto.ProtoUDP}
+	}
+
+	req.AllocationManager.EventHandler.OnAuth(req.SrcAddr, req.Conn.LocalAddr(),
+		transportAttr.Protocol.String(), usernameAttr.String(), realmAttr.String(),
+		callingMethod.String(), verdict)
 }
 
 func allocationLifeTime(m *stun.Message) time.Duration {

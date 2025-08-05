@@ -27,6 +27,7 @@ type Server struct {
 	realm              string
 	channelBindTimeout time.Duration
 	nonceHash          *server.NonceHash
+	eventHandler       EventHandler
 
 	packetConnConfigs  []PacketConnConfig
 	listenerConfigs    []ListenerConfig
@@ -64,6 +65,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		listenerConfigs:    config.ListenerConfigs,
 		nonceHash:          nonceHash,
 		inboundMTU:         mtu,
+		eventHandler:       config.EventHandler,
 	}
 
 	if server.channelBindTimeout == 0 {
@@ -196,6 +198,7 @@ func (s *Server) createAllocationManager(
 		AllocatePacketConn: addrGenerator.AllocatePacketConn,
 		AllocateConn:       addrGenerator.AllocateConn,
 		PermissionHandler:  handler,
+		EventHandler:       s.eventHandler,
 		LeveledLogger:      s.log,
 	})
 	if err != nil {
@@ -233,6 +236,9 @@ func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Man
 			ChannelBindTimeout: s.channelBindTimeout,
 			NonceHash:          s.nonceHash,
 		}); err != nil {
+			if s.eventHandler.OnAllocationError != nil {
+				s.eventHandler.OnAllocationError(addr, conn.LocalAddr(), allocation.UDP.String(), err.Error())
+			}
 			s.log.Debugf("Failed to handle datagram: %v", err)
 		}
 	}
