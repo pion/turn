@@ -20,7 +20,7 @@ const (
 )
 
 // NewNonceHash creates a NonceHash.
-func NewNonceHash() (*NonceHash, error) {
+func NewNonceHash() (NonceManager, error) {
 	key := make([]byte, nonceKeyLength)
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
