@@ -1011,6 +1011,58 @@ func TestSTUNOnly(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestQuotaReached(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	assert.NoError(t, err)
+
+	defer serverConn.Close() //nolint:errcheck
+
+	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			if pw, ok := credMap[username]; ok {
+				return pw, true
+			}
+			return nil, false //nolint:nlreturn
+		},
+		QuotaHandler: func(_, _ string, _ net.Addr) (ok bool) { return false },
+		Realm:        "pion.ly",
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	defer server.Close() //nolint:errcheck
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           conn,
+		STUNServerAddr: "127.0.0.1:3478",
+		TURNServerAddr: "127.0.0.1:3478",
+		Username:       "user",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+	defer client.Close()
+
+	_, err = client.Allocate()
+	assert.Equal(t, err.Error(), "Allocate error response (error 486: )")
+}
+
 func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	b.Helper()
 

@@ -157,6 +157,13 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	//    server is free to define this allocation quota any way it wishes,
 	//    but SHOULD define it based on the username used to authenticate
 	//    the request, and not on the client's transport address.
+	if req.QuotaHandler != nil && !req.QuotaHandler(usernameAttr.String(), realmAttr.String(), req.SrcAddr) {
+		quotaReachedMsg := buildMsg(stunMsg.TransactionID,
+			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodeAllocQuotaReached})
+
+		return buildAndSend(req.Conn, req.SrcAddr, quotaReachedMsg...)
+	}
 
 	// 8. Also at any point, the server MAY choose to reject the request
 	//    with a 300 (Try Alternate) error if it wishes to redirect the

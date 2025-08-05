@@ -29,6 +29,9 @@ type Request struct {
 	// User Configuration
 	AuthHandler func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)
 
+	// Quota Handler
+	QuotaHandler func(username string, realm string, srcAddr net.Addr) (ok bool)
+
 	Log                logging.LeveledLogger
 	Realm              string
 	ChannelBindTimeout time.Duration
