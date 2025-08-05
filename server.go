@@ -27,7 +27,7 @@ type Server struct {
 	quotaHandler       QuotaHandler
 	realm              string
 	channelBindTimeout time.Duration
-	nonceHash          *server.NonceHash
+	nonceHash          server.NonceManager
 	eventHandler       EventHandler
 
 	packetConnConfigs  []PacketConnConfig
@@ -52,7 +52,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		mtu = config.InboundMTU
 	}
 
-	nonceHash, err := server.NewNonceHash()
+	nonceHash, err := server.NewShortNonceHash(0)
 	if err != nil {
 		return nil, err
 	}

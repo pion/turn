@@ -24,7 +24,7 @@ type Request struct {
 
 	// Server State
 	AllocationManager *allocation.Manager
-	NonceHash         *NonceHash
+	NonceHash         NonceManager
 
 	// User Configuration
 	AuthHandler func(username string, realm string, srcAddr net.Addr) (key []byte, ok bool)

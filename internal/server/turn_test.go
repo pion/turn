@@ -73,7 +73,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		nonceHash, err := NewNonceHash()
+		nonceHash, err := NewShortNonceHash(0)
 		assert.NoError(t, err)
 		staticKey, err := nonceHash.Generate()
 		assert.NoError(t, err)
