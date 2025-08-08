@@ -7,6 +7,7 @@
 package turn
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -52,6 +53,65 @@ type eventHandlerArgs struct {
 	verdict                                bool
 	requestedPort                          int
 	channelNumber                          uint16
+}
+
+// mtuConn enforces a maxMTU limit and returns an error on overflow.
+type mtuConn struct {
+	net.PacketConn
+	mtu int
+}
+
+func (c *mtuConn) WriteTo(data []byte, addr net.Addr) (int, error) {
+	if len(data) > c.mtu {
+		return 0, errors.New("MTU violation") //nolint:err113
+	}
+
+	return c.PacketConn.WriteTo(data, addr)
+}
+
+type mtuConnGenerator struct {
+	RelayAddressGenerator
+	mtu int
+}
+
+// mtuConnGenerator is a relay address generator that wraps the PacketConn returned by a base generator in an mtuConn.
+func (g *mtuConnGenerator) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+	conn, addr, err := g.RelayAddressGenerator.AllocatePacketConn(network, requestedPort)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &mtuConn{conn, g.mtu}, addr, nil
+}
+
+// truncConn truncates send payloads to a given max length.
+type truncConn struct {
+	net.PacketConn
+	mtu int
+}
+
+func (c *truncConn) WriteTo(data []byte, addr net.Addr) (int, error) {
+	if len(data) > c.mtu {
+		return c.PacketConn.WriteTo(data[0:c.mtu], addr)
+	}
+
+	return c.PacketConn.WriteTo(data, addr)
+}
+
+type truncConnGenerator struct {
+	RelayAddressGenerator
+	mtu int
+}
+
+// truncConnGenerator is a relay address generator that wraps the PacketConn returned by a base
+// generator in a truncConn.
+func (g *truncConnGenerator) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
+	conn, addr, err := g.RelayAddressGenerator.AllocatePacketConn(network, requestedPort)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &truncConn{conn, g.mtu}, addr, nil
 }
 
 func TestServer(t *testing.T) { //nolint:maintidx
@@ -394,6 +454,151 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		client2.Close()
 		assert.NoError(t, conn2.Close())
 
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("Return error if payload exceeds peer connection MTU", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		assert.NoError(t, err)
+
+		errMessage := atomic.Value{}
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+
+				return nil, false
+			},
+			EventHandler: allocation.EventHandler{ // used to report write errors from peer
+				OnAllocationError: func(_, _ net.Addr, _, message string) {
+					errMessage.Store(message)
+				},
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &mtuConnGenerator{
+						RelayAddressGenerator: &RelayAddressGeneratorStatic{
+							RelayAddress: net.IPv4(127, 0, 0, 1),
+							Address:      "0.0.0.0",
+						},
+						mtu: 1, // allow single-byte payload
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		assert.NoError(t, err)
+
+		addr := "127.0.0.1:3478"
+
+		client, err := NewClient(&ClientConfig{
+			STUNServerAddr: addr,
+			TURNServerAddr: addr,
+			Conn:           conn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
+
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err)
+
+		peerAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:1")
+		assert.NoError(t, err, "should succeed")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), peerAddr)
+		assert.NoError(t, err, "mtu not enforced in client side")
+		assert.Eventually(t, func() bool { return errMessage.Load() != "" }, timeout, interval)
+		assert.Contains(t, errMessage.Load(), "MTU violation", "allocation error")
+
+		// Let the previous transaction terminate
+		time.Sleep(200 * time.Millisecond)
+		assert.NoError(t, relayConn.Close())
+
+		client.Close()
+		assert.NoError(t, conn.Close())
+		assert.NoError(t, server.Close())
+	})
+
+	t.Run("Return error if peer payload is truncated", func(t *testing.T) {
+		errMessage := atomic.Value{}
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		assert.NoError(t, err)
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+				if pw, ok := credMap[username]; ok {
+					return pw, true
+				}
+
+				return nil, false
+			},
+			EventHandler: allocation.EventHandler{ // used to report write errors from peer
+				OnAllocationError: func(_, _ net.Addr, _, message string) {
+					errMessage.Store(message)
+				},
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &truncConnGenerator{
+						RelayAddressGenerator: &RelayAddressGeneratorStatic{
+							RelayAddress: net.IPv4(127, 0, 0, 1),
+							Address:      "0.0.0.0",
+						},
+						mtu: 1,
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		assert.NoError(t, err)
+
+		addr := "127.0.0.1:3478"
+
+		client, err := NewClient(&ClientConfig{
+			STUNServerAddr: addr,
+			TURNServerAddr: addr,
+			Conn:           conn,
+			Username:       "user",
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
+
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err)
+
+		peerAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:1")
+		assert.NoError(t, err, "should succeed")
+
+		_, err = relayConn.WriteTo([]byte("Hello"), peerAddr)
+		assert.NoError(t, err, "mtu not enforced in client side")
+		assert.Eventually(t, func() bool { return errMessage.Load() != "" }, timeout, interval)
+		assert.Contains(t, errMessage.Load(), "packet write smaller than packet 1 != 5 (expected)",
+			"allocation error")
+
+		// Let the previous transaction terminate
+		time.Sleep(200 * time.Millisecond)
+		assert.NoError(t, relayConn.Close())
+
+		client.Close()
+		assert.NoError(t, conn.Close())
 		assert.NoError(t, server.Close())
 	})
 }
