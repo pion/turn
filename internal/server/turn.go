@@ -363,8 +363,10 @@ func handleSendIndication(req Request, stunMsg *stun.Message) error {
 	}
 
 	l, err := alloc.RelaySocket.WriteTo(dataAttr, msgDst)
-	if l != len(dataAttr) {
-		return fmt.Errorf("%w %d != %d (expected) err: %v", errShortWrite, l, len(dataAttr), err) //nolint:errorlint
+	if err != nil {
+		return fmt.Errorf("%w: %s", errFailedWriteSocket, err.Error())
+	} else if l != len(dataAttr) {
+		return fmt.Errorf("%w %d != %d (expected)", errShortWrite, l, len(dataAttr))
 	}
 
 	return err
