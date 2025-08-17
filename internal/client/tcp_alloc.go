@@ -107,10 +107,10 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return 0, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
+			return 0, fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
 		}
 
-		return 0, fmt.Errorf("%s", res.Type) //nolint:goerr113
+		return 0, fmt.Errorf("%s", res.Type) //nolint // dynamic errors
 	}
 
 	var cid proto.ConnectionID
@@ -271,10 +271,10 @@ func (a *TCPAllocation) BindConnection(dataConn *TCPConn, cid proto.ConnectionID
 	case stun.ClassErrorResponse:
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
+			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
 		}
 
-		return fmt.Errorf("%s", res.Type) //nolint:goerr113
+		return fmt.Errorf("%s", res.Type) //nolint // dynamic errors
 	case stun.ClassSuccessResponse:
 		a.log.Debug("Successful connectionBind request")
 
@@ -344,7 +344,7 @@ func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (*TCPConn, error) {
 // SetDeadline sets the deadline associated with the listener. A zero time value disables the deadline.
 func (a *TCPAllocation) SetDeadline(t time.Time) error {
 	var d time.Duration
-	if t == noDeadline() {
+	if t.Equal(noDeadline()) {
 		d = time.Duration(math.MaxInt64)
 	} else {
 		d = time.Until(t)

@@ -101,7 +101,7 @@ func (a *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 			return err
 		}
 
-		return fmt.Errorf("%s", res.Type) //nolint:goerr113
+		return fmt.Errorf("%s", res.Type) //nolint:err113
 	}
 
 	// Getting lifetime from response

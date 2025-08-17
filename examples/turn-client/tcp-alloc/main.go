@@ -40,7 +40,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 					addrCh <- message[:len(message)-1]
 				}()
 
-				if _, err = conn.Write([]byte(fmt.Sprintf("%s\n", relayAddr))); err != nil {
+				if _, err = fmt.Fprintf(conn, "%s\n", relayAddr); err != nil {
 					log.Panicf("Failed to write relayAddr: %s", err)
 				}
 			}
@@ -55,7 +55,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 			log.Panicf("Failed to read relayAddr: %s", err)
 		}
 		addrCh <- message[:len(message)-1]
-		if _, err = conn.Write([]byte(fmt.Sprintf("%s\n", relayAddr))); err != nil {
+		if _, err = fmt.Fprintf(conn, "%s\n", relayAddr); err != nil {
 			log.Panicf("Failed to write relayAddr: %s", err)
 		}
 	}

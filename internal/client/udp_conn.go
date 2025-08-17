@@ -308,7 +308,7 @@ func (c *UDPConn) SetDeadline(t time.Time) error {
 // A zero value for t means ReadFrom will not time out.
 func (c *UDPConn) SetReadDeadline(t time.Time) error {
 	var d time.Duration
-	if t == noDeadline() {
+	if t.Equal(noDeadline()) {
 		d = time.Duration(math.MaxInt64)
 	} else {
 		d = time.Until(t)
@@ -382,10 +382,10 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 				return errTryAgain
 			}
 
-			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
+			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
 		}
 
-		return fmt.Errorf("%s", res.Type) //nolint:goerr113
+		return fmt.Errorf("%s", res.Type) //nolint // dynamic errors
 	}
 
 	return nil
@@ -443,7 +443,7 @@ func (c *UDPConn) bind(bound *binding) error {
 	res := trRes.Msg
 
 	if res.Type != stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse) {
-		return fmt.Errorf("unexpected response type %s", res.Type) //nolint:goerr113
+		return fmt.Errorf("unexpected response type %s", res.Type) //nolint // dynamic errors
 	}
 
 	c.log.Debugf("Channel binding successful: %s %d", bound.addr, bound.number)

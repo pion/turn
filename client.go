@@ -302,10 +302,10 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return relayed, lifetime, nonce, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:goerr113
+			return relayed, lifetime, nonce, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:err113
 		}
 
-		return relayed, lifetime, nonce, fmt.Errorf("%s", res.Type) //nolint:goerr113
+		return relayed, lifetime, nonce, fmt.Errorf("%s", res.Type) //nolint:err113
 	}
 
 	// Getting relayed addresses from response.

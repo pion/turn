@@ -30,12 +30,11 @@ func (r *RelayAddressGeneratorNone) Validate() error {
 		}
 	}
 
-	switch {
-	case r.Address == "":
+	if r.Address == "" {
 		return errListeningAddressInvalid
-	default:
-		return nil
 	}
+
+	return nil
 }
 
 // AllocatePacketConn generates a new PacketConn to receive traffic on and the IP/Port

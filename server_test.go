@@ -28,6 +28,7 @@ const (
 	interval = 50 * time.Millisecond
 	stunAddr = "1.2.3.4:3478"
 	turnAddr = "1.2.3.4:3478"
+	testAddr = "127.0.0.1:3478"
 )
 
 type EventHandlerType int
@@ -218,7 +219,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	t.Run("Delete allocation on spontaneous TCP close", func(t *testing.T) {
 		// Test whether allocation is properly deleted when client spontaneously closes the
 		// TCP connection underlying it
-		tcpListener, err := net.Listen("tcp4", "127.0.0.1:3478")
+		tcpListener, err := net.Listen("tcp4", testAddr)
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -251,12 +252,12 @@ func TestServer(t *testing.T) { //nolint:maintidx
 				})
 			},
 		}
-		conn, err := dialer.Dial("tcp", "127.0.0.1:3478")
+		conn, err := dialer.Dial("tcp", testAddr)
 		assert.NoError(t, err)
 
 		clientAddr := conn.LocalAddr()
 
-		serverAddr, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:3478")
+		serverAddr, err := net.ResolveTCPAddr("tcp4", testAddr)
 		assert.NoError(t, err)
 
 		client, err := NewClient(&ClientConfig{
@@ -337,11 +338,9 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321")
 		assert.NoError(t, err)
 
-		addr := "127.0.0.1:3478"
-
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: addr,
-			TURNServerAddr: addr,
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
 			Conn:           conn,
 			Username:       "user",
 			Password:       "pass",
@@ -407,8 +406,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		client2, err := NewClient(&ClientConfig{
-			STUNServerAddr: addr,
-			TURNServerAddr: addr,
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
 			Conn:           conn2,
 			Username:       "user",
 			Password:       "pass",
@@ -1193,8 +1192,8 @@ func TestSTUNOnly(t *testing.T) {
 
 	client, err := NewClient(&ClientConfig{
 		Conn:           conn,
-		STUNServerAddr: "127.0.0.1:3478",
-		TURNServerAddr: "127.0.0.1:3478",
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
 		Username:       "user",
 		Password:       "pass",
 		Realm:          "pion.ly",
@@ -1253,8 +1252,8 @@ func TestQuotaReached(t *testing.T) {
 
 	client, err := NewClient(&ClientConfig{
 		Conn:           conn,
-		STUNServerAddr: "127.0.0.1:3478",
-		TURNServerAddr: "127.0.0.1:3478",
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
 		Username:       "user",
 		Password:       "pass",
 		Realm:          "pion.ly",
@@ -1347,8 +1346,8 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 		defer clientConn.Close() //nolint:errcheck
 
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: "127.0.0.1:3478",
-			TURNServerAddr: "127.0.0.1:3478",
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
 			Conn:           clientConn,
 			Username:       "user",
 			Password:       "pass",
