@@ -29,7 +29,7 @@ func buildMsg(
 func createListeningTestClient(t *testing.T, loggerFactory logging.LoggerFactory) (*Client, net.PacketConn, bool) {
 	t.Helper()
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	c, err := NewClient(&ClientConfig{
@@ -49,7 +49,7 @@ func createListeningTestClientWithSTUNServ(t *testing.T, loggerFactory logging.L
 ) {
 	t.Helper()
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	addr := "stun1.l.google.com:19302"
@@ -145,7 +145,7 @@ func TestClientWithSTUN(t *testing.T) {
 // The subsequent Write on the allocation will cause a CreatePermission
 // which will be forced to handle a stale nonce response.
 func TestClientNonceExpiration(t *testing.T) {
-	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -165,7 +165,7 @@ func TestClientNonceExpiration(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	// nolint: goconst
@@ -196,7 +196,7 @@ func TestClientNonceExpiration(t *testing.T) {
 // Create a TCP-based allocation and verify allocation can be created.
 func TestTCPClient(t *testing.T) {
 	// Setup server
-	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec,noctx
 	require.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -217,7 +217,7 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, err)
 
 	// Setup clients
-	conn, err := net.Dial("tcp", "127.0.0.1:13478")
+	conn, err := net.Dial("tcp", "127.0.0.1:13478") // nolint: noctx
 	require.NoError(t, err)
 
 	serverAddr := "127.0.0.1:13478"
@@ -263,7 +263,7 @@ func TestTCPClient(t *testing.T) {
 
 func TestTCPClientWithoutAddress(t *testing.T) {
 	// Setup server
-	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec,noctx
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -287,7 +287,7 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test tcp client without turn server address with small RTO.
-	conn, err := net.Dial("tcp", "127.0.0.1:13478")
+	conn, err := net.Dial("tcp", "127.0.0.1:13478") // nolint: noctx
 	assert.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
@@ -306,7 +306,8 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, conn.Close())
 
 	// Test tcp client without turn server with successful allocation.
-	conn, err = net.Dial("tcp", "127.0.0.1:13478")
+	conn, err = net.Dial("tcp", "127.0.0.1:13478") // nolint: noctx
+
 	assert.NoError(t, err)
 
 	client, err = NewClient(&ClientConfig{

@@ -74,7 +74,7 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(
 	requestedPort int,
 ) (net.PacketConn, net.Addr, error) {
 	if requestedPort != 0 {
-		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, requestedPort))
+		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, requestedPort)) // nolint: noctx
 		if err != nil {
 			return nil, nil, err
 		}
@@ -90,8 +90,8 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(
 	}
 
 	for try := 0; try < r.MaxRetries; try++ {
-		port := r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort))) // nolint:gosec // G115 false positive
-		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, port))
+		port := r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort)))           // nolint:gosec // G115 false positive
+		conn, err := r.Net.ListenPacket(network, fmt.Sprintf("%s:%d", r.Address, port)) // nolint: noctx
 		if err != nil {
 			continue
 		}

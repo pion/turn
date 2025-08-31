@@ -34,7 +34,7 @@ func main() { //nolint:cyclop
 
 	// Dial TURN Server
 	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
-	conn, err := net.Dial("tcp", turnServerAddr)
+	conn, err := net.Dial("tcp", turnServerAddr) // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to connect to TURN server: %s", err)
 	}
@@ -100,7 +100,7 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error { //nolint:
 	}
 
 	// Set up pinger socket (pingerConn)
-	pingerConn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	pingerConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to listen: %s", err)
 	}

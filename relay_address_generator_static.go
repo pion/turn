@@ -50,7 +50,7 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(
 	network string,
 	requestedPort int,
 ) (net.PacketConn, net.Addr, error) {
-	conn, err := r.Net.ListenPacket(network, r.Address+":"+strconv.Itoa(requestedPort))
+	conn, err := r.Net.ListenPacket(network, r.Address+":"+strconv.Itoa(requestedPort)) // nolint: noctx
 	if err != nil {
 		return nil, nil, err
 	}

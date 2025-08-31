@@ -72,7 +72,7 @@ func main() { //nolint:cyclop
 
 	packetConnConfigs := make([]turn.PacketConnConfig, *threadNum)
 	for i := 0; i < *threadNum; i++ {
-		conn, listErr := listenerConfig.ListenPacket(context.Background(), addr.Network(), addr.String())
+		conn, listErr := listenerConfig.ListenPacket(context.Background(), addr.Network(), addr.String()) // nolint: noctx
 		if listErr != nil {
 			log.Fatalf("Failed to allocate UDP listener at %s:%s", addr.Network(), addr.String())
 		}

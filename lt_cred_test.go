@@ -27,7 +27,7 @@ func TestLtCredMech(t *testing.T) {
 func TestNewLongTermAuthHandler(t *testing.T) {
 	const sharedSecret = "HELLO_WORLD"
 
-	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -46,7 +46,7 @@ func TestNewLongTermAuthHandler(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	username, password, err := GenerateLongTermCredentials(sharedSecret, time.Minute)
@@ -77,7 +77,7 @@ func TestNewLongTermAuthHandler(t *testing.T) {
 func TestLongTermTURNRESTAuthHandler(t *testing.T) {
 	const sharedSecret = "HELLO_WORLD"
 
-	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -96,7 +96,7 @@ func TestLongTermTURNRESTAuthHandler(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	username, password, err := GenerateLongTermTURNRESTCredentials(sharedSecret, "testuser", time.Minute)

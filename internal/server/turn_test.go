@@ -49,7 +49,7 @@ func TestAllocationLifeTime(t *testing.T) {
 	})
 
 	t.Run("DeletionZeroLifetime", func(t *testing.T) {
-		conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, conn.Close())
@@ -59,7 +59,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 			AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-				con, listenErr := net.ListenPacket(network, "0.0.0.0:0")
+				con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
 				if err != nil {
 					return nil, nil, listenErr
 				}
