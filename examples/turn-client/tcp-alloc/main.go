@@ -20,7 +20,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 	addr := "127.0.0.1:5000"
 	if signaling { // nolint:nestif
 		go func() {
-			listener, err := net.Listen("tcp", addr)
+			listener, err := net.Listen("tcp", addr) // nolint: noctx
 			if err != nil {
 				log.Panicf("Failed to create signaling server: %s", err)
 			}
@@ -46,7 +46,7 @@ func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string)
 			}
 		}()
 	} else {
-		conn, err := net.Dial("tcp", addr)
+		conn, err := net.Dial("tcp", addr) // nolint: noctx
 		if err != nil {
 			log.Panicf("Error dialing: %s", err)
 		}

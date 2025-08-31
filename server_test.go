@@ -129,7 +129,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	}
 
 	t.Run("simple", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -156,7 +156,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 
 		assert.Equal(t, proto.DefaultLifetime, server.channelBindTimeout, "should match")
 
-		conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		assert.NoError(t, err)
 
 		client, err := NewClient(&ClientConfig{
@@ -176,7 +176,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("default inboundMTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 		server, err := NewServer(ServerConfig{
 			LoggerFactory: loggerFactory,
@@ -196,7 +196,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Set inboundMTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 		server, err := NewServer(ServerConfig{
 			InboundMTU:    2000,
@@ -219,7 +219,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	t.Run("Delete allocation on spontaneous TCP close", func(t *testing.T) {
 		// Test whether allocation is properly deleted when client spontaneously closes the
 		// TCP connection underlying it
-		tcpListener, err := net.Listen("tcp4", testAddr)
+		tcpListener, err := net.Listen("tcp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -305,7 +305,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Filter on client address and peer IP", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -335,7 +335,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		// Enforce correct client IP and port
-		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321")
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321") // nolint: noctx
 		assert.NoError(t, err)
 
 		client, err := NewClient(&ClientConfig{
@@ -402,7 +402,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, conn.Close())
 
 		// Enforce filtered source address
-		conn2, err := net.ListenPacket("udp4", "127.0.0.1:12321")
+		conn2, err := net.ListenPacket("udp4", "127.0.0.1:12321") // nolint: noctx
 		assert.NoError(t, err)
 
 		client2, err := NewClient(&ClientConfig{
@@ -457,7 +457,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Return error if payload exceeds peer connection MTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		errMessage := atomic.Value{}
@@ -491,7 +491,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		})
 		assert.NoError(t, err)
 
-		conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
 		addr := "127.0.0.1:3478"
@@ -530,7 +530,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 
 	t.Run("Return error if peer payload is truncated", func(t *testing.T) {
 		errMessage := atomic.Value{}
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478")
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -563,7 +563,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		})
 		assert.NoError(t, err)
 
-		conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
 		addr := "127.0.0.1:3478"
@@ -691,7 +691,7 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 	// Start server...
 	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
 
-	udpListener, err := net0.ListenPacket("udp4", "1.2.3.4:3478")
+	udpListener, err := net0.ListenPacket("udp4", "1.2.3.4:3478") // nolint: noctx
 	if err != nil {
 		return nil, err
 	}
@@ -899,7 +899,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 			assert.NoError(t, v.Close())
 		}()
 
-		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		lconn, err := v.netL0.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		assert.NoError(t, err, "should succeed")
 		defer func() {
 			assert.NoError(t, lconn.Close())
@@ -937,7 +937,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 			assert.NoError(t, virtNet.Close())
 		}()
 
-		lconn, err := virtNet.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		lconn, err := virtNet.netL0.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		assert.NoError(t, err, "should succeed")
 		defer func() {
 			assert.NoError(t, lconn.Close())
@@ -1051,7 +1051,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 			assert.NoError(t, virtNet.Close())
 		}()
 
-		lconn, err := virtNet.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		lconn, err := virtNet.netL0.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		assert.NoError(t, err, "should succeed")
 		defer func() {
 			assert.NoError(t, lconn.Close())
@@ -1090,7 +1090,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 			assert.NoError(t, virtNet.Close())
 		}()
 
-		lconn, err := virtNet.netL0.ListenPacket("udp4", "0.0.0.0:0")
+		lconn, err := virtNet.netL0.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		assert.NoError(t, err, "should succeed")
 		defer func() {
 			assert.NoError(t, lconn.Close())
@@ -1171,7 +1171,7 @@ func TestSTUNOnly(t *testing.T) {
 	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
 	assert.NoError(t, err)
 
-	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
 	assert.NoError(t, err)
 
 	defer serverConn.Close() //nolint:errcheck
@@ -1187,7 +1187,7 @@ func TestSTUNOnly(t *testing.T) {
 
 	defer server.Close() //nolint:errcheck
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
@@ -1219,7 +1219,7 @@ func TestQuotaReached(t *testing.T) {
 	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
 	assert.NoError(t, err)
 
-	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
 	assert.NoError(t, err)
 
 	defer serverConn.Close() //nolint:errcheck
@@ -1247,7 +1247,7 @@ func TestQuotaReached(t *testing.T) {
 
 	defer server.Close() //nolint:errcheck
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
@@ -1283,7 +1283,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 		b.Fatalf("Failed to resolve server address: %s", err)
 	}
 
-	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String())
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
 	if err != nil {
 		b.Fatalf("Failed to allocate server listener at %s:%s", serverAddr.Network(), serverAddr.String())
 	}
@@ -1318,7 +1318,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 		b.Fatalf("Failed to resolve sink address: %s", err)
 	}
 
-	sink, err := net.ListenPacket(sinkAddr.Network(), sinkAddr.String())
+	sink, err := net.ListenPacket(sinkAddr.Network(), sinkAddr.String()) // nolint: noctx
 	if err != nil {
 		b.Fatalf("Failed to allocate sink: %s", err)
 	}
@@ -1339,7 +1339,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	// Setup client(s)
 	clients := make([]net.PacketConn, clientNum)
 	for i := 0; i < clientNum; i++ {
-		clientConn, listenErr := net.ListenPacket("udp4", "0.0.0.0:0")
+		clientConn, listenErr := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		if listenErr != nil {
 			b.Fatalf("Failed to allocate socket for client %d: %s", i+1, err)
 		}

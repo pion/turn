@@ -35,7 +35,7 @@ func main() { //nolint:cyclop
 	cred := strings.SplitN(*user, "=", 2)
 
 	// TURN client won't create a local listening socket by itself.
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to listen: %s", err)
 	}
@@ -104,7 +104,7 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error { //nolint:
 	}
 
 	// Set up pinger socket (pingerConn)
-	pingerConn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+	pingerConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to listen: %s", err)
 	}

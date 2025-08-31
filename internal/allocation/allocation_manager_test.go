@@ -34,7 +34,7 @@ func TestManager(t *testing.T) {
 	}
 
 	network := "udp4"
-	turnSocket, err := net.ListenPacket(network, "0.0.0.0:0")
+	turnSocket, err := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	for _, tc := range tt {
@@ -180,7 +180,7 @@ func newTestManager() (*Manager, error) {
 	config := ManagerConfig{
 		LeveledLogger: loggerFactory.NewLogger("test"),
 		AllocatePacketConn: func(string, int) (net.PacketConn, net.Addr, error) {
-			conn, err := net.ListenPacket("udp4", "0.0.0.0:0")
+			conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 			if err != nil {
 				return nil, nil, err
 			}

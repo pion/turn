@@ -231,7 +231,7 @@ func subTestAllocationClose(t *testing.T) {
 
 	network := "udp"
 
-	l, err := net.ListenPacket(network, "0.0.0.0:0")
+	l, err := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
@@ -261,11 +261,11 @@ func subTestPacketHandler(t *testing.T) {
 	manager, _ := newTestManager()
 
 	// TURN server initialization
-	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0")
+	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	// Client listener initialization
-	clientListener, err := net.ListenPacket(network, "127.0.0.1:0")
+	clientListener, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	dataCh := make(chan []byte)
@@ -289,10 +289,10 @@ func subTestPacketHandler(t *testing.T) {
 
 	assert.NoError(t, err, "should succeed")
 
-	peerListener1, err := net.ListenPacket(network, "127.0.0.1:0")
+	peerListener1, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
-	peerListener2, err := net.ListenPacket(network, "127.0.0.1:0")
+	peerListener2, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	// Add permission with peer1 address
