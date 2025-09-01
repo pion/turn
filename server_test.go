@@ -461,6 +461,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		errMessage := atomic.Value{}
+		errMessage.Store("")
+
 		server, err := NewServer(ServerConfig{
 			AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
 				if pw, ok := credMap[username]; ok {
@@ -530,6 +532,8 @@ func TestServer(t *testing.T) { //nolint:maintidx
 
 	t.Run("Return error if peer payload is truncated", func(t *testing.T) {
 		errMessage := atomic.Value{}
+		errMessage.Store("")
+
 		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
 		assert.NoError(t, err)
 
