@@ -1,6 +1,6 @@
 module github.com/pion/turn/v4
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/pion/logging v0.2.4
@@ -8,7 +8,7 @@ require (
 	github.com/pion/stun/v3 v3.0.0
 	github.com/pion/transport/v3 v3.0.7
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.35.0
 )
 
 require (
