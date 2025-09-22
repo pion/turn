@@ -8,6 +8,7 @@ package turn
 
 import (
 	"net"
+	"runtime"
 	"testing"
 	"time"
 
@@ -269,7 +270,11 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	server, err := NewServer(ServerConfig{
 		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
 			// Sleep needed for sending retransmission.
-			time.Sleep(time.Millisecond)
+			if runtime.GOOS == "windows" {
+				time.Sleep(20 * time.Millisecond)
+			} else {
+				time.Sleep(time.Millisecond)
+			}
 
 			return GenerateAuthKey(username, realm, "pass"), true
 		},

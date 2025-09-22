@@ -27,7 +27,7 @@ func TestLtCredMech(t *testing.T) {
 func TestNewLongTermAuthHandler(t *testing.T) {
 	const sharedSecret = "HELLO_WORLD"
 
-	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+	serverListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -37,7 +37,7 @@ func TestNewLongTermAuthHandler(t *testing.T) {
 				PacketConn: serverListener,
 				RelayAddressGenerator: &RelayAddressGeneratorStatic{
 					RelayAddress: net.ParseIP("127.0.0.1"),
-					Address:      "0.0.0.0",
+					Address:      "127.0.0.1",
 				},
 			},
 		},
@@ -46,7 +46,7 @@ func TestNewLongTermAuthHandler(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	username, password, err := GenerateLongTermCredentials(sharedSecret, time.Minute)
@@ -77,7 +77,7 @@ func TestNewLongTermAuthHandler(t *testing.T) {
 func TestLongTermTURNRESTAuthHandler(t *testing.T) {
 	const sharedSecret = "HELLO_WORLD"
 
-	serverListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+	serverListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
@@ -87,7 +87,7 @@ func TestLongTermTURNRESTAuthHandler(t *testing.T) {
 				PacketConn: serverListener,
 				RelayAddressGenerator: &RelayAddressGeneratorStatic{
 					RelayAddress: net.ParseIP("127.0.0.1"),
-					Address:      "0.0.0.0",
+					Address:      "127.0.0.1",
 				},
 			},
 		},
@@ -96,15 +96,15 @@ func TestLongTermTURNRESTAuthHandler(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
 	username, password, err := GenerateLongTermTURNRESTCredentials(sharedSecret, "testuser", time.Minute)
 	assert.NoError(t, err)
 
 	client, err := NewClient(&ClientConfig{
-		STUNServerAddr: "0.0.0.0:3478",
-		TURNServerAddr: "0.0.0.0:3478",
+		STUNServerAddr: "127.0.0.1:3478",
+		TURNServerAddr: "127.0.0.1:3478",
 		Conn:           conn,
 		Username:       username,
 		Password:       password,

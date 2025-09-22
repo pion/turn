@@ -129,7 +129,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	}
 
 	t.Run("simple", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -145,7 +145,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 					PacketConn: udpListener,
 					RelayAddressGenerator: &RelayAddressGeneratorStatic{
 						RelayAddress: net.ParseIP("127.0.0.1"),
-						Address:      "0.0.0.0",
+						Address:      "127.0.0.1",
 					},
 				},
 			},
@@ -156,7 +156,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 
 		assert.Equal(t, proto.DefaultLifetime, server.channelBindTimeout, "should match")
 
-		conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
 		client, err := NewClient(&ClientConfig{
@@ -176,7 +176,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("default inboundMTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 		assert.NoError(t, err)
 		server, err := NewServer(ServerConfig{
 			LoggerFactory: loggerFactory,
@@ -185,7 +185,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 					PacketConn: udpListener,
 					RelayAddressGenerator: &RelayAddressGeneratorStatic{
 						RelayAddress: net.ParseIP("127.0.0.1"),
-						Address:      "0.0.0.0",
+						Address:      "127.0.0.1",
 					},
 				},
 			},
@@ -196,7 +196,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Set inboundMTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 		assert.NoError(t, err)
 		server, err := NewServer(ServerConfig{
 			InboundMTU:    2000,
@@ -206,7 +206,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 					PacketConn: udpListener,
 					RelayAddressGenerator: &RelayAddressGeneratorStatic{
 						RelayAddress: net.ParseIP("127.0.0.1"),
-						Address:      "0.0.0.0",
+						Address:      "127.0.0.1",
 					},
 				},
 			},
@@ -248,7 +248,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		dialer := &net.Dialer{
 			Control: func(_, _ string, conn syscall.RawConn) error {
 				return conn.Control(func(descriptor uintptr) {
-					_ = syscall.SetsockoptInt(int(descriptor), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+					_ = syscall.SetsockoptInt(Handle(descriptor), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 				})
 			},
 		}
@@ -305,7 +305,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Filter on client address and peer IP", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -321,7 +321,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 					PacketConn: udpListener,
 					RelayAddressGenerator: &RelayAddressGeneratorStatic{
 						RelayAddress: net.IPv4(127, 0, 0, 1),
-						Address:      "0.0.0.0",
+						Address:      "127.0.0.1",
 					},
 					PermissionHandler: func(src net.Addr, peer net.IP) bool {
 						return src.String() == "127.0.0.1:54321" &&
@@ -457,7 +457,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Return error if payload exceeds peer connection MTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		errMessage := atomic.Value{}
@@ -482,7 +482,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 					RelayAddressGenerator: &mtuConnGenerator{
 						RelayAddressGenerator: &RelayAddressGeneratorStatic{
 							RelayAddress: net.IPv4(127, 0, 0, 1),
-							Address:      "0.0.0.0",
+							Address:      "127.0.0.1",
 						},
 						mtu: 1, // allow single-byte payload
 					},
@@ -534,7 +534,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		errMessage := atomic.Value{}
 		errMessage.Store("")
 
-		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -556,7 +556,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 					RelayAddressGenerator: &truncConnGenerator{
 						RelayAddressGenerator: &RelayAddressGeneratorStatic{
 							RelayAddress: net.IPv4(127, 0, 0, 1),
-							Address:      "0.0.0.0",
+							Address:      "127.0.0.1",
 						},
 						mtu: 1,
 					},
