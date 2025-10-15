@@ -35,7 +35,11 @@ type TurnError struct {
 
 // Error returns the formatted TURN error message.
 func (e TurnError) Error() string {
-	return fmt.Sprintf("TURN error: (type: %s) (code: %d) (reason: %s)", e.StunMessageType, e.ErrorCodeAttr.Code, e.ErrorCodeAttr.Reason)
+	return fmt.Sprintf(
+		"TURN error: (type: %s) (code: %d) (reason: %s)",
+		e.StunMessageType,
+		e.ErrorCodeAttr.Code,
+		e.ErrorCodeAttr.Reason)
 }
 
 // String returns the error message as a string.
