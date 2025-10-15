@@ -39,8 +39,8 @@ func (e TurnError) Error() string {
 }
 
 // String returns the error message as a string.
-func (c TurnError) String() string {
-	return c.Error()
+func (e TurnError) String() string {
+	return e.Error()
 }
 
 type inboundData struct {
