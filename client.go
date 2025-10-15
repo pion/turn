@@ -306,6 +306,7 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 				StunMessageType: res.Type,
 				ErrorCodeAttr:   code,
 			}
+
 			return relayed, lifetime, nonce, turnError
 		}
 
