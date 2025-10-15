@@ -76,3 +76,73 @@ func TestUDPConn(t *testing.T) {
 		assert.Equal(t, len(buf), n)
 	})
 }
+
+func TestCreatePermissions(t *testing.T) {
+	t.Run("CreatePermissions success", func(t *testing.T) {
+		called := false
+		client := &mockClient{
+			performTransaction: func(msg *stun.Message, addr net.Addr, _ bool) (TransactionResult, error) {
+				called = true
+				// Simulate a successful response
+				res := stun.New()
+				res.Type = stun.NewType(stun.MethodCreatePermission, stun.ClassSuccessResponse)
+
+				return TransactionResult{Msg: res}, nil
+			},
+		}
+		a := &allocation{
+			client:     client,
+			serverAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3478},
+			username:   stun.NewUsername("user"),
+			realm:      stun.NewRealm("realm"),
+			integrity:  stun.NewShortTermIntegrity("pass"),
+			_nonce:     stun.NewNonce("nonce"),
+		}
+		addr := &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 12345}
+		err := a.CreatePermissions(addr)
+		assert.NoError(t, err)
+		assert.True(t, called)
+	})
+
+	t.Run("CreatePermissions error", func(t *testing.T) {
+		client := &mockClient{
+			performTransaction: func(msg *stun.Message, addr net.Addr, _ bool) (TransactionResult, error) {
+				res := stun.New()
+				res.Type = stun.NewType(stun.MethodCreatePermission, stun.ClassErrorResponse)
+				code := stun.ErrorCodeAttribute{
+					Code:   stun.CodeForbidden,
+					Reason: []byte("Forbidden"),
+				}
+				_ = code.AddTo(res)
+
+				return TransactionResult{Msg: res}, nil
+			},
+		}
+		a := &allocation{
+			client:     client,
+			serverAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3478},
+			username:   stun.NewUsername("user"),
+			realm:      stun.NewRealm("realm"),
+			integrity:  stun.NewShortTermIntegrity("pass"),
+			_nonce:     stun.NewNonce("nonce"),
+		}
+		addr := &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 12345}
+		err := a.CreatePermissions(addr)
+		var turnErr TurnError
+		assert.ErrorAs(t, err, &turnErr)
+		assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
+	})
+}
+
+func TestTurnError(t *testing.T) {
+	te := TurnError{
+		StunMessageType: stun.NewType(stun.MethodCreatePermission, stun.ClassErrorResponse),
+		ErrorCodeAttr: stun.ErrorCodeAttribute{
+			Code:   stun.CodeForbidden,
+			Reason: []byte("Forbidden"),
+		},
+	}
+	expected := "TURN error: (type: CreatePermission error response) (code: 403) (reason: Forbidden)"
+	assert.Equal(t, expected, te.Error())
+	assert.Equal(t, expected, te.String())
+}
