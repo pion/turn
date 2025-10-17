@@ -17,14 +17,17 @@ import (
 )
 
 const (
-	maxReadQueueSize    = 1024
-	permRefreshInterval = 120 * time.Second
-	maxRetryAttempts    = 3
+	maxReadQueueSize       = 1024
+	permRefreshInterval    = 120 * time.Second
+	bindingRefreshInterval = 5 * time.Minute
+	bindingCheckInterval   = 30 * time.Second
+	maxRetryAttempts       = 3
 )
 
 const (
 	timerIDRefreshAlloc int = iota
 	timerIDRefreshPerms
+	timerIDCheckBindings
 )
 
 type inboundData struct {
@@ -35,9 +38,10 @@ type inboundData struct {
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
 // compatible with net.PacketConn and net.Conn.
 type UDPConn struct {
-	bindingMgr *bindingManager   // Thread-safe
-	readCh     chan *inboundData // Thread-safe
-	closeCh    chan struct{}     // Thread-safe
+	bindingMgr         *bindingManager   // Thread-safe
+	checkBindingsTimer *PeriodicTimer    // Thread-safe
+	readCh             chan *inboundData // Thread-safe
+	closeCh            chan struct{}     // Thread-safe
 	allocation
 }
 
@@ -77,11 +81,24 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		permRefreshInterval,
 	)
 
+	conn.checkBindingsTimer = NewPeriodicTimer(
+		timerIDCheckBindings,
+		func(timerID int) {
+			for _, bound := range conn.bindingMgr.all() {
+				conn.maybeBind(bound)
+			}
+		},
+		bindingCheckInterval,
+	)
+
 	if conn.refreshAllocTimer.Start() {
 		conn.log.Debugf("Started refresh allocation timer")
 	}
 	if conn.refreshPermsTimer.Start() {
 		conn.log.Debugf("Started refresh permission timer")
+	}
+	if conn.checkBindingsTimer.Start() {
+		conn.log.Debugf("Started check bindings timer")
 	}
 
 	return conn
@@ -185,31 +202,11 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 		bound = c.bindingMgr.create(addr)
 	}
 
-	bindSt := bound.state()
-
 	//nolint:nestif
-	if bindSt == bindingStateIdle || bindSt == bindingStateRequest || bindSt == bindingStateFailed {
-		func() {
-			// Block only callers with the same binding until
-			// the binding transaction has been complete
-			bound.muBind.Lock()
-			defer bound.muBind.Unlock()
-
-			// Binding state may have been changed while waiting. check again.
-			if bound.state() == bindingStateIdle {
-				bound.setState(bindingStateRequest)
-				go func() {
-					err2 := c.bind(bound)
-					if err2 != nil {
-						c.log.Warnf("Failed to bind bind(): %s", err2)
-						bound.setState(bindingStateFailed)
-						// Keep going...
-					} else {
-						bound.setState(bindingStateReady)
-					}
-				}()
-			}
-		}()
+	if !bound.ok() {
+		// Try to establish an initial binding with the server.
+		// Writes still occur via indications meanwhile.
+		c.maybeBind(bound)
 
 		// Send data using SendIndication
 		peerAddr := addr2PeerAddress(addr)
@@ -225,34 +222,10 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 			return 0, err
 		}
 
-		// Indication has no transaction (fire-and-forget)
-
 		return c.client.WriteTo(msg.Raw, c.serverAddr)
 	}
 
-	// Binding is either ready
-
-	// Check if the binding needs a refresh
-	func() {
-		bound.muBind.Lock()
-		defer bound.muBind.Unlock()
-
-		if bound.state() == bindingStateReady && time.Since(bound.refreshedAt()) > 5*time.Minute {
-			bound.setState(bindingStateRefresh)
-			go func() {
-				if bindErr := c.bind(bound); bindErr != nil {
-					c.log.Warnf("Failed to bind() for refresh: %s", bindErr)
-					bound.setState(bindingStateFailed)
-					// Keep going...
-				} else {
-					bound.setRefreshedAt(time.Now())
-					bound.setState(bindingStateReady)
-				}
-			}()
-		}
-	}()
-
-	// Send via ChannelData
+	// Binding is ready beyond this point, so send over it.
 	_, err = c.sendChannelData(payload, bound.number)
 	if err != nil {
 		return 0, err
@@ -266,6 +239,7 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 func (c *UDPConn) Close() error {
 	c.refreshAllocTimer.Stop()
 	c.refreshPermsTimer.Stop()
+	c.checkBindingsTimer.Stop()
 
 	select {
 	case <-c.closeCh:
@@ -420,6 +394,44 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 	return b.addr, true
 }
 
+func (c *UDPConn) maybeBind(bound *binding) {
+	bind := func() {
+		var err error
+		for i := 0; i < maxRetryAttempts; i++ {
+			if err = c.bind(bound); !errors.Is(err, errTryAgain) {
+				break
+			}
+		}
+		if err != nil {
+			c.log.Warnf("Failed to bind channel %d: %s", bound.number, err)
+			bound.setState(bindingStateFailed)
+
+			return
+		}
+		bound.setRefreshedAt(time.Now())
+		bound.setState(bindingStateReady)
+	}
+
+	// Block only callers with the same binding until
+	// the binding transaction has been complete
+	bound.muBind.Lock()
+	defer bound.muBind.Unlock()
+
+	state := bound.state()
+	switch {
+	case state == bindingStateIdle:
+		bound.setState(bindingStateRequest)
+	case state == bindingStateReady && time.Since(bound.refreshedAt()) > bindingRefreshInterval:
+		bound.setState(bindingStateRefresh)
+	default:
+		return
+	}
+
+	// Establish binding with the server if eligible
+	// with regard to cases right above.
+	go bind()
+}
+
 func (c *UDPConn) bind(bound *binding) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
@@ -446,8 +458,15 @@ func (c *UDPConn) bind(bound *binding) error {
 	}
 
 	res := trRes.Msg
+	if res.Type.Class == stun.ClassErrorResponse {
+		var code stun.ErrorCodeAttribute
+		if err = code.GetFrom(res); err == nil {
+			if code.Code == stun.CodeStaleNonce {
+				c.setNonceFromMsg(res)
 
-	if res.Type != stun.NewType(stun.MethodChannelBind, stun.ClassSuccessResponse) {
+				return errTryAgain
+			}
+		}
 		return fmt.Errorf("unexpected response type %s", res.Type) //nolint // dynamic errors
 	}
 

@@ -46,6 +46,13 @@ func TestBindingManager(t *testing.T) {
 			assert.Equal(t, b0, b2, "should match")
 		}
 
+		all := bm.all()
+		for _, b := range all {
+			found, ok := bm.findByNumber(b.number)
+			assert.True(t, ok, "should exist")
+			assert.Equal(t, b, found, "should match")
+		}
+		assert.Equal(t, count, len(all), "should match")
 		assert.Equal(t, count, bm.size(), "should match")
 		assert.Equal(t, count, len(bm.addrMap), "should match")
 
@@ -60,6 +67,7 @@ func TestBindingManager(t *testing.T) {
 
 		assert.Equal(t, 0, bm.size(), "should match")
 		assert.Equal(t, 0, len(bm.addrMap), "should match")
+		assert.Equal(t, 0, len(bm.all()), "should match")
 	})
 
 	t.Run("failure test", func(t *testing.T) {
