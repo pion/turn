@@ -27,6 +27,26 @@ const (
 	timerIDRefreshPerms
 )
 
+// TurnError represents an error from a TURN response.
+type TurnError struct {
+	StunMessageType stun.MessageType
+	ErrorCodeAttr   stun.ErrorCodeAttribute
+}
+
+// Error returns the formatted TURN error message.
+func (e TurnError) Error() string {
+	return fmt.Sprintf(
+		"TURN error: (type: %s) (code: %d) (reason: %s)",
+		e.StunMessageType,
+		e.ErrorCodeAttr.Code,
+		e.ErrorCodeAttr.Reason)
+}
+
+// String returns the error message as a string.
+func (e TurnError) String() string {
+	return e.Error()
+}
+
 type inboundData struct {
 	data []byte
 	from net.Addr
@@ -382,7 +402,12 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 				return errTryAgain
 			}
 
-			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
+			turnError := TurnError{
+				StunMessageType: res.Type,
+				ErrorCodeAttr:   code,
+			}
+
+			return turnError
 		}
 
 		return fmt.Errorf("%s", res.Type) //nolint // dynamic errors
