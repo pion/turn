@@ -128,21 +128,8 @@ func TestCreatePermissions(t *testing.T) {
 		}
 		addr := &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 12345}
 		err := a.CreatePermissions(addr)
-		var turnErr TurnError
+		var turnErr stun.TurnError
 		assert.ErrorAs(t, err, &turnErr)
 		assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
 	})
-}
-
-func TestTurnError(t *testing.T) {
-	te := TurnError{
-		StunMessageType: stun.NewType(stun.MethodCreatePermission, stun.ClassErrorResponse),
-		ErrorCodeAttr: stun.ErrorCodeAttribute{
-			Code:   stun.CodeForbidden,
-			Reason: []byte("Forbidden"),
-		},
-	}
-	expected := "TURN error: (type: CreatePermission error response) (code: 403) (reason: Forbidden)"
-	assert.Equal(t, expected, te.Error())
-	assert.Equal(t, expected, te.String())
 }
