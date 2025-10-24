@@ -4,6 +4,7 @@
 package client
 
 import (
+	"errors"
 	"net"
 	"testing"
 
@@ -128,8 +129,9 @@ func TestCreatePermissions(t *testing.T) {
 		}
 		addr := &net.UDPAddr{IP: net.IPv4(5, 6, 7, 8), Port: 12345}
 		err := a.CreatePermissions(addr)
-		var turnErr stun.TurnError
-		assert.ErrorAs(t, err, &turnErr)
+		var turnErr *stun.TurnError
+		assert.Error(t, err)
+		assert.True(t, errors.As(err, &turnErr), "should return a TurnError")
 		assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
 	})
 }

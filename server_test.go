@@ -1214,7 +1214,7 @@ func TestSTUNOnly(t *testing.T) {
 	assert.True(t, ok)
 
 	_, err = client.Allocate()
-	assert.Equal(t, err.Error(), "TURN error: (type: Allocate error response) (code: 400) (reason: )")
+	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
 
 	assert.NoError(t, conn.Close())
 }
@@ -1268,7 +1268,7 @@ func TestQuotaReached(t *testing.T) {
 	defer client.Close()
 
 	_, err = client.Allocate()
-	assert.Equal(t, err.Error(), "TURN error: (type: Allocate error response) (code: 486) (reason: )")
+	assert.Equal(t, err.Error(), "Allocate error response (error 486: )")
 }
 
 func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
