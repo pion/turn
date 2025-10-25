@@ -302,7 +302,12 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return relayed, lifetime, nonce, fmt.Errorf("%s (error %s)", res.Type, code) //nolint:err113
+			turnError := &stun.TurnError{
+				StunMessageType: res.Type,
+				ErrorCodeAttr:   code,
+			}
+
+			return relayed, lifetime, nonce, turnError
 		}
 
 		return relayed, lifetime, nonce, fmt.Errorf("%s", res.Type) //nolint:err113

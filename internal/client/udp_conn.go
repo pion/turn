@@ -382,7 +382,12 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 				return errTryAgain
 			}
 
-			return fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
+			turnError := &stun.TurnError{
+				StunMessageType: res.Type,
+				ErrorCodeAttr:   code,
+			}
+
+			return turnError
 		}
 
 		return fmt.Errorf("%s", res.Type) //nolint // dynamic errors
