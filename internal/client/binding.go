@@ -61,6 +61,12 @@ func (b *binding) refreshedAt() time.Time {
 	return b._refreshedAt
 }
 
+func (b *binding) ok() bool {
+	state := b.state()
+
+	return state == bindingStateReady || state == bindingStateRefresh
+}
+
 // Thread-safe binding map.
 type bindingManager struct {
 	chanMap map[uint16]*binding
@@ -158,4 +164,16 @@ func (mgr *bindingManager) size() int {
 	defer mgr.mutex.RUnlock()
 
 	return len(mgr.chanMap)
+}
+
+func (mgr *bindingManager) all() []*binding {
+	mgr.mutex.RLock()
+	defer mgr.mutex.RUnlock()
+
+	list := make([]*binding, 0, len(mgr.chanMap))
+	for _, b := range mgr.chanMap {
+		list = append(list, b)
+	}
+
+	return list
 }
