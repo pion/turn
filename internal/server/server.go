@@ -84,8 +84,31 @@ func handleTURNPacket(req Request) error {
 		)
 	}
 
-	err = handler(req, stunMsg)
-	if err != nil {
+	unknownAttributes := []stun.AttrType{}
+	for _, attr := range stunMsg.Attributes {
+		if attr.Type.Required() && !attr.Type.Known() {
+			unknownAttributes = append(unknownAttributes, attr.Type)
+		}
+	}
+
+	if len(unknownAttributes) != 0 {
+		req.Log.Errorf(
+			"%v-%v with unknown comprehension-required attributes from %v: %v",
+			stunMsg.Type.Method,
+			stunMsg.Type.Class,
+			req.SrcAddr,
+			unknownAttributes,
+		)
+
+		return buildAndSend(
+			req.Conn,
+			req.SrcAddr,
+			stun.CodeUnknownAttribute,
+			stun.UnknownAttributes(unknownAttributes),
+		)
+	}
+
+	if err = handler(req, stunMsg); err != nil {
 		// nolint:errorlint
 		return fmt.Errorf(
 			"%w %v-%v from %v: %v",

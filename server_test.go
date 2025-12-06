@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v3/test"
 	"github.com/pion/transport/v3/vnet"
 	"github.com/pion/turn/v4/internal/allocation"
@@ -129,7 +130,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	}
 
 	t.Run("simple", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -176,7 +177,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("default inboundMTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 		server, err := NewServer(ServerConfig{
 			LoggerFactory: loggerFactory,
@@ -196,7 +197,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Set inboundMTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 		server, err := NewServer(ServerConfig{
 			InboundMTU:    2000,
@@ -305,7 +306,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Filter on client address and peer IP", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -457,7 +458,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	})
 
 	t.Run("Return error if payload exceeds peer connection MTU", func(t *testing.T) {
-		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 
 		errMessage := atomic.Value{}
@@ -496,11 +497,9 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
-		addr := "127.0.0.1:3478"
-
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: addr,
-			TURNServerAddr: addr,
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
 			Conn:           conn,
 			Username:       "user",
 			Password:       "pass",
@@ -534,7 +533,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		errMessage := atomic.Value{}
 		errMessage.Store("")
 
-		udpListener, err := net.ListenPacket("udp4", "127.0.0.1:3478") // nolint: noctx
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
@@ -570,11 +569,9 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
-		addr := "127.0.0.1:3478"
-
 		client, err := NewClient(&ClientConfig{
-			STUNServerAddr: addr,
-			TURNServerAddr: addr,
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
 			Conn:           conn,
 			Username:       "user",
 			Password:       "pass",
@@ -604,6 +601,68 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, conn.Close())
 		assert.NoError(t, server.Close())
 	})
+}
+
+func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
+	lim := test.TimeOut(time.Second * 30)
+	defer lim.Stop()
+
+	report := test.CheckRoutines(t)
+	defer report()
+
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			return nil, false
+		},
+		PacketConnConfigs: []PacketConnConfig{
+			{
+				PacketConn: udpListener,
+				RelayAddressGenerator: &truncConnGenerator{
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.IPv4(127, 0, 0, 1),
+						Address:      "127.0.0.1",
+					},
+					mtu: 1,
+				},
+			},
+		},
+		Realm:         "pion.ly",
+		LoggerFactory: loggerFactory,
+	})
+	assert.NoError(t, err)
+
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	invalid, err := stun.Build(
+		stun.BindingRequest,
+		stun.RawAttribute{Type: 0x7AD, Value: []byte{0xBA, 0xAD}},                  // nolint: lll
+		stun.RawAttribute{Type: stun.AttrChannelNumber, Value: []byte{0xBA, 0xAD}}, // nolint: lll
+		stun.RawAttribute{Type: 0x7FFF, Value: []byte{0xBA, 0xAD}},                 // nolint: lll
+		stun.RawAttribute{Type: 0x8000, Value: []byte{0xBA, 0xAD}},                 // nolint: lll
+	)
+	assert.NoError(t, err)
+
+	_, err = conn.WriteTo(invalid.Raw, udpListener.LocalAddr())
+	assert.NoError(t, err)
+
+	pkt := stun.Message{Raw: make([]byte, 1500)}
+	i, _, err := conn.ReadFrom(pkt.Raw)
+	assert.NoError(t, err)
+
+	pkt.Raw = pkt.Raw[:i]
+	assert.NoError(t, pkt.Decode())
+
+	assert.Equal(t, pkt.Attributes[0], stun.RawAttribute{Type: stun.AttrErrorCode, Length: 0x15, Value: []uint8{0x0, 0x0, 0x4, 0x14, 0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x20, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65}}) // nolint: lll
+	assert.Equal(t, pkt.Attributes[1], stun.RawAttribute{Type: stun.AttrUnknownAttributes, Length: 0x8, Value: []uint8{0x7, 0xad, 0x0, 0x0, 0x7f, 0xff, 0x0, 0x0}})                                                                          // nolint: lll
+
+	assert.NoError(t, conn.Close())
+	assert.NoError(t, server.Close())
 }
 
 type VNet struct {
@@ -1172,7 +1231,7 @@ func TestConsumeSingleTURNFrame(t *testing.T) {
 }
 
 func TestSTUNOnly(t *testing.T) {
-	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	serverAddr, err := net.ResolveUDPAddr("udp4", testAddr)
 	assert.NoError(t, err)
 
 	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
