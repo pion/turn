@@ -1,16 +1,21 @@
 # Examples
 
 ## turn-server
-The `turn-server` directory contains 5 examples that show common Pion TURN usages.
+
+The `turn-server` directory contains 5 examples that show common Pion
+TURN usages.
 
 All of these except `lt-creds` take the following arguments.
 
-* -users     : &lt;username&gt;=&lt;password&gt;[,&lt;username&gt;=&lt;password&gt;,...] pairs
-* -realm     : Realm name (defaults to "pion.ly")
-* -port      : Listening port (defaults to 3478)
-* -public-ip : IP that your TURN server is reachable on, for local development then can just be your local IP, avoid using `127.0.0.1` as some browsers discard from that IP.
+- -users : \<username\>=\<password\>\[,\<username\>=\<password\>,...\]
+  pairs
+- -realm : Realm name (defaults to "pion.ly")
+- -port : Listening port (defaults to 3478)
+- -public-ip : IP that your TURN server is reachable on, for local
+  development then can just be your local IP, avoid using `127.0.0.1` as
+  some browsers discard from that IP.
 
-```sh
+``` sh
 $ cd simple
 $ go build
 $ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
@@ -19,150 +24,199 @@ $ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
 The five example servers are
 
 #### add-software-attribute
-This examples adds the SOFTWARE attribute with the value "CustomTURNServer" to every outbound STUN packet. This could be useful if you want to add debug info to your outbound packets.
+
+This examples adds the SOFTWARE attribute with the value
+"CustomTURNServer" to every outbound STUN packet. This could be useful
+if you want to add debug info to your outbound packets.
 
 You could also use this same pattern to filter/modify packets if needed.
 
 #### log
-This example logs all inbound/outbound STUN packets. This could be useful if you want to store all inbound/outbound traffic or generate rich logs.
 
-You could also intercept these reads/writes if you want to filter traffic going to/from specific peers.
+This example logs all inbound/outbound STUN packets. This could be
+useful if you want to store all inbound/outbound traffic or generate
+rich logs.
+
+You could also intercept these reads/writes if you want to filter
+traffic going to/from specific peers.
 
 #### simple
-This example is the most minimal invocation of a Pion TURN instance possible. It has no custom behavior, and could be a good starting place for running your own TURN server.
+
+This example is the most minimal invocation of a Pion TURN instance
+possible. It has no custom behavior, and could be a good starting place
+for running your own TURN server.
 
 #### simple-multithreaded
-A multithreaded version of the `simple` Pion TURN server, demonstrating how to scale a Pion UDP TURN server to multiple CPU cores. By default, Pion TURN servers use a single UDP socket that is shared across all clients, which limits Pion UDP/TURN servers to a single CPU thread. This example passes a configurable number of UDP sockets to the TURN server, which share the same local `address:port` pair using the `SO_REUSEPORT` socket option. This then lets the server to create a separate readloop to drain each socket. The OS kernel will distribute packets received on the `address:port` pair across the sockets by the IP 5-tuple, which makes sure that all packets of a TURN allocation will be correctly processed in a single readloop.
+
+A multithreaded version of the `simple` Pion TURN server, demonstrating
+how to scale a Pion UDP TURN server to multiple CPU cores. By default,
+Pion TURN servers use a single UDP socket that is shared across all
+clients, which limits Pion UDP/TURN servers to a single CPU thread. This
+example passes a configurable number of UDP sockets to the TURN server,
+which share the same local `address:port` pair using the `SO_REUSEPORT`
+socket option. This then lets the server to create a separate readloop
+to drain each socket. The OS kernel will distribute packets received on
+the `address:port` pair across the sockets by the IP 5-tuple, which
+makes sure that all packets of a TURN allocation will be correctly
+processed in a single readloop.
 
 #### tcp
-This example demonstrates listening on TCP. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TCP and UDP.
+
+This example demonstrates listening on TCP. You could combine this
+example with `simple` and you will have a Pion TURN instance that is
+available via TCP and UDP.
 
 #### tls
-This example demonstrates listening on TLS. You could combine this example with `simple` and you will have a Pion TURN instance that is available via TLS and UDP.
+
+This example demonstrates listening on TLS. You could combine this
+example with `simple` and you will have a Pion TURN instance that is
+available via TLS and UDP.
 
 #### lt-creds
 
-This example shows how to use long term credentials. You can issue passwords that automatically expire, and you don't have the store them.
+This example shows how to use long term credentials. You can issue
+passwords that automatically expire, and you don't have the store them.
 
-The only downside is that you can't revoke a single username/password. You need to rotate the shared secret. Instead of `users` it has the follow arguments instead
+The only downside is that you can't revoke a single username/password.
+You need to rotate the shared secret. Instead of `users` it has the
+follow arguments instead
 
-* -authSecret     : Shared secret for the Long Term Credential Mechanism
+- -authSecret : Shared secret for the Long Term Credential Mechanism
 
 #### lt-cred-turn-rest
 
-This example shows how to use ephemeral credentials, generated by a REST API, with the user part formatted as `timestamp:username`.
+This example shows how to use ephemeral credentials, generated by a REST
+API, with the user part formatted as `timestamp:username`.
 
-The REST API and TURN server use the same shared secret to compute the credentials.
+The REST API and TURN server use the same shared secret to compute the
+credentials.
 
 The timestamp part specifies when the credentials will expire.
 
-This mechanism is described in https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00
+This mechanism is described in
+https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00
 
-* -authSecret     : Shared secret for the ephemeral Credential Mechanism
+- -authSecret : Shared secret for the ephemeral Credential Mechanism
 
 #### perm-filter
 
-This example demonstrates the use of a permission handler in the PION TURN server. The example implements a filtering policy that lets clients to connect back to their own host or server-reflexive address but will drop everything else. This will let the client ping-test through but will block essentially all other peer connection attempts.
+This example demonstrates the use of a permission handler in the PION
+TURN server. The example implements a filtering policy that lets clients
+to connect back to their own host or server-reflexive address but will
+drop everything else. This will let the client ping-test through but
+will block essentially all other peer connection attempts.
 
 ## turn-client
-The `turn-client` directory contains 3 examples that show common Pion TURN usages. 
+
+The `turn-client` directory contains 3 examples that show common Pion
+TURN usages.
 
 All of these examples except `tcp-alloc` take the following arguments.
 
-* -host      : TURN server host
-* -ping      : Run ping test
-* -port      : Listening port (defaults to 3478)
-* -realm     : Realm name (defaults to "pion.ly")
-* -user      : &lt;username&gt;=&lt;password&gt; pair
+- -host : TURN server host
+- -ping : Run ping test
+- -port : Listening port (defaults to 3478)
+- -realm : Realm name (defaults to "pion.ly")
+- -user : \<username\>=\<password\> pair
 
 #### tcp
+
 Dials the requested TURN server via TCP
 
 #### udp
+
 Dials the requested TURN server via UDP
 
-```sh
+``` sh
 $ cd udp
 $ go build
 $ ./udp -host <turn-server-name> -user=user=pass
 ```
 
-By adding `-ping`, it will perform a ping test. (it internally creates a 'pinger' and send
-a UDP packet every second, 10 times then exits.
+By adding `-ping`, it will perform a ping test. (it internally creates a
+'pinger' and send a UDP packet every second, 10 times then exits.
 
-```sh
+``` sh
 $ go build
 ./turn-client -host <turn-server-name> -user=user=pass -ping
 ```
 
 Following diagram shows what turn-client does:
-```
-          +----------------+
-          |   TURN Server  |
-          |                |
-          +---o--------o---+
-  TURN port  /^      / ^\
-       3478_/ |     /  | \_relayConn (*1)
-              |    /   |
-              |  _/    |
-  mappedAddr_ | /      | ___external IP:port
-       (*2)  \|v       |/    for pingerConn
-          +---o--------o---+     (*3)
-          |   |   NAT  |   |
-          +----------------+
-              |        |
-  TURN    ___ |        | __pingerConn
-  listen     \|        |/     (sends `ping` to relayConn)
-  port    +---o--------o---+
-  (conn)  |   turn-client  |
-          +----------------+
-```
 
-> (*1) The relayConn actually lives in the local turn-client, but it acts as if it is
-> listening on the TURN server. In fact, relayConn.LocalAddr() returns a transport address
-> on which the TURN server is listening.
+              +----------------+
+              |   TURN Server  |
+              |                |
+              +---o--------o---+
+      TURN port  /^      / ^\
+           3478_/ |     /  | \_relayConn (*1)
+                  |    /   |
+                  |  _/    |
+      mappedAddr_ | /      | ___external IP:port
+           (*2)  \|v       |/    for pingerConn
+              +---o--------o---+     (*3)
+              |   |   NAT  |   |
+              +----------------+
+                  |        |
+      TURN    ___ |        | __pingerConn
+      listen     \|        |/     (sends `ping` to relayConn)
+      port    +---o--------o---+
+      (conn)  |   turn-client  |
+              +----------------+
 
-> (*2) For relayConn to send/receive packet to/from (*3), you will need to give relayConn permission
-> to send/receive packet to/from the IP address. In the example code, this is done by sending a
-> packet, "Hello" (content does not matter), to the mappedAddr. (assuming the IP address of
-> mappedAddr and the external IP:port (*3) are the same) This process is known as
-> "UDP hole punching" and TURN server exhibits "Address-restricted" behavior. Once it is done,
-> packets coming from (*3) will be received by relayConn.
+> (\*1) The relayConn actually lives in the local turn-client, but it
+> acts as if it is listening on the TURN server. In fact,
+> relayConn.LocalAddr() returns a transport address on which the TURN
+> server is listening.
 
+> (*2) For relayConn to send/receive packet to/from (*3), you will need
+> to give relayConn permission to send/receive packet to/from the IP
+> address. In the example code, this is done by sending a packet,
+> "Hello" (content does not matter), to the mappedAddr. (assuming the IP
+> address of mappedAddr and the external IP:port (*3) are the same) This
+> process is known as "UDP hole punching" and TURN server exhibits
+> "Address-restricted" behavior. Once it is done, packets coming from
+> (*3) will be received by relayConn.
 
 #### tcp-alloc
-The `tcp-alloc` exemplifies how to create client TCP allocations and use them to exchange messages between peers. It simulates two clients and creates a TCP allocation for each. Then, both clients exchange their relayed addresses with each other through a signaling server. Finally, each client uses its TCP allocation and the relayed address of the other client to send and receive a single message.
+
+The `tcp-alloc` exemplifies how to create client TCP allocations and use
+them to exchange messages between peers. It simulates two clients and
+creates a TCP allocation for each. Then, both clients exchange their
+relayed addresses with each other through a signaling server. Finally,
+each client uses its TCP allocation and the relayed address of the other
+client to send and receive a single message.
 
 The `tcp-alloc` takes the following arguments:
 
-* -host      : TURN server host
-* -port      : Listening port (defaults to 3478)
-* -user      : &lt;username&gt;=&lt;password&gt; pair
-* -realm     : Realm name (defaults to "pion.ly")
-* -signaling : Run the signaling server
-
+- -host : TURN server host
+- -port : Listening port (defaults to 3478)
+- -user : \<username\>=\<password\> pair
+- -realm : Realm name (defaults to "pion.ly")
+- -signaling : Run the signaling server
 
 To run the example:
 
-1) Start one client and the signaling server used to exchange the relayed addresses:
+1)  Start one client and the signaling server used to exchange the
+    relayed addresses:
 
-```sh
+``` sh
 go build
 ./tcp-alloc -host <turn-server-name> -port <port> -user=<username=password> -signaling=true
 ```
 
-2) Start the other client without starting the signaling server:
+2)  Start the other client without starting the signaling server:
 
-```sh
+``` sh
 ./tcp-alloc -host <turn-server-name> -port <port> -user=<username=password> -signaling=false
 ```
 
-A Coturn TURN server can be locally deployed and used for testing with the following command (this is a test configuration of the Coturn TURN server and should not be used for production):
+A Coturn TURN server can be locally deployed and used for testing with
+the following command (this is a test configuration of the Coturn TURN
+server and should not be used for production):
 
-```sh
+``` sh
 /bin/turnserver -lt-cred-mech -u <username:password> -r pion.ly --allow-loopback-peers --cli-password=<clipassword>
 ```
 
->If using this Coturn TURN server deployment: 
->* turn-server-name      : 127.0.0.1
->* port                  : 3478
+> If using this Coturn TURN server deployment: \* turn-server-name :
+> 127.0.0.1 \* port : 3478
