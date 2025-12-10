@@ -47,6 +47,9 @@ type ClientConfig struct {
 	Conn           net.PacketConn // Listening socket (net.PacketConn)
 	Net            transport.Net
 	LoggerFactory  logging.LoggerFactory
+
+	evenPort         bool   // If EVEN-PORT Attribute should be sent in Allocation
+	reservationToken []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
 }
 
 // Client is a STUN server client.
@@ -70,6 +73,9 @@ type Client struct {
 	mutex         sync.RWMutex           // Thread-safe
 	mutexTrMap    sync.Mutex             // Thread-safe
 	log           logging.LeveledLogger  // Read-only
+
+	evenPort         bool   // If EVEN-PORT Attribute should be sent in Allocation
+	reservationToken []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on,
@@ -121,17 +127,19 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 
 	client := &Client{
-		conn:           config.Conn,
-		stunServerAddr: stunServ,
-		turnServerAddr: turnServ,
-		username:       stun.NewUsername(config.Username),
-		password:       config.Password,
-		realm:          stun.NewRealm(config.Realm),
-		software:       stun.NewSoftware(config.Software),
-		trMap:          client.NewTransactionMap(),
-		net:            config.Net,
-		rto:            rto,
-		log:            log,
+		conn:             config.Conn,
+		stunServerAddr:   stunServ,
+		turnServerAddr:   turnServ,
+		username:         stun.NewUsername(config.Username),
+		password:         config.Password,
+		realm:            stun.NewRealm(config.Realm),
+		software:         stun.NewSoftware(config.Software),
+		trMap:            client.NewTransactionMap(),
+		net:              config.Net,
+		rto:              rto,
+		log:              log,
+		evenPort:         config.evenPort,
+		reservationToken: config.reservationToken,
 	}
 
 	return client, nil
@@ -241,45 +249,50 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 }
 
 func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
-	proto.RelayedAddress,
-	proto.Lifetime,
-	stun.Nonce,
-	error,
+	relayed proto.RelayedAddress,
+	lifetime proto.Lifetime,
+	nonce stun.Nonce,
+	reservationToken proto.ReservationToken,
+	err error,
 ) {
-	var relayed proto.RelayedAddress
-	var lifetime proto.Lifetime
-	var nonce stun.Nonce
-
-	msg, err := stun.Build(
+	allocationSetters := []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
 		proto.RequestedTransport{Protocol: protocol},
 		stun.Fingerprint,
-	)
+	}
+	if c.evenPort {
+		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
+	}
+	if len(c.reservationToken) != 0 {
+		allocationSetters = append(allocationSetters, proto.ReservationToken(c.reservationToken))
+	}
+
+	msg, err := stun.Build(allocationSetters...)
 	if err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 
 	trRes, err := c.PerformTransaction(msg, c.turnServerAddr, false)
 	if err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 
 	res := trRes.Msg
 
 	// Anonymous allocate failed, trying to authenticate.
 	if err = nonce.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 	if err = c.realm.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 	c.realm = append([]byte(nil), c.realm...)
 	c.integrity = stun.NewLongTermIntegrity(
 		c.username.String(), c.realm.String(), c.password,
 	)
 	// Trying to authorize.
-	msg, err = stun.Build(
+	allocationSetters = []stun.Setter{
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
 		proto.RequestedTransport{Protocol: protocol},
@@ -288,14 +301,22 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		&nonce,
 		&c.integrity,
 		stun.Fingerprint,
-	)
+	}
+	if c.evenPort {
+		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
+	}
+	if len(c.reservationToken) != 0 {
+		allocationSetters = append(allocationSetters, proto.ReservationToken(c.reservationToken))
+	}
+
+	msg, err = stun.Build(allocationSetters...)
 	if err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 
 	trRes, err = c.PerformTransaction(msg, c.turnServerAddr, false)
 	if err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 	res = trRes.Msg
 
@@ -307,23 +328,30 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 				ErrorCodeAttr:   code,
 			}
 
-			return relayed, lifetime, nonce, turnError
+			return relayed, lifetime, nonce, reservationToken, turnError
 		}
 
-		return relayed, lifetime, nonce, fmt.Errorf("%s", res.Type) //nolint:err113
+		return relayed, lifetime, nonce, reservationToken, fmt.Errorf("%s", res.Type) //nolint:err113
 	}
 
 	// Getting relayed addresses from response.
 	if err := relayed.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 
 	// Getting lifetime from response
 	if err := lifetime.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, err
+		return relayed, lifetime, nonce, reservationToken, err
 	}
 
-	return relayed, lifetime, nonce, nil
+	// Getting reservation-token from response
+	if c.evenPort {
+		if err := reservationToken.GetFrom(res); err != nil {
+			return relayed, lifetime, nonce, reservationToken, err
+		}
+	}
+
+	return relayed, lifetime, nonce, reservationToken, nil
 }
 
 // Allocate sends a TURN allocation request to the given transport address.
@@ -338,7 +366,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, relayedConn.LocalAddr().String())
 	}
 
-	relayed, lifetime, nonce, err := c.sendAllocateRequest(proto.ProtoUDP)
+	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoUDP)
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +389,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		Log:         c.log,
 	})
 	c.setRelayedUDPConn(relayedConn)
+	c.setReservationToken(reservationToken)
 
 	return relayedConn, nil
 }
@@ -377,7 +406,7 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, allocation.Addr())
 	}
 
-	relayed, lifetime, nonce, err := c.sendAllocateRequest(proto.ProtoTCP)
+	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoTCP)
 	if err != nil {
 		return nil, err
 	}
@@ -401,6 +430,7 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 	})
 
 	c.setTCPAllocation(allocation)
+	c.setReservationToken(reservationToken)
 
 	return allocation, nil
 }
@@ -708,4 +738,18 @@ func (c *Client) getTCPAllocation() *client.TCPAllocation {
 	defer c.mutex.RUnlock()
 
 	return c.tcpAllocation
+}
+
+func (c *Client) setReservationToken(reservationToken []byte) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.reservationToken = reservationToken
+}
+
+func (c *Client) getReservationToken() []byte {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.reservationToken
 }

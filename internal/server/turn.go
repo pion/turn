@@ -123,6 +123,12 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		if err = evenPort.GetFrom(stunMsg); err == nil {
 			return buildAndSendErr(req.Conn, req.SrcAddr, errRequestWithReservationTokenAndEvenPort, badRequestMsg...)
 		}
+
+		allocationPort, reservationFound := req.AllocationManager.GetReservation(string(reservationTokenAttr))
+		if !reservationFound {
+			return buildAndSendErr(req.Conn, req.SrcAddr, errNoAllocationFound, insufficientCapacityMsg...)
+		}
+		requestedPort = allocationPort + 1
 	}
 
 	// 6. The server checks if the request contains an EVEN-PORT attribute.
