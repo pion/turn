@@ -1330,6 +1330,176 @@ func TestQuotaReached(t *testing.T) {
 	assert.Equal(t, err.Error(), "Allocate error response (error 486: )")
 }
 
+func TestReservation(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		},
+		Realm: "pion.ly",
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	firstConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	secondConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	firstClient, err := NewClient(&ClientConfig{
+		Conn:           firstConn,
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "user",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+		evenPort:       true,
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, firstClient.Listen())
+
+	firstAllocation, err := firstClient.Allocate()
+	assert.NoError(t, err)
+
+	firstAllocationAddr, ok := firstAllocation.LocalAddr().(*net.UDPAddr)
+	assert.True(t, ok)
+	assert.Equal(t, firstAllocationAddr.Port%2, 0)
+
+	reservationToken := firstClient.getReservationToken()
+	assert.NotEmpty(t, reservationToken)
+
+	secondClient, err := NewClient(&ClientConfig{
+		Conn:             secondConn,
+		STUNServerAddr:   testAddr,
+		TURNServerAddr:   testAddr,
+		Username:         "user",
+		Password:         "pass",
+		Realm:            "pion.ly",
+		LoggerFactory:    logging.NewDefaultLoggerFactory(),
+		reservationToken: reservationToken,
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, secondClient.Listen())
+
+	secondAllocation, err := secondClient.Allocate()
+	assert.NoError(t, err)
+
+	secondAllocationAddr, ok := secondAllocation.LocalAddr().(*net.UDPAddr)
+	assert.True(t, ok)
+	assert.Equal(t, firstAllocationAddr.Port+1, secondAllocationAddr.Port)
+
+	firstClient.Close()
+	secondClient.Close()
+	assert.NoError(t, server.Close())
+}
+
+func TestReservation_InvalidToken(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		},
+		Realm: "pion.ly",
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:             conn,
+		STUNServerAddr:   testAddr,
+		TURNServerAddr:   testAddr,
+		Username:         "user",
+		Password:         "pass",
+		Realm:            "pion.ly",
+		LoggerFactory:    logging.NewDefaultLoggerFactory(),
+		reservationToken: []byte{105, 99, 86, 84, 103, 97, 108, 112},
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	_, err = client.Allocate()
+	assert.Equal(t, err.Error(), "Allocate error response (error 508: )")
+
+	client.Close()
+	assert.NoError(t, server.Close())
+}
+
+func TestReservation_TokenAndEvenPort(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		},
+		Realm: "pion.ly",
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: serverConn,
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:             conn,
+		STUNServerAddr:   testAddr,
+		TURNServerAddr:   testAddr,
+		Username:         "user",
+		Password:         "pass",
+		Realm:            "pion.ly",
+		LoggerFactory:    logging.NewDefaultLoggerFactory(),
+		evenPort:         true,
+		reservationToken: []byte{105, 99, 86, 84, 103, 97, 108, 112},
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	_, err = client.Allocate()
+	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
+
+	client.Close()
+	assert.NoError(t, server.Close())
+}
+
 func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	b.Helper()
 
