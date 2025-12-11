@@ -116,6 +116,48 @@ func (g *truncConnGenerator) AllocatePacketConn(network string, requestedPort in
 	return &truncConn{conn, g.mtu}, addr, nil
 }
 
+func TestServerConfig(t *testing.T) {
+	udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
+	assert.NoError(t, err)
+
+	tcpListener, err := net.Listen("tcp4", testAddr) // nolint: noctx
+	assert.NoError(t, err)
+
+	t.Run("Empty", func(t *testing.T) {
+		assert.ErrorIs(t, (&ServerConfig{}).validate(), errNoAvailableConns)
+	})
+
+	t.Run("No PacketConn", func(t *testing.T) {
+		assert.ErrorIs(t, (&ServerConfig{
+			PacketConnConfigs: []PacketConnConfig{{}},
+		}).validate(), errConnUnset)
+	})
+
+	t.Run("RelayAddressGenerator Error", func(t *testing.T) {
+		assert.ErrorIs(t, (&ServerConfig{
+			PacketConnConfigs: []PacketConnConfig{{
+				PacketConn:            udpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorNone{},
+			}},
+		}).validate(), errListeningAddressInvalid)
+	})
+
+	t.Run("No Listener", func(t *testing.T) {
+		assert.ErrorIs(t, (&ServerConfig{
+			ListenerConfigs: []ListenerConfig{{}},
+		}).validate(), errListenerUnset)
+	})
+
+	t.Run("No RelayAddressGenerator", func(t *testing.T) {
+		assert.ErrorIs(t, (&ServerConfig{
+			ListenerConfigs: []ListenerConfig{{Listener: tcpListener}},
+		}).validate(), errRelayAddressGeneratorUnset)
+	})
+
+	assert.NoError(t, tcpListener.Close())
+	assert.NoError(t, udpListener.Close())
+}
+
 func TestServer(t *testing.T) { //nolint:maintidx
 	lim := test.TimeOut(time.Second * 30)
 	defer lim.Stop()
