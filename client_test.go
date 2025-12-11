@@ -331,3 +331,97 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, server.Close())
 }
+
+type mockConn struct {
+	didClose, didLocalAddr, didRemoteAddr, didSetWriteDeadline, didSetDeadline, didSetReadDeadline bool
+}
+
+func (m *mockConn) Read(b []byte) (n int, err error) { return }
+
+func (m *mockConn) Write(b []byte) (n int, err error) { return }
+
+func (m *mockConn) Close() error {
+	m.didClose = true
+
+	return nil
+}
+
+func (m *mockConn) LocalAddr() net.Addr {
+	m.didLocalAddr = true
+
+	return nil
+}
+
+func (m *mockConn) RemoteAddr() net.Addr {
+	m.didRemoteAddr = true
+
+	return nil
+}
+
+func (m *mockConn) SetDeadline(t time.Time) error {
+	m.didSetDeadline = true
+
+	return nil
+}
+
+func (m *mockConn) SetReadDeadline(t time.Time) error {
+	m.didSetReadDeadline = true
+
+	return nil
+}
+
+func (m *mockConn) SetWriteDeadline(t time.Time) error {
+	m.didSetWriteDeadline = true
+
+	return nil
+}
+
+func TestStunConn(t *testing.T) {
+	t.Run("nextConn Called", func(t *testing.T) {
+		testConn := &mockConn{}
+		stunConn := NewSTUNConn(testConn)
+
+		assert.Nil(t, stunConn.LocalAddr())
+		assert.True(t, testConn.didLocalAddr)
+
+		assert.NoError(t, stunConn.Close())
+		assert.True(t, testConn.didClose)
+
+		assert.NoError(t, stunConn.SetDeadline(time.Time{}))
+		assert.True(t, testConn.didSetDeadline)
+
+		assert.NoError(t, stunConn.SetReadDeadline(time.Time{}))
+		assert.True(t, testConn.didSetReadDeadline)
+
+		assert.NoError(t, stunConn.SetWriteDeadline(time.Time{}))
+		assert.True(t, testConn.didSetWriteDeadline)
+	})
+
+	t.Run("Invalid STUN Frames", func(t *testing.T) {
+		testConn := &mockConn{}
+		stunConn := NewSTUNConn(testConn)
+		stunConn.buff = make([]byte, stunHeaderSize+1)
+
+		n, addr, err := stunConn.ReadFrom(nil)
+		assert.Zero(t, n)
+		assert.Nil(t, addr)
+		assert.Error(t, err, errInvalidTURNFrame)
+	})
+
+	t.Run("Invalid ChannelData size", func(t *testing.T) {
+		n, err := consumeSingleTURNFrame([]byte{0x40, 0x00, 0x00, 0x12, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+		assert.Equal(t, n, 0)
+		assert.Error(t, err, errIncompleteTURNFrame)
+	})
+
+	t.Run("Padding", func(t *testing.T) {
+		testConn := &mockConn{}
+		stunConn := NewSTUNConn(testConn)
+		stunConn.buff = []byte{0x40, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+
+		n, addr, err := stunConn.ReadFrom(nil)
+		assert.Equal(t, n, 8)
+		assert.Nil(t, addr)
+		assert.NoError(t, err)
+	})
+}
