@@ -1542,6 +1542,53 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 	assert.NoError(t, server.Close())
 }
 
+func TestRelayAddressGeneratorPortRange(t *testing.T) {
+	relayAddressGeneratorPortRange := &RelayAddressGeneratorPortRange{}
+
+	t.Run("Validate", func(t *testing.T) {
+		assert.ErrorIs(t, relayAddressGeneratorPortRange.Validate(), errMinPortNotZero)
+
+		relayAddressGeneratorPortRange.MinPort = 5000
+		assert.ErrorIs(t, relayAddressGeneratorPortRange.Validate(), errMaxPortNotZero)
+
+		relayAddressGeneratorPortRange.MaxPort = 6000
+		assert.ErrorIs(t, relayAddressGeneratorPortRange.Validate(), errRelayAddressInvalid)
+
+		relayAddressGeneratorPortRange.RelayAddress = net.ParseIP("127.0.0.1")
+		assert.ErrorIs(t, relayAddressGeneratorPortRange.Validate(), errListeningAddressInvalid)
+	})
+
+	t.Run("One Port", func(t *testing.T) {
+		conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn("udp", 3478)
+		assert.NoError(t, err)
+		assert.NotNil(t, addr)
+
+		udpAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+		assert.True(t, ok)
+		assert.Equal(t, udpAddr.Port, 3478)
+
+		assert.NoError(t, conn.Close())
+	})
+
+	t.Run("Range", func(t *testing.T) {
+		conns := []net.PacketConn{}
+		for i := 0; i < 25; i++ {
+			conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn("udp", 0)
+			assert.NoError(t, err)
+			assert.NotNil(t, addr)
+			conns = append(conns, conn)
+		}
+
+		for i := range conns {
+			udpAddr, ok := conns[i].LocalAddr().(*net.UDPAddr)
+			assert.True(t, ok)
+			assert.True(t, udpAddr.Port >= 5000 && udpAddr.Port <= 6000)
+
+			assert.NoError(t, conns[i].Close())
+		}
+	})
+}
+
 func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	b.Helper()
 
