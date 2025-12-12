@@ -1542,6 +1542,18 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 	assert.NoError(t, server.Close())
 }
 
+func TestRelayAddressGeneratorStatic(t *testing.T) {
+	relayAddressGeneratorStatic := &RelayAddressGeneratorStatic{}
+
+	assert.ErrorIs(t, relayAddressGeneratorStatic.Validate(), errRelayAddressInvalid)
+
+	relayAddressGeneratorStatic.RelayAddress = net.ParseIP("127.0.0.1")
+	assert.ErrorIs(t, relayAddressGeneratorStatic.Validate(), errListeningAddressInvalid)
+
+	relayAddressGeneratorStatic.Address = "127.0.0.1"
+	assert.NoError(t, relayAddressGeneratorStatic.Validate())
+}
+
 func TestRelayAddressGeneratorPortRange(t *testing.T) {
 	relayAddressGeneratorPortRange := &RelayAddressGeneratorPortRange{}
 
@@ -1556,6 +1568,9 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 
 		relayAddressGeneratorPortRange.RelayAddress = net.ParseIP("127.0.0.1")
 		assert.ErrorIs(t, relayAddressGeneratorPortRange.Validate(), errListeningAddressInvalid)
+
+		relayAddressGeneratorPortRange.Address = "127.0.0.1"
+		assert.NoError(t, relayAddressGeneratorPortRange.Validate())
 	})
 
 	t.Run("One Port", func(t *testing.T) {
