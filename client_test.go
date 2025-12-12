@@ -330,83 +330,113 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, server.Close())
 }
 
-func TestClientE2E(t *testing.T) {
-	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
-	assert.NoError(t, err)
+type channelBindFilterConn struct {
+	net.PacketConn
 
-	server, err := NewServer(ServerConfig{
-		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
-			return GenerateAuthKey(username, realm, "pass"), true
-		},
-		PacketConnConfigs: []PacketConnConfig{
-			{
-				PacketConn: udpListener,
-				RelayAddressGenerator: &RelayAddressGeneratorStatic{
-					RelayAddress: net.ParseIP("127.0.0.1"),
-					Address:      "0.0.0.0",
+	doFilter bool
+}
+
+func (c *channelBindFilterConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	for {
+		n, addr, err = c.PacketConn.ReadFrom(p)
+
+		if c.doFilter {
+			stunMsg := &stun.Message{Raw: p[:n]}
+			if err := stunMsg.Decode(); err == nil && stunMsg.Type.Method == stun.MethodChannelBind {
+				continue
+			}
+		}
+
+		return
+	}
+}
+
+func TestClientE2E(t *testing.T) {
+	doTest := func(disableChannelBind bool) {
+		udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+		assert.NoError(t, err)
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
+				return GenerateAuthKey(username, realm, "pass"), true
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: &channelBindFilterConn{udpListener, disableChannelBind},
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "0.0.0.0",
+					},
 				},
 			},
-		},
-		Realm: "pion.ly",
-	})
-	assert.NoError(t, err)
+			Realm: "pion.ly",
+		})
+		assert.NoError(t, err)
 
-	stunClientConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
-	assert.NoError(t, err)
+		stunClientConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+		assert.NoError(t, err)
 
-	client, err := NewClient(&ClientConfig{
-		Conn:           stunClientConn,
-		STUNServerAddr: testAddr,
-		TURNServerAddr: testAddr,
-		Username:       "foo",
-		Password:       "pass",
-	})
-	assert.NoError(t, err)
-	assert.NoError(t, client.Listen())
+		client, err := NewClient(&ClientConfig{
+			Conn:           stunClientConn,
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
+			Username:       "foo",
+			Password:       "pass",
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
 
-	allocation, err := client.Allocate()
-	assert.NoError(t, err)
+		allocation, err := client.Allocate()
+		assert.NoError(t, err)
 
-	remotePeerConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
-	assert.NoError(t, err)
+		remotePeerConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+		assert.NoError(t, err)
 
-	remotePeerAddr, ok := remotePeerConn.LocalAddr().(*net.UDPAddr)
-	assert.True(t, ok)
+		remotePeerAddr, ok := remotePeerConn.LocalAddr().(*net.UDPAddr)
+		assert.True(t, ok)
 
-	allocationAddr, ok := allocation.LocalAddr().(*net.UDPAddr)
-	assert.True(t, ok)
+		allocationAddr, ok := allocation.LocalAddr().(*net.UDPAddr)
+		assert.True(t, ok)
 
-	expectedPacket := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+		expectedPacket := []byte{0xDE, 0xAD, 0xBE, 0xEF}
 
-	sendPackets := func(src, dst net.PacketConn, port int) {
-		pktCount := atomic.Uint32{}
+		sendPackets := func(src, dst net.PacketConn, port int) {
+			pktCount := atomic.Uint32{}
 
-		go func() {
-			buff := make([]byte, 500)
+			go func() {
+				buff := make([]byte, 500)
+				for pktCount.Load() < 25 {
+					i, _, readErr := dst.ReadFrom(buff)
+					assert.NoError(t, readErr)
+
+					assert.Equal(t, expectedPacket, buff[:i])
+					pktCount.Add(1)
+				}
+			}()
 			for pktCount.Load() < 25 {
-				i, _, readErr := dst.ReadFrom(buff)
-				assert.NoError(t, readErr)
+				_, err = src.WriteTo(expectedPacket, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: port})
+				assert.NoError(t, err)
 
-				assert.Equal(t, expectedPacket, buff[:i])
-				pktCount.Add(1)
+				time.Sleep(time.Millisecond * 25)
 			}
-		}()
-		for pktCount.Load() < 25 {
-			_, err = src.WriteTo(expectedPacket, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: port})
-			assert.NoError(t, err)
-
-			time.Sleep(time.Millisecond * 25)
 		}
+
+		sendPackets(allocation, remotePeerConn, remotePeerAddr.Port)
+		sendPackets(remotePeerConn, allocation, allocationAddr.Port)
+
+		assert.NotNil(t, client.TURNServerAddr())
+		assert.NotNil(t, client.Username())
+		assert.NotNil(t, client.Realm())
+
+		// Shutdown
+		assert.NoError(t, remotePeerConn.Close())
+		assert.NoError(t, allocation.Close())
+		assert.NoError(t, stunClientConn.Close())
+		assert.NoError(t, server.Close())
 	}
 
-	sendPackets(allocation, remotePeerConn, remotePeerAddr.Port)
-	sendPackets(remotePeerConn, allocation, allocationAddr.Port)
-
-	// Shutdown
-	assert.NoError(t, remotePeerConn.Close())
-	assert.NoError(t, allocation.Close())
-	assert.NoError(t, stunClientConn.Close())
-	assert.NoError(t, server.Close())
+	doTest(true)
+	doTest(false)
 }
 
 type mockConn struct {
