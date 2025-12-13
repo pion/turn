@@ -1604,6 +1604,18 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 	})
 }
 
+func TestNilAddressGenerator(t *testing.T) {
+	generator := &nilAddressGenerator{}
+
+	assert.ErrorIs(t, generator.Validate(), errRelayAddressGeneratorNil)
+
+	_, _, err := generator.AllocatePacketConn("", 0)
+	assert.ErrorIs(t, err, errRelayAddressGeneratorNil)
+
+	_, _, err = generator.AllocateConn("", 0)
+	assert.ErrorIs(t, err, errRelayAddressGeneratorNil)
+}
+
 func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	b.Helper()
 
