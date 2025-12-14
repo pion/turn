@@ -10,7 +10,7 @@ import (
 	"github.com/pion/logging"
 )
 
-const permissionTimeout = time.Duration(5) * time.Minute
+const DefaultPermissionTimeout = time.Duration(5) * time.Minute
 
 // Permission represents a TURN permission. TURN permissions mimic the address-restricted
 // filtering mechanism of NATs that comply with [RFC4787].
@@ -18,15 +18,17 @@ const permissionTimeout = time.Duration(5) * time.Minute
 type Permission struct {
 	Addr          net.Addr
 	allocation    *Allocation
+	timeout       time.Duration
 	lifetimeTimer *time.Timer
 	log           logging.LeveledLogger
 }
 
 // NewPermission create a new Permission.
-func NewPermission(addr net.Addr, log logging.LeveledLogger) *Permission {
+func NewPermission(addr net.Addr, log logging.LeveledLogger, timeout time.Duration) *Permission {
 	return &Permission{
-		Addr: addr,
-		log:  log,
+		Addr:    addr,
+		log:     log,
+		timeout: timeout,
 	}
 }
 

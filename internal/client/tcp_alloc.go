@@ -62,6 +62,11 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 		alloc.lifetime()/2,
 	)
 
+	permRefreshInterval := defaultPermRefreshInterval
+	if config.PermissionRefreshInterval != 0 {
+		permRefreshInterval = config.PermissionRefreshInterval
+	}
+
 	alloc.refreshPermsTimer = NewPeriodicTimer(
 		timerIDRefreshPerms,
 		alloc.onRefreshTimers,

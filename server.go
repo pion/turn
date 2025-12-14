@@ -27,6 +27,8 @@ type Server struct {
 	quotaHandler       QuotaHandler
 	realm              string
 	channelBindTimeout time.Duration
+	permissionTimeout  time.Duration
+	allocationLifetime time.Duration
 	nonceHash          server.NonceManager
 	eventHandler       EventHandler
 
@@ -63,6 +65,8 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		quotaHandler:       config.QuotaHandler,
 		realm:              config.Realm,
 		channelBindTimeout: config.ChannelBindTimeout,
+		permissionTimeout:  config.PermissionTimeout,
+		allocationLifetime: config.AllocationLifetime,
 		packetConnConfigs:  config.PacketConnConfigs,
 		listenerConfigs:    config.ListenerConfigs,
 		nonceHash:          nonceHash,
@@ -72,6 +76,12 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 
 	if server.channelBindTimeout == 0 {
 		server.channelBindTimeout = proto.DefaultLifetime
+	}
+	if server.permissionTimeout == 0 {
+		server.permissionTimeout = allocation.DefaultPermissionTimeout
+	}
+	if server.allocationLifetime == 0 {
+		server.allocationLifetime = proto.DefaultLifetime
 	}
 
 	for _, cfg := range server.packetConnConfigs {
@@ -237,6 +247,8 @@ func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Man
 			Realm:              s.realm,
 			AllocationManager:  allocationManager,
 			ChannelBindTimeout: s.channelBindTimeout,
+			PermissionTimeout:  s.permissionTimeout,
+			AllocationLifetime: s.allocationLifetime,
 			NonceHash:          s.nonceHash,
 		}); err != nil {
 			if s.eventHandler.OnAllocationError != nil {

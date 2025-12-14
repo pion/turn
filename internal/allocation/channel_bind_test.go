@@ -45,7 +45,7 @@ func newChannelBind(lifetime time.Duration) *ChannelBind {
 		Peer:   addr,
 	}
 
-	_ = a.AddChannelBind(c, lifetime)
+	_ = a.AddChannelBind(c, lifetime, DefaultPermissionTimeout)
 
 	return c
 }

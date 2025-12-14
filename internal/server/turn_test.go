@@ -25,12 +25,12 @@ func TestAllocationLifeTime(t *testing.T) {
 		}
 
 		m := &stun.Message{}
-		lifetimeDuration := allocationLifeTime(m)
+		lifetimeDuration := allocationLifeTime(Request{AllocationLifetime: proto.DefaultLifetime}, m)
 		assert.Equal(t, proto.DefaultLifetime, lifetimeDuration,
 			"Allocation lifetime should be default time duration")
 		assert.NoError(t, lifetime.AddTo(m))
 
-		lifetimeDuration = allocationLifeTime(m)
+		lifetimeDuration = allocationLifeTime(Request{AllocationLifetime: proto.DefaultLifetime}, m)
 		assert.Equal(t, lifetime.Duration, lifetimeDuration,
 			"Allocation lifetime should be equal to the one set in the message")
 	})
@@ -44,7 +44,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		m2 := &stun.Message{}
 		_ = lifetime.AddTo(m2)
 
-		lifetimeDuration := allocationLifeTime(m2)
+		lifetimeDuration := allocationLifeTime(Request{AllocationLifetime: proto.DefaultLifetime}, m2)
 		assert.Equal(t, proto.DefaultLifetime, lifetimeDuration)
 	})
 

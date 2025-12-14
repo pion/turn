@@ -18,16 +18,19 @@ import (
 
 // AllocationConfig is a set of configuration params use by NewUDPConn and NewTCPAllocation.
 type AllocationConfig struct {
-	Client      Client
-	RelayedAddr net.Addr
-	ServerAddr  net.Addr
-	Integrity   stun.MessageIntegrity
-	Nonce       stun.Nonce
-	Username    stun.Username
-	Realm       stun.Realm
-	Lifetime    time.Duration
-	Net         transport.Net
-	Log         logging.LeveledLogger
+	Client                    Client
+	RelayedAddr               net.Addr
+	ServerAddr                net.Addr
+	Integrity                 stun.MessageIntegrity
+	Nonce                     stun.Nonce
+	Username                  stun.Username
+	Realm                     stun.Realm
+	Lifetime                  time.Duration
+	Net                       transport.Net
+	Log                       logging.LeveledLogger
+	PermissionRefreshInterval time.Duration
+	BindingRefreshInterval    time.Duration
+	BindingCheckInterval      time.Duration
 }
 
 type allocation struct {

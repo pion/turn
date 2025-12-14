@@ -149,8 +149,8 @@ func genAuthEvent(req Request, stunMsg *stun.Message, callingMethod stun.Method,
 		callingMethod.String(), verdict)
 }
 
-func allocationLifeTime(m *stun.Message) time.Duration {
-	lifetimeDuration := proto.DefaultLifetime
+func allocationLifeTime(req Request, m *stun.Message) time.Duration {
+	lifetimeDuration := req.AllocationLifetime
 
 	var lifetime proto.Lifetime
 	if err := lifetime.GetFrom(m); err == nil {
