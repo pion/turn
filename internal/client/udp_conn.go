@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	maxReadQueueSize       = 1024
-	permRefreshInterval    = 120 * time.Second
-	bindingRefreshInterval = 5 * time.Minute
-	bindingCheckInterval   = 30 * time.Second
-	maxRetryAttempts       = 3
+	maxReadQueueSize              = 1024
+	defaultPermRefreshInterval    = 120 * time.Second
+	defaultBindingRefreshInterval = 5 * time.Minute
+	defaultBindingCheckInterval   = 30 * time.Second
+	maxRetryAttempts              = 3
 )
 
 const (
@@ -38,19 +38,21 @@ type inboundData struct {
 // UDPConn is the implementation of the Conn and PacketConn interfaces for UDP network connections.
 // compatible with net.PacketConn and net.Conn.
 type UDPConn struct {
-	bindingMgr         *bindingManager   // Thread-safe
-	checkBindingsTimer *PeriodicTimer    // Thread-safe
-	readCh             chan *inboundData // Thread-safe
-	closeCh            chan struct{}     // Thread-safe
+	bindingMgr             *bindingManager   // Thread-safe
+	checkBindingsTimer     *PeriodicTimer    // Thread-safe
+	readCh                 chan *inboundData // Thread-safe
+	closeCh                chan struct{}     // Thread-safe
+	bindingRefreshInterval time.Duration     // Read-only
 	allocation
 }
 
 // NewUDPConn creates a new instance of UDPConn.
 func NewUDPConn(config *AllocationConfig) *UDPConn {
 	conn := &UDPConn{
-		bindingMgr: newBindingManager(),
-		readCh:     make(chan *inboundData, maxReadQueueSize),
-		closeCh:    make(chan struct{}),
+		bindingMgr:             newBindingManager(),
+		readCh:                 make(chan *inboundData, maxReadQueueSize),
+		closeCh:                make(chan struct{}),
+		bindingRefreshInterval: defaultBindingRefreshInterval,
 		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
@@ -67,6 +69,10 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		},
 	}
 
+	if config.BindingRefreshInterval != 0 {
+		conn.bindingRefreshInterval = config.BindingRefreshInterval
+	}
+
 	conn.log.Debugf("Initial lifetime: %d seconds", int(conn.lifetime().Seconds()))
 
 	conn.refreshAllocTimer = NewPeriodicTimer(
@@ -75,11 +81,21 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		conn.lifetime()/2,
 	)
 
+	permRefreshInterval := defaultPermRefreshInterval
+	if config.PermissionRefreshInterval != 0 {
+		permRefreshInterval = config.PermissionRefreshInterval
+	}
+
 	conn.refreshPermsTimer = NewPeriodicTimer(
 		timerIDRefreshPerms,
 		conn.onRefreshTimers,
 		permRefreshInterval,
 	)
+
+	bindingCheckInterval := defaultBindingCheckInterval
+	if config.BindingCheckInterval != 0 {
+		bindingCheckInterval = config.BindingCheckInterval
+	}
 
 	conn.checkBindingsTimer = NewPeriodicTimer(
 		timerIDCheckBindings,
@@ -421,7 +437,7 @@ func (c *UDPConn) maybeBind(bound *binding) {
 	switch {
 	case state == bindingStateIdle:
 		bound.setState(bindingStateRequest)
-	case state == bindingStateReady && time.Since(bound.refreshedAt()) > bindingRefreshInterval:
+	case state == bindingStateReady && time.Since(bound.refreshedAt()) > c.bindingRefreshInterval:
 		bound.setState(bindingStateRefresh)
 	default:
 		return

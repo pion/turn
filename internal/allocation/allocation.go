@@ -80,7 +80,7 @@ func (a *Allocation) AddPermission(perms *Permission) {
 	a.permissionsLock.RUnlock()
 
 	if ok {
-		existedPermission.refresh(permissionTimeout)
+		existedPermission.refresh(perms.timeout)
 
 		return
 	}
@@ -98,7 +98,7 @@ func (a *Allocation) AddPermission(perms *Permission) {
 		}
 	}
 
-	perms.start(permissionTimeout)
+	perms.start(perms.timeout)
 }
 
 // RemovePermission removes the net.Addr's fingerprint from the allocation's permissions.
@@ -130,7 +130,7 @@ func (a *Allocation) ListPermissions() []*Permission {
 
 // AddChannelBind adds a new ChannelBind to the allocation, it also updates the
 // permissions needed for this ChannelBind.
-func (a *Allocation) AddChannelBind(chanBind *ChannelBind, lifetime time.Duration) error {
+func (a *Allocation) AddChannelBind(chanBind *ChannelBind, channelLifetime, permissionLifetime time.Duration) error {
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel number.
 	channelByNumber := a.GetChannelByNumber(chanBind.Number)
@@ -146,10 +146,10 @@ func (a *Allocation) AddChannelBind(chanBind *ChannelBind, lifetime time.Duratio
 
 		chanBind.allocation = a
 		a.channelBindings = append(a.channelBindings, chanBind)
-		chanBind.start(lifetime)
+		chanBind.start(channelLifetime)
 
 		// Channel binds also refresh permissions.
-		a.AddPermission(NewPermission(chanBind.Peer, a.log))
+		a.AddPermission(NewPermission(chanBind.Peer, a.log, permissionLifetime))
 
 		if a.eventHandler.OnChannelCreated != nil {
 			a.eventHandler.OnChannelCreated(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
@@ -157,10 +157,10 @@ func (a *Allocation) AddChannelBind(chanBind *ChannelBind, lifetime time.Duratio
 				a.RelayAddr, chanBind.Peer, uint16(chanBind.Number))
 		}
 	} else {
-		channelByNumber.refresh(lifetime)
+		channelByNumber.refresh(channelLifetime)
 
 		// Channel binds also refresh permissions.
-		a.AddPermission(NewPermission(channelByNumber.Peer, a.log))
+		a.AddPermission(NewPermission(channelByNumber.Peer, a.log, permissionLifetime))
 	}
 
 	return nil

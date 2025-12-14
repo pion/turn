@@ -48,8 +48,11 @@ type ClientConfig struct {
 	Net            transport.Net
 	LoggerFactory  logging.LoggerFactory
 
-	evenPort         bool   // If EVEN-PORT Attribute should be sent in Allocation
-	reservationToken []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	evenPort                  bool   // If EVEN-PORT Attribute should be sent in Allocation
+	reservationToken          []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	permissionRefreshInterval time.Duration
+	bindingRefreshInterval    time.Duration
+	bindingCheckInterval      time.Duration
 }
 
 // Client is a STUN server client.
@@ -74,8 +77,11 @@ type Client struct {
 	mutexTrMap    sync.Mutex             // Thread-safe
 	log           logging.LeveledLogger  // Read-only
 
-	evenPort         bool   // If EVEN-PORT Attribute should be sent in Allocation
-	reservationToken []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	evenPort                  bool   // If EVEN-PORT Attribute should be sent in Allocation
+	reservationToken          []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	permissionRefreshInterval time.Duration
+	bindingRefreshInterval    time.Duration
+	bindingCheckInterval      time.Duration
 }
 
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on,
@@ -127,19 +133,22 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 
 	client := &Client{
-		conn:             config.Conn,
-		stunServerAddr:   stunServ,
-		turnServerAddr:   turnServ,
-		username:         stun.NewUsername(config.Username),
-		password:         config.Password,
-		realm:            stun.NewRealm(config.Realm),
-		software:         stun.NewSoftware(config.Software),
-		trMap:            client.NewTransactionMap(),
-		net:              config.Net,
-		rto:              rto,
-		log:              log,
-		evenPort:         config.evenPort,
-		reservationToken: config.reservationToken,
+		conn:                      config.Conn,
+		stunServerAddr:            stunServ,
+		turnServerAddr:            turnServ,
+		username:                  stun.NewUsername(config.Username),
+		password:                  config.Password,
+		realm:                     stun.NewRealm(config.Realm),
+		software:                  stun.NewSoftware(config.Software),
+		trMap:                     client.NewTransactionMap(),
+		net:                       config.Net,
+		rto:                       rto,
+		log:                       log,
+		evenPort:                  config.evenPort,
+		reservationToken:          config.reservationToken,
+		permissionRefreshInterval: config.permissionRefreshInterval,
+		bindingRefreshInterval:    config.bindingRefreshInterval,
+		bindingCheckInterval:      config.bindingCheckInterval,
 	}
 
 	return client, nil
@@ -377,16 +386,19 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	}
 
 	relayedConn = client.NewUDPConn(&client.AllocationConfig{
-		Client:      c,
-		RelayedAddr: relayedAddr,
-		ServerAddr:  c.turnServerAddr,
-		Realm:       c.realm,
-		Username:    c.username,
-		Integrity:   c.integrity,
-		Nonce:       nonce,
-		Lifetime:    lifetime.Duration,
-		Net:         c.net,
-		Log:         c.log,
+		Client:                    c,
+		RelayedAddr:               relayedAddr,
+		ServerAddr:                c.turnServerAddr,
+		Realm:                     c.realm,
+		Username:                  c.username,
+		Integrity:                 c.integrity,
+		Nonce:                     nonce,
+		Lifetime:                  lifetime.Duration,
+		Net:                       c.net,
+		Log:                       c.log,
+		PermissionRefreshInterval: c.permissionRefreshInterval,
+		BindingRefreshInterval:    c.bindingRefreshInterval,
+		BindingCheckInterval:      c.bindingCheckInterval,
 	})
 	c.setRelayedUDPConn(relayedConn)
 	c.setReservationToken(reservationToken)

@@ -369,7 +369,9 @@ func TestClientE2E(t *testing.T) {
 					},
 				},
 			},
-			Realm: "pion.ly",
+			Realm:              "pion.ly",
+			PermissionTimeout:  time.Millisecond * 100,
+			ChannelBindTimeout: time.Millisecond * 100,
 		})
 		assert.NoError(t, err)
 
@@ -377,11 +379,14 @@ func TestClientE2E(t *testing.T) {
 		assert.NoError(t, err)
 
 		client, err := NewClient(&ClientConfig{
-			Conn:           stunClientConn,
-			STUNServerAddr: testAddr,
-			TURNServerAddr: testAddr,
-			Username:       "foo",
-			Password:       "pass",
+			Conn:                      stunClientConn,
+			STUNServerAddr:            testAddr,
+			TURNServerAddr:            testAddr,
+			Username:                  "foo",
+			Password:                  "pass",
+			permissionRefreshInterval: time.Millisecond * 50,
+			bindingRefreshInterval:    time.Millisecond * 50,
+			bindingCheckInterval:      time.Millisecond * 50,
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, client.Listen())
@@ -398,14 +403,14 @@ func TestClientE2E(t *testing.T) {
 		allocationAddr, ok := allocation.LocalAddr().(*net.UDPAddr)
 		assert.True(t, ok)
 
-		expectedPacket := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-
 		sendPackets := func(src, dst net.PacketConn, port int) {
-			pktCount := atomic.Uint32{}
+			const expectedPktCount = 25
+			expectedPacket := []byte{0xDE, 0xAD, 0xBE, 0xEF}
 
+			pktCount := atomic.Uint32{}
 			go func() {
-				buff := make([]byte, 500)
-				for pktCount.Load() < 25 {
+				buff := make([]byte, len(expectedPacket))
+				for pktCount.Load() < expectedPktCount {
 					i, _, readErr := dst.ReadFrom(buff)
 					assert.NoError(t, readErr)
 
@@ -413,7 +418,7 @@ func TestClientE2E(t *testing.T) {
 					pktCount.Add(1)
 				}
 			}()
-			for pktCount.Load() < 25 {
+			for pktCount.Load() < expectedPktCount {
 				_, err = src.WriteTo(expectedPacket, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: port})
 				assert.NoError(t, err)
 

@@ -21,7 +21,8 @@ func TestUDPConn(t *testing.T) {
 				client: client,
 				log:    logging.NewDefaultLoggerFactory().NewLogger("test"),
 			},
-			bindingMgr: bm,
+			bindingMgr:             bm,
+			bindingRefreshInterval: defaultBindingRefreshInterval,
 		}
 	}
 
@@ -73,7 +74,7 @@ func TestUDPConn(t *testing.T) {
 
 				bound.setState(tt.initialState)
 				if tt.pastInterval {
-					bound.setRefreshedAt(time.Now().Add(-(bindingRefreshInterval + 1*time.Minute)))
+					bound.setRefreshedAt(time.Now().Add(-(defaultBindingRefreshInterval + 1*time.Minute)))
 				}
 
 				conn.maybeBind(bound)

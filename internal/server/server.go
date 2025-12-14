@@ -32,9 +32,12 @@ type Request struct {
 	// Quota Handler
 	QuotaHandler func(username string, realm string, srcAddr net.Addr) (ok bool)
 
-	Log                logging.LeveledLogger
-	Realm              string
+	Log   logging.LeveledLogger
+	Realm string
+
 	ChannelBindTimeout time.Duration
+	PermissionTimeout  time.Duration
+	AllocationLifetime time.Duration
 }
 
 // HandleRequest processes the give Request.

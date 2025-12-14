@@ -19,35 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAllocation(t *testing.T) {
-	tt := []struct {
-		name string
-		f    func(*testing.T)
-	}{
-		{"GetPermission", subTestGetPermission},
-		{"AddPermission", subTestAddPermission},
-		{"RemovePermission", subTestRemovePermission},
-		{"AddChannelBind", subTestAddChannelBind},
-		{"GetChannelByNumber", subTestGetChannelByNumber},
-		{"GetChannelByAddr", subTestGetChannelByAddr},
-		{"RemoveChannelBind", subTestRemoveChannelBind},
-		{"Refresh", subTestAllocationRefresh},
-		{"Close", subTestAllocationClose},
-		{"packetHandler", subTestPacketHandler},
-		{"ResponseCache", subTestResponseCache},
-	}
-
-	for _, tc := range tt {
-		f := tc.f
-		t.Run(tc.name, func(t *testing.T) {
-			f(t)
-		})
-	}
-}
-
-func subTestGetPermission(t *testing.T) {
-	t.Helper()
-
+func TestGetPermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
@@ -60,13 +32,16 @@ func subTestGetPermission(t *testing.T) {
 	assert.NoError(t, err)
 
 	perms := &Permission{
-		Addr: addr,
+		Addr:    addr,
+		timeout: DefaultPermissionTimeout,
 	}
 	perms2 := &Permission{
-		Addr: addr2,
+		Addr:    addr2,
+		timeout: DefaultPermissionTimeout,
 	}
 	perms3 := &Permission{
-		Addr: addr3,
+		Addr:    addr3,
+		timeout: DefaultPermissionTimeout,
 	}
 
 	alloc.AddPermission(perms)
@@ -83,16 +58,15 @@ func subTestGetPermission(t *testing.T) {
 	assert.Equal(t, perms3, foundP3, "Permission with another IP should be found")
 }
 
-func subTestAddPermission(t *testing.T) {
-	t.Helper()
-
+func TestAddPermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
 
 	p := &Permission{
-		Addr: addr,
+		Addr:    addr,
+		timeout: DefaultPermissionTimeout,
 	}
 
 	alloc.AddPermission(p)
@@ -102,16 +76,15 @@ func subTestAddPermission(t *testing.T) {
 	assert.Equal(t, p, foundPermission)
 }
 
-func subTestRemovePermission(t *testing.T) {
-	t.Helper()
-
+func TestRemovePermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
 	assert.NoError(t, err)
 
 	p := &Permission{
-		Addr: addr,
+		Addr:    addr,
+		timeout: DefaultPermissionTimeout,
 	}
 
 	alloc.AddPermission(p)
@@ -125,9 +98,7 @@ func subTestRemovePermission(t *testing.T) {
 	assert.Nil(t, foundPermission, "Got permission should be nil after removed.")
 }
 
-func subTestAddChannelBind(t *testing.T) {
-	t.Helper()
-
+func TestAddChannelBind(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
@@ -135,23 +106,21 @@ func subTestAddChannelBind(t *testing.T) {
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	err = alloc.AddChannelBind(c, proto.DefaultLifetime)
+	err = alloc.AddChannelBind(c, proto.DefaultLifetime, DefaultPermissionTimeout)
 	assert.Nil(t, err, "should succeed")
 	assert.Equal(t, alloc, c.allocation, "allocation should be the caller.")
 
 	c2 := NewChannelBind(proto.MinChannelNumber+1, addr, nil)
-	err = alloc.AddChannelBind(c2, proto.DefaultLifetime)
+	err = alloc.AddChannelBind(c2, proto.DefaultLifetime, DefaultPermissionTimeout)
 	assert.NotNil(t, err, "should failed with conflicted peer address")
 
 	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
 	c3 := NewChannelBind(proto.MinChannelNumber, addr2, nil)
-	err = alloc.AddChannelBind(c3, proto.DefaultLifetime)
+	err = alloc.AddChannelBind(c3, proto.DefaultLifetime, DefaultPermissionTimeout)
 	assert.NotNil(t, err, "should fail with conflicted number.")
 }
 
-func subTestGetChannelByNumber(t *testing.T) {
-	t.Helper()
-
+func TestGetChannelByNumber(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
@@ -159,7 +128,7 @@ func subTestGetChannelByNumber(t *testing.T) {
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	_ = alloc.AddChannelBind(c, proto.DefaultLifetime)
+	_ = alloc.AddChannelBind(c, proto.DefaultLifetime, DefaultPermissionTimeout)
 
 	existChannel := alloc.GetChannelByNumber(c.Number)
 	assert.Equal(t, c, existChannel)
@@ -168,9 +137,7 @@ func subTestGetChannelByNumber(t *testing.T) {
 	assert.Nil(t, notExistChannel, "should be nil for not existed channel.")
 }
 
-func subTestGetChannelByAddr(t *testing.T) {
-	t.Helper()
-
+func TestGetChannelByAddr(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
@@ -178,7 +145,7 @@ func subTestGetChannelByAddr(t *testing.T) {
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	_ = alloc.AddChannelBind(c, proto.DefaultLifetime)
+	_ = alloc.AddChannelBind(c, proto.DefaultLifetime, DefaultPermissionTimeout)
 
 	existChannel := alloc.GetChannelByAddr(c.Peer)
 	assert.Equal(t, c, existChannel)
@@ -188,9 +155,7 @@ func subTestGetChannelByAddr(t *testing.T) {
 	assert.Nil(t, notExistChannel, "should be nil for not existed channel.")
 }
 
-func subTestRemoveChannelBind(t *testing.T) {
-	t.Helper()
-
+func TestRemoveChannelBind(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3478")
@@ -198,7 +163,7 @@ func subTestRemoveChannelBind(t *testing.T) {
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
 
-	_ = alloc.AddChannelBind(c, proto.DefaultLifetime)
+	_ = alloc.AddChannelBind(c, proto.DefaultLifetime, DefaultPermissionTimeout)
 
 	alloc.RemoveChannelBind(c.Number)
 
@@ -209,9 +174,7 @@ func subTestRemoveChannelBind(t *testing.T) {
 	assert.Nil(t, channelByAddr)
 }
 
-func subTestAllocationRefresh(t *testing.T) {
-	t.Helper()
-
+func TestAllocationRefresh(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 
 	var wg sync.WaitGroup
@@ -226,9 +189,7 @@ func subTestAllocationRefresh(t *testing.T) {
 	assert.False(t, alloc.lifetimeTimer.Stop())
 }
 
-func subTestAllocationClose(t *testing.T) {
-	t.Helper()
-
+func TestAllocationClose(t *testing.T) {
 	network := "udp"
 
 	l, err := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
@@ -244,18 +205,16 @@ func subTestAllocationClose(t *testing.T) {
 	assert.NoError(t, err)
 
 	c := NewChannelBind(proto.MinChannelNumber, addr, nil)
-	_ = alloc.AddChannelBind(c, proto.DefaultLifetime)
+	_ = alloc.AddChannelBind(c, proto.DefaultLifetime, DefaultPermissionTimeout)
 
 	// Add permission
-	alloc.AddPermission(NewPermission(addr, nil))
+	alloc.AddPermission(NewPermission(addr, nil, DefaultPermissionTimeout))
 
 	assert.Nil(t, alloc.Close(), "should succeed")
 	assert.True(t, isClose(alloc.RelaySocket), "should be closed")
 }
 
-func subTestPacketHandler(t *testing.T) {
-	t.Helper()
-
+func TestPacketHandler(t *testing.T) {
 	network := "udp"
 
 	manager, _ := newTestManager()
@@ -296,10 +255,10 @@ func subTestPacketHandler(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Add permission with peer1 address
-	alloc.AddPermission(NewPermission(peerListener1.LocalAddr(), manager.log))
+	alloc.AddPermission(NewPermission(peerListener1.LocalAddr(), manager.log, DefaultPermissionTimeout))
 	// Add channel with min channel number and peer2 address
 	channelBind := NewChannelBind(proto.MinChannelNumber, peerListener2.LocalAddr(), manager.log)
-	_ = alloc.AddChannelBind(channelBind, proto.DefaultLifetime)
+	_ = alloc.AddChannelBind(channelBind, proto.DefaultLifetime, DefaultPermissionTimeout)
 
 	_, port, _ := ipnet.AddrIPPort(alloc.RelaySocket.LocalAddr())
 	relayAddrWithHostStr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -342,9 +301,7 @@ func subTestPacketHandler(t *testing.T) {
 	_ = peerListener2.Close()
 }
 
-func subTestResponseCache(t *testing.T) {
-	t.Helper()
-
+func TestResponseCache(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
 	responseAttrs := []stun.Setter{

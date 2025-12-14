@@ -175,7 +175,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	//    with a 300 (Try Alternate) error if it wishes to redirect the
 	//    client to a different server.  The use of this error code and
 	//    attribute follow the specification in [RFC5389].
-	lifetimeDuration := allocationLifeTime(stunMsg)
+	lifetimeDuration := allocationLifeTime(req, stunMsg)
 	alloc, err := req.AllocationManager.CreateAllocation(
 		fiveTuple,
 		req.Conn,
@@ -247,7 +247,7 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 		return err
 	}
 
-	lifetimeDuration := allocationLifeTime(stunMsg)
+	lifetimeDuration := allocationLifeTime(req, stunMsg)
 	fiveTuple := &allocation.FiveTuple{
 		SrcAddr:  req.SrcAddr,
 		DstAddr:  req.Conn.LocalAddr(),
@@ -321,6 +321,7 @@ func handleCreatePermissionRequest(req Request, stunMsg *stun.Message) error {
 				Port: peerAddress.Port,
 			},
 			req.Log,
+			req.PermissionTimeout,
 		))
 		addCount++
 
@@ -426,7 +427,7 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error {
 		channel,
 		&net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port},
 		req.Log,
-	), req.ChannelBindTimeout)
+	), req.ChannelBindTimeout, req.PermissionTimeout)
 	if err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
