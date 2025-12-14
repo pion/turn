@@ -154,6 +154,12 @@ func TestServerConfig(t *testing.T) {
 		}).validate(), errRelayAddressGeneratorUnset)
 	})
 
+	_, _, err = (&RelayAddressGeneratorNone{}).AllocateConn("", 0)
+	assert.ErrorIs(t, err, errTODO)
+
+	_, _, err = (&RelayAddressGeneratorStatic{}).AllocateConn("", 0)
+	assert.ErrorIs(t, err, errTODO)
+
 	assert.NoError(t, tcpListener.Close())
 	assert.NoError(t, udpListener.Close())
 }
@@ -1537,6 +1543,75 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 
 	_, err = client.Allocate()
 	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
+
+	client.Close()
+	assert.NoError(t, server.Close())
+}
+
+type dontFragmentConn struct {
+	net.PacketConn
+}
+
+func (c *dontFragmentConn) ReadFrom(buff []byte) (n int, addr net.Addr, err error) {
+	n, addr, err = c.PacketConn.ReadFrom(buff)
+	if err != nil {
+		return
+	}
+
+	stunMsg := &stun.Message{Raw: buff[:n]}
+	if err = stunMsg.Decode(); err != nil {
+		return
+	}
+
+	stunMsg.Attributes = append(stunMsg.Attributes, stun.RawAttribute{Type: stun.AttrDontFragment})
+	stunMsg.Encode()
+
+	copy(buff, stunMsg.Raw)
+	n = len(stunMsg.Raw)
+
+	return
+}
+
+func TestDontFragment(t *testing.T) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3478")
+	assert.NoError(t, err)
+
+	serverConn, err := net.ListenPacket(serverAddr.Network(), serverAddr.String()) // nolint: noctx
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, _ string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		},
+		Realm: "pion.ly",
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn: &dontFragmentConn{serverConn},
+			RelayAddressGenerator: &RelayAddressGeneratorStatic{
+				RelayAddress: net.ParseIP("127.0.0.1"),
+				Address:      "0.0.0.0",
+			},
+		}},
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           conn,
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "user",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	_, err = client.Allocate()
+	assert.Equal(t, err.Error(), "Allocate error response (error 420: )")
 
 	client.Close()
 	assert.NoError(t, server.Close())
