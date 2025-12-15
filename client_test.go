@@ -370,6 +370,7 @@ func TestClientE2E(t *testing.T) {
 				},
 			},
 			Realm:              "pion.ly",
+			AllocationLifetime: time.Second,
 			PermissionTimeout:  time.Millisecond * 100,
 			ChannelBindTimeout: time.Millisecond * 100,
 		})
