@@ -107,3 +107,56 @@ func TestAllocationLifeTime(t *testing.T) {
 		assert.Nil(t, req.AllocationManager.GetAllocation(fiveTuple))
 	})
 }
+
+func TestRequestedTransport(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, conn.Close())
+	}()
+
+	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+			if err != nil {
+				return nil, nil, listenErr
+			}
+
+			return con, con.LocalAddr(), nil
+		},
+		AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
+			return nil, nil, nil
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+
+	nonceHash, err := NewShortNonceHash(0)
+	assert.NoError(t, err)
+	staticKey, err := nonceHash.Generate()
+	assert.NoError(t, err)
+
+	req := Request{
+		AllocationManager: allocationManager,
+		NonceHash:         nonceHash,
+		Conn:              conn,
+		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+		Log:               logger,
+		AuthHandler: func(string, string, net.Addr) (key []byte, ok bool) {
+			return []byte(staticKey), true
+		},
+	}
+
+	m := &stun.Message{}
+	assert.NoError(t, (proto.Lifetime{}).AddTo(m))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
+	assert.NoError(t, (stun.Username(staticKey)).AddTo(m))
+	assert.ErrorIs(t, handleAllocateRequest(req, m), stun.ErrAttributeNotFound)
+
+	assert.NoError(t, (proto.RequestedTransport{Protocol: 1}).AddTo(m))
+	assert.ErrorIs(t, handleAllocateRequest(req, m), errUnsupportedTransportProtocol)
+}
