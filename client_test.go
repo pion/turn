@@ -330,6 +330,56 @@ func TestTCPClientWithoutAddress(t *testing.T) {
 	assert.NoError(t, server.Close())
 }
 
+func TestClientReadTimout(t *testing.T) {
+	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:3478") // nolint: noctx
+	assert.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey(username, realm, "pass"), true
+		},
+		PacketConnConfigs: []PacketConnConfig{
+			{
+				PacketConn: udpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	assert.NoError(t, err)
+
+	stunClientConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           stunClientConn,
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "foo",
+		Password:       "pass",
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	allocation, err := client.Allocate()
+	assert.NoError(t, err)
+
+	assert.NoError(t, allocation.SetReadDeadline(time.Now().Add(time.Nanosecond)))
+	_, _, err = allocation.ReadFrom(nil)
+	assert.Contains(t, err.Error(), "i/o timeout")
+
+	// Shutdown
+	assert.NoError(t, allocation.Close())
+	assert.NoError(t, stunClientConn.Close())
+	assert.NoError(t, server.Close())
+
+	_, _, err = allocation.ReadFrom(nil)
+	assert.Contains(t, err.Error(), "use of closed network connection")
+}
+
 type channelBindFilterConn struct {
 	net.PacketConn
 
