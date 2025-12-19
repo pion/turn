@@ -8,6 +8,7 @@ import (
 )
 
 // DontFragmentAttr is a deprecated alias for DontFragment
+//
 // Deprecated: Please use DontFragment.
 type DontFragmentAttr = DontFragment
 

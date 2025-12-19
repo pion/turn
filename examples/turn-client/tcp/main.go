@@ -33,7 +33,7 @@ func main() { //nolint:cyclop
 	}
 
 	// Dial TURN Server
-	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
+	turnServerAddr := net.JoinHostPort(*host, fmt.Sprintf("%d", *port))
 	conn, err := net.Dial("tcp", turnServerAddr) // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to connect to TURN server: %s", err)
