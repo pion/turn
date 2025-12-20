@@ -4,7 +4,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net"
 
 	"github.com/pion/randutil"
@@ -462,6 +464,131 @@ func handleChannelData(req Request, channelData *proto.ChannelData) error {
 		return fmt.Errorf("%w: %s", errFailedWriteSocket, err.Error())
 	} else if l != len(channelData.Data) {
 		return fmt.Errorf("%w %d != %d (expected)", errShortWrite, l, len(channelData.Data))
+	}
+
+	return nil
+}
+
+func handleConnectRequest(req Request, stunMsg *stun.Message) error {
+	req.Log.Debugf("Received Connect from %s", req.SrcAddr)
+
+	alloc := req.AllocationManager.GetAllocation(&allocation.FiveTuple{
+		SrcAddr:  req.SrcAddr,
+		DstAddr:  req.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+	})
+	if alloc == nil {
+		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
+	}
+
+	// If the request does not contain an XOR-PEER-ADDRESS attribute, or if
+	// such attribute is invalid, the server MUST return a 400 (Bad Request)
+	// error.
+	var peerAddr proto.PeerAddress
+	if err := peerAddr.GetFrom(stunMsg); err != nil {
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
+			stunMsg.TransactionID,
+			stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
+		)...)
+	}
+
+	connectionID, err := req.AllocationManager.AddTCPConnection(alloc, peerAddr)
+	if err != nil {
+		// If the server is currently processing a Connect request for this
+		// allocation with the same XOR-PEER-ADDRESS, it MUST return a 446
+		// (Connection Already Exists) error.
+
+		// If the server has already successfully processed a Connect request
+		// for this allocation with the same XOR-PEER-ADDRESS, and the resulting
+		// client and peer data connections are either pending or active, it
+		// MUST return a 446 (Connection Already Exists) error.
+		if errors.Is(err, allocation.ErrDupeTCPConnection) {
+			return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
+				stunMsg.TransactionID,
+				stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
+				&stun.ErrorCodeAttribute{Code: stun.CodeConnAlreadyExists},
+			)...)
+		}
+
+		// Otherwise, the server MUST initiate an outgoing TCP connection.  The
+		// local endpoint is the relayed transport address associated with the
+		// allocation.  The remote endpoint is the one indicated by the XOR-
+		// PEER-ADDRESS attribute.  If the connection attempt fails or times
+		// out, the server MUST return a 447 (Connection Timeout or Failure)
+		// error.  The timeout value MUST be at least 30 seconds.
+		if errors.Is(err, allocation.ErrTCPConnectionTimeoutOrFailure) {
+			return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
+				stunMsg.TransactionID,
+				stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
+				&stun.ErrorCodeAttribute{Code: stun.CodeConnTimeoutOrFailure},
+			)...)
+		}
+
+		return err
+	}
+
+	// The server MUST include the CONNECTION-ID attribute in the Connect
+	// success response.  The attribute's value MUST uniquely identify the
+	// peer data connection.
+	return buildAndSend(req.Conn, req.SrcAddr, buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse),
+		connectionID,
+	)...)
+}
+
+func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
+	req.Log.Debugf("Received ConnectBind from %s", req.SrcAddr)
+	badRequestMsg := buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodConnectionBind, stun.ClassErrorResponse),
+		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
+	)
+
+	_, hasAuth, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
+	if !hasAuth {
+		return err
+	}
+
+	var connectionID proto.ConnectionID
+	usernameAttr := &stun.Username{}
+	if err = usernameAttr.GetFrom(stunMsg); err != nil {
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+	} else if err = connectionID.GetFrom(stunMsg); err != nil {
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+	}
+
+	// Authentication of the client by the server MUST use the same method
+	// and credentials as for the control connection.
+	//
+	// GetTCPConnection asserts that userName used for auth is same as allocation
+	tcpConn := req.AllocationManager.GetTCPConnection(usernameAttr.String(), connectionID)
+	if tcpConn == nil {
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+	}
+
+	stunConn, ok := req.Conn.(*proto.STUNConn)
+	if !ok {
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+	}
+
+	if err = buildAndSend(req.Conn, req.SrcAddr, buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse),
+		connectionID,
+	)...); err != nil {
+		return err
+	}
+
+	go func() {
+		if _, ioErr := io.Copy(tcpConn, stunConn.Conn()); ioErr != nil {
+			req.Log.Debugf("Exit read loop on error: %s", err)
+		}
+	}()
+
+	if _, err = io.Copy(stunConn.Conn(), tcpConn); err != nil {
+		req.Log.Debugf("Exit read loop on error: %s", err)
 	}
 
 	return nil

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/randutil"
+	"github.com/pion/turn/v4/internal/proto"
 )
 
 // ManagerConfig a bag of config params for Manager.
@@ -243,4 +245,76 @@ func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
 	}
 
 	return errAdminProhibited
+}
+
+// AddTCPConnection creates a new outbound TCP Connection and returns the Connection-ID
+// if it succeeds.
+func (m *Manager) AddTCPConnection( // nolint: cyclop
+	allocation *Allocation,
+	peerAddress proto.PeerAddress,
+) (proto.ConnectionID, error) {
+	if len(peerAddress.IP) == 0 || peerAddress.Port == 0 {
+		return 0, errInvalidPeerAddress
+	}
+
+	rand64, err := randutil.CryptoUint64()
+	if err != nil {
+		return 0, err
+	}
+
+	conn, err := net.DialTCP("tcp4", nil, &net.TCPAddr{IP: peerAddress.IP, Port: peerAddress.Port}) // nolint: noctx
+	if err != nil {
+		m.log.Warnf("Failed to create TCP Connection: %v", err)
+
+		return 0, ErrTCPConnectionTimeoutOrFailure
+	}
+	closeConn := func() {
+		if closeErr := conn.Close(); closeErr != nil {
+			m.log.Warnf("Failed to close TCP connection after ConnectionID generation failed: %v", closeErr)
+		}
+	}
+
+	connectionID := proto.ConnectionID(uint32(rand64 >> 32)) // nolint: gosec
+
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for i := range m.allocations {
+		if _, ok := m.allocations[i].tcpConnections[connectionID]; ok {
+			closeConn()
+
+			return 0, errFailedToGenerateConnectionID
+		}
+	}
+
+	for i := range allocation.tcpConnections {
+		tcpAddr, ok := allocation.tcpConnections[i].RemoteAddr().(*net.TCPAddr)
+		if !ok {
+			closeConn()
+
+			return 0, ErrDupeTCPConnection
+		} else if tcpAddr.IP.Equal(peerAddress.IP) && tcpAddr.Port == peerAddress.Port {
+			closeConn()
+
+			return 0, ErrDupeTCPConnection
+		}
+	}
+
+	allocation.tcpConnections[connectionID] = conn
+
+	return connectionID, nil
+}
+
+// GetTCPConnection returns the TCP Connection for the given ConnectionID.
+func (m *Manager) GetTCPConnection(username string, connectionID proto.ConnectionID) net.Conn {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for _, a := range m.allocations {
+		if _, ok := a.tcpConnections[connectionID]; ok && a.username == username {
+			return a.tcpConnections[connectionID]
+		}
+	}
+
+	return nil
 }

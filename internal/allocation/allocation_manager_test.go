@@ -7,6 +7,7 @@
 package allocation
 
 import (
+	"context"
 	"io"
 	"math/rand"
 	"net"
@@ -206,4 +207,93 @@ func TestGetRandomEvenPort(t *testing.T) {
 	assert.True(t, port%2 == 0)
 
 	assert.NoError(t, manager.Close())
+}
+
+func TestAddTCPConnection(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var acceptedConn net.Conn
+	var acceptErr error
+	go func() {
+		acceptedConn, acceptErr = ln.Accept()
+		cancel()
+	}()
+
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	assert.True(t, ok)
+
+	peer := proto.PeerAddress{IP: addr.IP, Port: addr.Port}
+
+	manager, err := newTestManager()
+	assert.NoError(t, err)
+
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	assert.NoError(t, err)
+
+	connectionID, err := manager.AddTCPConnection(allocation, peer)
+	assert.NoError(t, err)
+	assert.NotZero(t, connectionID)
+
+	_, err = manager.AddTCPConnection(allocation, peer)
+	assert.ErrorIs(t, err, ErrDupeTCPConnection)
+
+	assert.Nil(t, manager.GetTCPConnection("bad-username", connectionID))
+	c1 := manager.GetTCPConnection("", connectionID)
+
+	assert.NotNil(t, c1)
+	assert.NoError(t, c1.Close())
+
+	<-ctx.Done()
+	assert.NoError(t, acceptErr)
+	assert.NoError(t, acceptedConn.Close())
+	assert.NoError(t, ln.Close())
+	assert.NoError(t, turnSocket.Close())
+}
+
+func TestAddTCPConnectionInvalidPeerAddress(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	manager, err := newTestManager()
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	assert.NoError(t, err)
+
+	_, err = manager.AddTCPConnection(allocation, proto.PeerAddress{IP: nil, Port: 1234})
+	assert.ErrorIs(t, err, errInvalidPeerAddress)
+
+	_, err = manager.AddTCPConnection(allocation, proto.PeerAddress{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	assert.ErrorIs(t, err, errInvalidPeerAddress)
+
+	assert.NoError(t, turnSocket.Close())
+}
+
+func TestAddTCPConnectionInvalid(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	manager, err := newTestManager()
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	assert.NoError(t, err)
+
+	peerAddress := proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5000}
+
+	connectionID, err := manager.AddTCPConnection(allocation, peerAddress)
+	assert.ErrorIs(t, err, ErrTCPConnectionTimeoutOrFailure)
+	assert.Zero(t, connectionID)
+
+	assert.NoError(t, turnSocket.Close())
 }
