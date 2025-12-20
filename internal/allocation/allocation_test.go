@@ -13,11 +13,67 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
 	"github.com/pion/turn/v4/internal/ipnet"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestAllocation_MarshalUnmarshalBinary(t *testing.T) {
+	t.Run("Normal", func(t *testing.T) {
+		fiveTuple := &FiveTuple{
+			SrcAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234},
+			DstAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5678},
+		}
+
+		turnSocket, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, turnSocket.Close())
+		}()
+
+		loggerFactory := logging.NewDefaultLoggerFactory()
+		log := loggerFactory.NewLogger("test")
+
+		alloc := NewAllocation(turnSocket, fiveTuple, EventHandler{}, log)
+		alloc.Protocol = UDP
+		alloc.username = "user"
+		alloc.realm = "realm"
+		alloc.expiresAt = time.Now().Add(time.Minute).Round(time.Second)
+
+		relayAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:1000")
+		assert.NoError(t, err)
+		alloc.RelayAddr = relayAddr
+
+		permAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2000")
+		assert.NoError(t, err)
+		alloc.AddPermission(NewPermission(permAddr, log, DefaultPermissionTimeout))
+
+		chanAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3000")
+		assert.NoError(t, err)
+		err = alloc.AddChannelBind(NewChannelBind(proto.MinChannelNumber, chanAddr, log), proto.DefaultLifetime, DefaultPermissionTimeout)
+		assert.NoError(t, err)
+
+		data, err := alloc.MarshalBinary()
+		assert.NoError(t, err)
+
+		newAlloc := NewAllocation(nil, &FiveTuple{}, EventHandler{}, log)
+		// Initialize lifetimeTimer before unmarshaling, as Refresh expects it.
+		// Use a dummy long-running timer so it doesn't fire during the test.
+		newAlloc.lifetimeTimer = time.AfterFunc(time.Hour, func() {})
+		err = newAlloc.UnmarshalBinary(data)
+		assert.NoError(t, err)
+		assert.Equal(t, alloc.fiveTuple.String(), newAlloc.fiveTuple.String())
+		assert.Equal(t, alloc.Protocol, newAlloc.Protocol)
+		assert.Equal(t, alloc.username, newAlloc.username)
+		assert.Equal(t, alloc.realm, newAlloc.realm)
+		assert.True(t, alloc.expiresAt.Equal(newAlloc.expiresAt))
+		assert.Equal(t, alloc.RelayAddr.String(), newAlloc.RelayAddr.String())
+		assert.Equal(t, len(alloc.permissions), len(newAlloc.permissions))
+		assert.Equal(t, len(alloc.channelBindings), len(newAlloc.channelBindings))
+	})
+}
 
 func TestGetPermission(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
