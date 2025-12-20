@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
-package turn
+package proto
 
 import (
 	"encoding/binary"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/pion/stun/v3"
-	"github.com/pion/turn/v4/internal/proto"
 )
 
 var (
@@ -27,12 +26,8 @@ type STUNConn struct {
 }
 
 const (
-	stunHeaderSize = 20
-
-	channelDataLengthSize = 2
-	channelDataNumberSize = channelDataLengthSize
-	channelDataHeaderSize = channelDataLengthSize + channelDataNumberSize
-	channelDataPadding    = 4
+	stunHeaderSize     = 20
+	channelDataPadding = 4
 )
 
 // Given a buffer give the last offset of the TURN frame
@@ -48,7 +43,7 @@ func consumeSingleTURNFrame(b []byte) (int, error) {
 	switch {
 	case stun.IsMessage(b):
 		datagramSize = binary.BigEndian.Uint16(b[2:4]) + stunHeaderSize
-	case proto.ChannelNumber(binary.BigEndian.Uint16(b[0:2])).Valid():
+	case ChannelNumber(binary.BigEndian.Uint16(b[0:2])).Valid():
 		datagramSize = binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize])
 		if paddingOverflow := (datagramSize + channelDataPadding) % channelDataPadding; paddingOverflow != 0 {
 			datagramSize = (datagramSize + channelDataPadding) - paddingOverflow
@@ -120,6 +115,11 @@ func (s *STUNConn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline implements SetWriteDeadline from net.PacketConn.
 func (s *STUNConn) SetWriteDeadline(t time.Time) error {
 	return s.nextConn.SetWriteDeadline(t)
+}
+
+// Conn returns the net.Conn used for this STUNConn.
+func (s *STUNConn) Conn() net.Conn {
+	return s.nextConn
 }
 
 // NewSTUNConn creates a STUNConn.

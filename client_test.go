@@ -7,6 +7,7 @@
 package turn
 
 import (
+	"context"
 	"net"
 	"runtime"
 	"sync/atomic"
@@ -380,6 +381,86 @@ func TestClientReadTimout(t *testing.T) {
 	assert.Contains(t, err.Error(), "use of closed network connection")
 }
 
+func TestTCPClientDialTCP(t *testing.T) {
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:3478") //nolint: gosec,noctx
+	require.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey(username, realm, "pass"), true
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: tcpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+
+	clientConn, err := net.Dial("tcp", testAddr) // nolint: noctx
+	require.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           NewSTUNConn(clientConn),
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "foo",
+		Password:       "pass",
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+
+	allocation, err := client.AllocateTCP()
+	assert.NoError(t, err)
+
+	remotePeerConn, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		inboundTCPConn, inboundErr := remotePeerConn.Accept()
+		assert.NoError(t, inboundErr)
+
+		_, inboundErr = inboundTCPConn.Write(expectedMsg)
+		assert.NoError(t, inboundErr)
+
+		inboundBuffer := make([]byte, len(expectedMsg))
+		_, inboundErr = inboundTCPConn.Read(inboundBuffer)
+		assert.NoError(t, inboundErr)
+		assert.Equal(t, expectedMsg, inboundBuffer)
+
+		assert.NoError(t, inboundTCPConn.Close())
+		cancel()
+	}()
+
+	remotePeerAddr, ok := remotePeerConn.Addr().(*net.TCPAddr)
+	assert.True(t, ok)
+
+	channelBindConn, err := allocation.DialTCP("tcp4", nil, remotePeerAddr)
+	assert.NoError(t, err)
+
+	channelBindConnBuffer := make([]byte, len(expectedMsg))
+	_, err = channelBindConn.Read(channelBindConnBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg, channelBindConnBuffer)
+
+	_, err = channelBindConn.Write(expectedMsg)
+	assert.NoError(t, err)
+	<-ctx.Done()
+
+	// Shutdown
+	assert.NoError(t, remotePeerConn.Close())
+	assert.NoError(t, allocation.Close())
+	assert.NoError(t, clientConn.Close())
+	assert.NoError(t, server.Close())
+}
+
 type channelBindFilterConn struct {
 	net.PacketConn
 
@@ -493,98 +574,4 @@ func TestClientE2E(t *testing.T) {
 
 	doTest(true)
 	doTest(false)
-}
-
-type mockConn struct {
-	didClose, didLocalAddr, didRemoteAddr, didSetWriteDeadline, didSetDeadline, didSetReadDeadline bool
-}
-
-func (m *mockConn) Read(b []byte) (n int, err error) { return }
-
-func (m *mockConn) Write(b []byte) (n int, err error) { return }
-
-func (m *mockConn) Close() error {
-	m.didClose = true
-
-	return nil
-}
-
-func (m *mockConn) LocalAddr() net.Addr {
-	m.didLocalAddr = true
-
-	return nil
-}
-
-func (m *mockConn) RemoteAddr() net.Addr {
-	m.didRemoteAddr = true
-
-	return nil
-}
-
-func (m *mockConn) SetDeadline(t time.Time) error {
-	m.didSetDeadline = true
-
-	return nil
-}
-
-func (m *mockConn) SetReadDeadline(t time.Time) error {
-	m.didSetReadDeadline = true
-
-	return nil
-}
-
-func (m *mockConn) SetWriteDeadline(t time.Time) error {
-	m.didSetWriteDeadline = true
-
-	return nil
-}
-
-func TestStunConn(t *testing.T) {
-	t.Run("nextConn Called", func(t *testing.T) {
-		testConn := &mockConn{}
-		stunConn := NewSTUNConn(testConn)
-
-		assert.Nil(t, stunConn.LocalAddr())
-		assert.True(t, testConn.didLocalAddr)
-
-		assert.NoError(t, stunConn.Close())
-		assert.True(t, testConn.didClose)
-
-		assert.NoError(t, stunConn.SetDeadline(time.Time{}))
-		assert.True(t, testConn.didSetDeadline)
-
-		assert.NoError(t, stunConn.SetReadDeadline(time.Time{}))
-		assert.True(t, testConn.didSetReadDeadline)
-
-		assert.NoError(t, stunConn.SetWriteDeadline(time.Time{}))
-		assert.True(t, testConn.didSetWriteDeadline)
-	})
-
-	t.Run("Invalid STUN Frames", func(t *testing.T) {
-		testConn := &mockConn{}
-		stunConn := NewSTUNConn(testConn)
-		stunConn.buff = make([]byte, stunHeaderSize+1)
-
-		n, addr, err := stunConn.ReadFrom(nil)
-		assert.Zero(t, n)
-		assert.Nil(t, addr)
-		assert.Error(t, err, errInvalidTURNFrame)
-	})
-
-	t.Run("Invalid ChannelData size", func(t *testing.T) {
-		n, err := consumeSingleTURNFrame([]byte{0x40, 0x00, 0x00, 0x12, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
-		assert.Equal(t, n, 0)
-		assert.Error(t, err, errIncompleteTURNFrame)
-	})
-
-	t.Run("Padding", func(t *testing.T) {
-		testConn := &mockConn{}
-		stunConn := NewSTUNConn(testConn)
-		stunConn.buff = []byte{0x40, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-
-		n, addr, err := stunConn.ReadFrom(nil)
-		assert.Equal(t, n, 8)
-		assert.Nil(t, addr)
-		assert.NoError(t, err)
-	})
 }

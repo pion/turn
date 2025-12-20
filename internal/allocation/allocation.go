@@ -39,6 +39,8 @@ type Allocation struct {
 	eventHandler        EventHandler
 	log                 logging.LeveledLogger
 
+	tcpConnections map[proto.ConnectionID]net.Conn // Guarded by AllocationManager lock
+
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
 	// cache for response lost and client retry to implement 'stateless stack approach'
@@ -54,12 +56,13 @@ func NewAllocation(
 	log logging.LeveledLogger,
 ) *Allocation {
 	return &Allocation{
-		TurnSocket:   turnSocket,
-		fiveTuple:    fiveTuple,
-		permissions:  make(map[string]*Permission, 64),
-		closed:       make(chan any),
-		eventHandler: eventHandler,
-		log:          log,
+		TurnSocket:     turnSocket,
+		fiveTuple:      fiveTuple,
+		permissions:    make(map[string]*Permission, 64),
+		closed:         make(chan any),
+		eventHandler:   eventHandler,
+		log:            log,
+		tcpConnections: make(map[proto.ConnectionID]net.Conn),
 	}
 }
 
