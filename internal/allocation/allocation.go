@@ -5,7 +5,10 @@
 package allocation
 
 import (
+	"bytes"
+	"encoding/gob"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,12 +43,22 @@ type Allocation struct {
 	log                 logging.LeveledLogger
 
 	tcpConnections map[proto.ConnectionID]net.Conn // Guarded by AllocationManager lock
+	expiresAt      time.Time
 
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
 	// cache for response lost and client retry to implement 'stateless stack approach'
 	// See: https://datatracker.ietf.org/doc/html/rfc5766#section-6.2
 	responseCache atomic.Value // *allocationResponse
+}
+type serilaziedAlloaction struct {
+	RelayAdd        string
+	Protocol        Protocol
+	FiveTuple       []byte
+	Permissions     [][]byte
+	ChannelBindings [][]byte
+	Username, Realm string
+	ExpiresAt       time.Time
 }
 
 // NewAllocation creates a new instance of NewAllocation.
@@ -64,6 +77,92 @@ func NewAllocation(
 		log:            log,
 		tcpConnections: make(map[proto.ConnectionID]net.Conn),
 	}
+}
+
+func (a *Allocation) serialize() *serilaziedAlloaction {
+	var serilazied serilaziedAlloaction
+	var err error
+	if serilazied.FiveTuple, err = a.fiveTuple.MarshalBinary(); err != nil {
+		a.log.Errorf("failed to marshal FiveTuple: %v", err)
+	}
+	serilazied.Permissions = make([][]byte, 0, len(a.permissions))
+	var data []byte
+	for _, p := range a.permissions {
+		data, err = p.MarshalBinary()
+		if err != nil {
+			a.log.Errorf("failed to marshal Permission: %v", err)
+			return nil
+		}
+		serilazied.Permissions = append(serilazied.Permissions, data[:])
+	}
+	serilazied.ChannelBindings = make([][]byte, 0, len(a.channelBindings))
+	for _, cb := range a.channelBindings {
+		data, err = cb.MarshalBinary()
+		if err != nil {
+			a.log.Errorf("failed to marshal ChannelBind: %v", err)
+			return nil
+		}
+		serilazied.ChannelBindings = append(serilazied.ChannelBindings, data[:])
+	}
+	serilazied.Realm = a.realm
+	serilazied.Username = a.username
+	serilazied.Protocol = a.Protocol
+	serilazied.RelayAdd = a.RelayAddr.String()
+	serilazied.ExpiresAt = a.expiresAt
+	a.tcpConnections = make(map[proto.ConnectionID]net.Conn)
+	return &serilazied
+}
+func (a *Allocation) deserialize(serilazied *serilaziedAlloaction) {
+	a.fiveTuple.UnmarshalBinary(serilazied.FiveTuple)
+	a.permissions = make(map[string]*Permission, 64)
+	a.channelBindings = make([]*ChannelBind, 0, 64)
+	for _, p := range serilazied.Permissions {
+		perm := &Permission{}
+		perm.UnmarshalBinary(p)
+		a.permissions[ipnet.FingerprintAddr(perm.Addr)] = perm
+	}
+	for _, cb := range serilazied.ChannelBindings {
+		channelBind := &ChannelBind{}
+		channelBind.UnmarshalBinary(cb)
+		a.channelBindings = append(a.channelBindings, channelBind)
+	}
+	a.realm = serilazied.Realm
+	a.username = serilazied.Username
+	a.Protocol = serilazied.Protocol
+	network := strings.ToLower(a.Protocol.String())
+	switch serilazied.Protocol {
+	case UDP:
+		a.RelayAddr, _ = net.ResolveUDPAddr(network, serilazied.RelayAdd)
+	case TCP:
+		a.RelayAddr, _ = net.ResolveTCPAddr(network, serilazied.RelayAdd)
+	default:
+		a.log.Errorf("unknown protocol %v", serilazied.Protocol)
+	}
+	a.expiresAt = serilazied.ExpiresAt
+	remaningTime := time.Until(a.expiresAt)
+	if remaningTime > 0 {
+		if a.lifetimeTimer != nil {
+			a.lifetimeTimer.Reset(remaningTime)
+		}
+	}
+}
+func (a *Allocation) MarshalBinary() ([]byte, error) {
+	var buf bytes.Buffer
+	var enc = gob.NewEncoder(&buf)
+	serialized := a.serialize()
+	if err := enc.Encode(*serialized); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+func (a *Allocation) UnmarshalBinary(data []byte) error {
+	var serialized serilaziedAlloaction
+	dec := gob.NewDecoder(bytes.NewBuffer(data))
+	if err := dec.Decode(&serialized); err != nil {
+		return err
+	}
+	a.deserialize(&serialized)
+	return nil
 }
 
 // GetPermission gets the Permission from the allocation.
@@ -229,9 +328,20 @@ func (a *Allocation) ListChannelBindings() []*ChannelBind {
 
 // Refresh updates the allocations lifetime.
 func (a *Allocation) Refresh(lifetime time.Duration) {
+	a.expiresAt = time.Now().Add(lifetime)
 	if !a.lifetimeTimer.Reset(lifetime) {
 		a.log.Errorf("Failed to reset allocation timer for %v", a.fiveTuple)
 	}
+}
+func (a *Allocation) Stop() {
+	if a.lifetimeTimer == nil {
+		a.log.Errorf("Allocation timer was nil for %v", a.fiveTuple)
+		return
+	}
+	if !a.lifetimeTimer.Stop() {
+		a.log.Warnf("Allocation timer for %v had already fired when Stop() was called", a.fiveTuple)
+	}
+	a.expiresAt = time.Now()
 }
 
 // SetResponseCache cache allocation response for retransmit allocation request.
@@ -260,16 +370,16 @@ func (a *Allocation) Close() error {
 	}
 	close(a.closed)
 
-	a.lifetimeTimer.Stop()
+	a.Stop()
 
 	for _, p := range a.ListPermissions() {
 		a.RemovePermission(p.Addr)
-		p.lifetimeTimer.Stop()
+		p.stop()
 	}
 
 	for _, c := range a.ListChannelBindings() {
 		a.RemoveChannelBind(c.Number)
-		c.lifetimeTimer.Stop()
+		c.stop()
 	}
 
 	return a.RelaySocket.Close()
