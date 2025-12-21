@@ -19,87 +19,74 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestManager(t *testing.T) {
-	tt := []struct {
-		name string
-		f    func(*testing.T, net.PacketConn)
-	}{
-		{"CreateInvalidAllocation", subTestCreateInvalidAllocation},
-		{"CreateAllocation", subTestCreateAllocation},
-		{"CreateAllocationDuplicateFiveTuple", subTestCreateAllocationDuplicateFiveTuple},
-		{"DeleteAllocation", subTestDeleteAllocation},
-		{"AllocationTimeout", subTestAllocationTimeout},
-		{"Close", subTestManagerClose},
-		{"GetRandomEvenPort", subTestGetRandomEvenPort},
-	}
-
-	network := "udp4"
-	turnSocket, err := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
-	assert.NoError(t, err)
-
-	for _, tc := range tt {
-		f := tc.f
-		t.Run(tc.name, func(t *testing.T) {
-			f(t, turnSocket)
-		})
-	}
-}
-
 // Test invalid Allocation creations.
-func subTestCreateInvalidAllocation(t *testing.T, turnSocket net.PacketConn) {
-	t.Helper()
-
-	m, err := newTestManager()
+func TestCreateInvalidAllocation(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
-	a, err := m.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime, "", "")
+	manager, err := newTestManager()
+	assert.NoError(t, err)
+
+	a, err := manager.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime, "", "")
 	assert.Nil(t, a, "Illegally created allocation with nil FiveTuple")
 	assert.Error(t, err, "Illegally created allocation with nil FiveTuple")
 
-	a, err = m.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime, "", "")
+	a, err = manager.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime, "", "")
 	assert.Nil(t, a, "Illegally created allocation with nil turnSocket")
 	assert.Error(t, err, "Illegally created allocation with nil turnSocket")
 
-	a, err = m.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0, "", "")
+	a, err = manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0, "", "")
 	assert.Nil(t, a, "Illegally created allocation with 0 lifetime")
 	assert.Error(t, err, "Illegally created allocation with 0 lifetime")
+
+	assert.NoError(t, manager.Close())
+	assert.NoError(t, turnSocket.Close())
 }
 
 // Test valid Allocation creations.
-func subTestCreateAllocation(t *testing.T, turnSocket net.PacketConn) {
-	t.Helper()
+func TestCreateAllocation(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
 
-	m, err := newTestManager()
+	manager, err := newTestManager()
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
-	a = m.GetAllocation(fiveTuple)
+	a = manager.GetAllocation(fiveTuple)
 	assert.NotNil(t, a, "Failed to get allocation right after creation")
+
+	assert.NoError(t, manager.Close())
+	assert.NoError(t, turnSocket.Close())
 }
 
 // Test that two allocations can't be created with the same FiveTuple.
-func subTestCreateAllocationDuplicateFiveTuple(t *testing.T, turnSocket net.PacketConn) {
-	t.Helper()
+func TestCreateAllocationDuplicateFiveTuple(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
 
-	m, err := newTestManager()
+	manager, err := newTestManager()
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
-	a, err = m.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err = manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
 	assert.Nil(t, a, "Was able to create allocation with same FiveTuple twice")
 	assert.Error(t, err, "Was able to create allocation with same FiveTuple twice")
+
+	assert.NoError(t, manager.Close())
+	assert.NoError(t, turnSocket.Close())
 }
 
-func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
-	t.Helper()
+func TestDeleteAllocation(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
 
 	manager, err := newTestManager()
 	assert.NoError(t, err)
@@ -115,13 +102,17 @@ func subTestDeleteAllocation(t *testing.T, turnSocket net.PacketConn) {
 	manager.DeleteAllocation(fiveTuple)
 	a = manager.GetAllocation(fiveTuple)
 	assert.Nilf(t, a, "Failed to delete allocation %v", fiveTuple)
+
+	assert.NoError(t, manager.Close())
+	assert.NoError(t, turnSocket.Close())
 }
 
 // Test that allocation should be closed if timeout.
-func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
-	t.Helper()
+func TestAllocationTimeout(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
 
-	m, err := newTestManager()
+	manager, err := newTestManager()
 	assert.NoError(t, err)
 
 	allocations := make([]*Allocation, 5)
@@ -130,7 +121,7 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	for index := range allocations {
 		fiveTuple := randomFiveTuple()
 
-		a, err := m.CreateAllocation(fiveTuple, turnSocket, 0, lifetime, "", "")
+		a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, lifetime, "", "")
 		assert.NoErrorf(t, err, "Failed to create allocation with %v", fiveTuple)
 
 		allocations[index] = a
@@ -141,11 +132,15 @@ func subTestAllocationTimeout(t *testing.T, turnSocket net.PacketConn) {
 	for _, alloc := range allocations {
 		assert.True(t, isClose(alloc.RelaySocket), "Allocation relay socket should be closed if lifetime timeout")
 	}
+
+	assert.NoError(t, manager.Close())
+	assert.NoError(t, turnSocket.Close())
 }
 
 // Test for manager close.
-func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
-	t.Helper()
+func TestManagerClose(t *testing.T) {
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
 
 	manager, err := newTestManager()
 	assert.NoError(t, err)
@@ -164,6 +159,8 @@ func subTestManagerClose(t *testing.T, turnSocket net.PacketConn) {
 	for _, alloc := range allocations {
 		assert.True(t, isClose(alloc.RelaySocket), "Manager's allocations should be closed")
 	}
+
+	assert.NoError(t, turnSocket.Close())
 }
 
 func randomFiveTuple() *FiveTuple {
@@ -199,14 +196,14 @@ func isClose(conn io.Closer) bool {
 	return closeErr != nil && strings.Contains(closeErr.Error(), "use of closed network connection")
 }
 
-func subTestGetRandomEvenPort(t *testing.T, _ net.PacketConn) {
-	t.Helper()
-
-	m, err := newTestManager()
+func TestGetRandomEvenPort(t *testing.T) {
+	manager, err := newTestManager()
 	assert.NoError(t, err)
 
-	port, err := m.GetRandomEvenPort()
+	port, err := manager.GetRandomEvenPort()
 	assert.NoError(t, err)
 	assert.True(t, port > 0)
 	assert.True(t, port%2 == 0)
+
+	assert.NoError(t, manager.Close())
 }
