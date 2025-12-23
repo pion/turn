@@ -13,12 +13,16 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
+	"github.com/pion/transport/v3/test"
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestAllocationLifeTime(t *testing.T) {
+	report := test.CheckRoutines(t)
+	defer report()
+
 	t.Run("Parsing", func(t *testing.T) {
 		lifetime := proto.Lifetime{
 			Duration: 5 * time.Second,
