@@ -95,7 +95,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour, "", "")
+		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour, "test", "")
 		assert.NoError(t, err)
 
 		assert.NotNil(t, req.AllocationManager.GetAllocation(fiveTuple))
@@ -105,7 +105,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Username("test")).AddTo(m))
 
 		assert.NoError(t, handleRefreshRequest(req, m))
 		assert.Nil(t, req.AllocationManager.GetAllocation(fiveTuple))
