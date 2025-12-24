@@ -49,17 +49,18 @@ func buildMsg(
 }
 
 func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.Method) (
-	stun.MessageIntegrity,
-	bool,
-	error,
+	messageIntegrity stun.MessageIntegrity,
+	hasAuth bool,
+	username string,
+	err error,
 ) {
-	respondWithNonce := func(responseCode stun.ErrorCode) (stun.MessageIntegrity, bool, error) {
+	respondWithNonce := func(responseCode stun.ErrorCode) (stun.MessageIntegrity, bool, string, error) {
 		nonce, err := req.NonceHash.Generate()
 		if err != nil {
-			return nil, false, err
+			return nil, false, "", err
 		}
 
-		return nil, false, buildAndSend(req.Conn, req.SrcAddr, buildMsg(stunMsg.TransactionID,
+		return nil, false, "", buildAndSend(req.Conn, req.SrcAddr, buildMsg(stunMsg.TransactionID,
 			stun.NewType(callingMethod, stun.ClassErrorResponse),
 			&stun.ErrorCodeAttribute{Code: responseCode},
 			stun.NewNonce(nonce),
@@ -85,11 +86,11 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 	if req.AuthHandler == nil {
 		sendErr := buildAndSend(req.Conn, req.SrcAddr, badRequestMsg...)
 
-		return nil, false, sendErr
+		return nil, false, "", sendErr
 	}
 
 	if err := nonceAttr.GetFrom(stunMsg); err != nil {
-		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
 	// Assert Nonce is signed and is not expired.
@@ -98,14 +99,14 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 	}
 
 	if err := realmAttr.GetFrom(stunMsg); err != nil {
-		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	} else if err := usernameAttr.GetFrom(stunMsg); err != nil {
-		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
 	ourKey, ok := req.AuthHandler(usernameAttr.String(), realmAttr.String(), req.SrcAddr)
 	if !ok {
-		return nil, false, buildAndSendErr(
+		return nil, false, "", buildAndSendErr(
 			req.Conn,
 			req.SrcAddr,
 			fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()),
@@ -116,12 +117,12 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 	if err := stun.MessageIntegrity(ourKey).Check(stunMsg); err != nil {
 		genAuthEvent(req, stunMsg, callingMethod, false)
 
-		return nil, false, buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
 	genAuthEvent(req, stunMsg, callingMethod, true)
 
-	return stun.MessageIntegrity(ourKey), true, nil
+	return stun.MessageIntegrity(ourKey), true, usernameAttr.String(), nil
 }
 
 func genAuthEvent(req Request, stunMsg *stun.Message, callingMethod stun.Method, verdict bool) {
