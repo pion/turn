@@ -70,6 +70,7 @@ func TestAllocationLifeTime(t *testing.T) {
 				return nil, nil, nil
 			},
 			LeveledLogger: logger,
+			Storage:       allocation.NewMemoryStorage(),
 		})
 		assert.NoError(t, err)
 
@@ -130,6 +131,7 @@ func TestRequestedTransport(t *testing.T) {
 			return nil, nil, nil
 		},
 		LeveledLogger: logger,
+		Storage:       allocation.NewMemoryStorage(),
 	})
 	assert.NoError(t, err)
 
