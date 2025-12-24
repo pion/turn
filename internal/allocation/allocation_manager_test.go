@@ -188,6 +188,7 @@ func newTestManager() (*Manager, error) {
 			return conn, conn.LocalAddr(), nil
 		},
 		AllocateConn: func(string, int) (net.Conn, net.Addr, error) { return nil, nil, nil },
+		Storage:      NewMemoryStorage(),
 	}
 
 	return NewManager(config)

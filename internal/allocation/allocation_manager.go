@@ -19,6 +19,7 @@ type ManagerConfig struct {
 	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
+	Storage            Storage
 }
 
 type reservation struct {
@@ -31,13 +32,13 @@ type Manager struct {
 	lock sync.RWMutex
 	log  logging.LeveledLogger
 
-	allocations  map[FiveTupleFingerprint]*Allocation
 	reservations []*reservation
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
+	storage            Storage
 }
 
 // NewManager creates a new instance of Manager.
@@ -53,28 +54,26 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 
 	return &Manager{
 		log:                config.LeveledLogger,
-		allocations:        make(map[FiveTupleFingerprint]*Allocation, 64),
 		allocatePacketConn: config.AllocatePacketConn,
 		allocateConn:       config.AllocateConn,
 		permissionHandler:  config.PermissionHandler,
 		EventHandler:       config.EventHandler,
+		storage:            config.Storage,
 	}, nil
 }
 
 // GetAllocation fetches the allocation matching the passed FiveTuple.
 func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.allocations[fiveTuple.Fingerprint()]
+	a, ok := m.storage.GetAllocation(fiveTuple.Fingerprint())
+	if !ok {
+		return nil
+	}
+	return a
 }
 
 // AllocationCount returns the number of existing allocations.
 func (m *Manager) AllocationCount() int {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return len(m.allocations)
+	return len(m.storage.GetAllocations())
 }
 
 // Close closes the manager and closes all allocations it manages.
@@ -82,12 +81,14 @@ func (m *Manager) Close() error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	for _, a := range m.allocations {
+	for _, a := range m.storage.GetAllocations() {
 		if err := a.Close(); err != nil {
 			return err
 		}
 	}
-
+	if err := m.storage.Close(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -133,9 +134,7 @@ func (m *Manager) CreateAllocation(
 		m.DeleteAllocation(alloc.fiveTuple)
 	})
 
-	m.lock.Lock()
-	m.allocations[fiveTuple.Fingerprint()] = alloc
-	m.lock.Unlock()
+	m.storage.AddAllocation(alloc)
 
 	if m.EventHandler.OnAllocationCreated != nil {
 		m.EventHandler.OnAllocationCreated(fiveTuple.SrcAddr, fiveTuple.DstAddr,
@@ -152,8 +151,12 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 	fingerprint := fiveTuple.Fingerprint()
 
 	m.lock.Lock()
-	allocation := m.allocations[fingerprint]
-	delete(m.allocations, fingerprint)
+	allocation, ok := m.storage.GetAllocation(fingerprint)
+	if !ok {
+		m.lock.Unlock()
+		return
+	}
+	m.storage.DeleteAllocation(fingerprint)
 	m.lock.Unlock()
 
 	if allocation == nil {
@@ -243,4 +246,16 @@ func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
 	}
 
 	return errAdminProhibited
+}
+
+func (m *Manager) LoadAllocations(turnSocket net.PacketConn) {
+	for _, alloc := range m.storage.GetAllocations() {
+		m.storage.AddAllocation(alloc)
+	}
+}
+
+func (m *Manager) SaveAllocations() {
+	for _, alloc := range m.storage.GetAllocations() {
+		m.storage.AddAllocation(alloc)
+	}
 }

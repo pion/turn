@@ -153,6 +153,9 @@ type ServerConfig struct {
 
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
+	// Storage is a user-provided storage implementation for the server to use.
+	// If not provided, a default in-memory storage will be used.
+	Storage allocation.Storage
 }
 
 func (s *ServerConfig) validate() error {
