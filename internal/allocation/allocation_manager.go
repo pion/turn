@@ -82,6 +82,16 @@ func (m *Manager) GetAllocationForUsername(fiveTuple *FiveTuple, username string
 	return nil
 }
 
+// GetAllocationForUsername fetches the allocation matching the passed FiveTuple and Username.
+func (m *Manager) GetAllocationForUsername(fiveTuple *FiveTuple, username string) *Allocation {
+	allocation := m.GetAllocation(fiveTuple)
+	if allocation != nil && allocation.username == username {
+		return allocation
+	}
+
+	return nil
+}
+
 // AllocationCount returns the number of existing allocations.
 func (m *Manager) AllocationCount() int {
 	return len(m.storage.GetAllocations())
