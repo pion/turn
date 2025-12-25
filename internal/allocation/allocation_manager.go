@@ -68,6 +68,7 @@ func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	if !ok {
 		return nil
 	}
+
 	return a
 }
 
@@ -89,6 +90,7 @@ func (m *Manager) Close() error {
 	if err := m.storage.Close(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -154,6 +156,7 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 	allocation, ok := m.storage.GetAllocation(fingerprint)
 	if !ok {
 		m.lock.Unlock()
+
 		return
 	}
 	m.storage.DeleteAllocation(fingerprint)

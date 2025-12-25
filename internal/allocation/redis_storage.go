@@ -23,9 +23,7 @@ func NewRedisStorage(client *redis.Client) *RedisStorage {
 	}
 }
 
-/**
-* GetAllocation returns an allocation from Redis
-**/
+// GetAllocation returns an allocation from Redis.
 func (s *RedisStorage) GetAllocation(fingerprint FiveTupleFingerprint) (*Allocation, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -49,9 +47,7 @@ func (s *RedisStorage) GetAllocation(fingerprint FiveTupleFingerprint) (*Allocat
 	return alloc, true
 }
 
-/**
-*  AddAllocation adds an allocation to Redis
-**/
+// AddAllocation adds an allocation to Redis.
 func (s *RedisStorage) AddAllocation(alloc *Allocation) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -70,9 +66,7 @@ func (s *RedisStorage) AddAllocation(alloc *Allocation) {
 	s.client.Set(context.Background(), bufKey.String(), val, 0)
 }
 
-/**
-*DeleteAllocation removes an allocation from Redis.
-**/
+// DeleteAllocation removes an allocation from Redis.
 func (s *RedisStorage) DeleteAllocation(fingerprint FiveTupleFingerprint) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -86,9 +80,7 @@ func (s *RedisStorage) DeleteAllocation(fingerprint FiveTupleFingerprint) {
 	s.client.Del(context.Background(), buf.String())
 }
 
-/**
-*GetAllocations returns all allocations from Redis.
-**/
+// GetAllocations returns all allocations from Redis.
 func (s *RedisStorage) GetAllocations() map[FiveTupleFingerprint]*Allocation {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -115,9 +107,7 @@ func (s *RedisStorage) GetAllocations() map[FiveTupleFingerprint]*Allocation {
 	return allocations
 }
 
-/**
-*Close closes the Redis client.
-**/
+// Close closes the Redis client.
 func (s *RedisStorage) Close() error {
 	return s.client.Close()
 }

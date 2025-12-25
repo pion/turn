@@ -22,6 +22,7 @@ func (s *MemoryStorage) GetAllocation(fingerprint FiveTupleFingerprint) (*Alloca
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	alloc, ok := s.allocations[fingerprint]
+
 	return alloc, ok
 }
 
@@ -40,6 +41,7 @@ func (s *MemoryStorage) DeleteAllocation(fingerprint FiveTupleFingerprint) {
 func (s *MemoryStorage) GetAllocations() map[FiveTupleFingerprint]*Allocation {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
+
 	return s.allocations
 }
 
