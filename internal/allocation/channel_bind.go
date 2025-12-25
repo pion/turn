@@ -6,6 +6,7 @@ package allocation
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -33,6 +34,8 @@ type serializedChannelBind struct {
 	ExpiresAt time.Time
 }
 
+var ErrUnsupportedProtocol = errors.New("unsupported protocol")
+
 func (c *ChannelBind) serialize() *serializedChannelBind {
 	return &serializedChannelBind{
 		Peer:      c.Peer.String(),
@@ -41,47 +44,53 @@ func (c *ChannelBind) serialize() *serializedChannelBind {
 		ExpiresAt: c.expiresAt,
 	}
 }
-func (c *ChannelBind) deserialize(s *serializedChannelBind) error {
-	network := strings.ToLower(s.Protocol.String())
-	switch s.Protocol {
+
+func (c *ChannelBind) deserialize(serializedChannelBind *serializedChannelBind) error {
+	network := strings.ToLower(serializedChannelBind.Protocol.String())
+	switch serializedChannelBind.Protocol {
 	case UDP:
-		peerAddr, err := net.ResolveUDPAddr(network, s.Peer)
+		peerAddr, err := net.ResolveUDPAddr(network, serializedChannelBind.Peer)
 		if err != nil {
 			return err
 		}
 		c.Peer = peerAddr
 	case TCP:
-		peerAddr, err := net.ResolveTCPAddr(network, s.Peer)
+		peerAddr, err := net.ResolveTCPAddr(network, serializedChannelBind.Peer)
 		if err != nil {
 			return err
 		}
 		c.Peer = peerAddr
 	default:
-		return fmt.Errorf("Unsupported protocol %v", s.Protocol)
+		return fmt.Errorf("%w: %v", ErrUnsupportedProtocol, serializedChannelBind.Protocol)
 	}
-	c.expiresAt = s.ExpiresAt
-	c.Number = s.Number
-	remaningTime := time.Until(s.ExpiresAt)
+	c.expiresAt = serializedChannelBind.ExpiresAt
+	c.Number = serializedChannelBind.Number
+	remaningTime := time.Until(serializedChannelBind.ExpiresAt)
 	if remaningTime > 0 {
 		c.start(remaningTime)
 	}
+
 	return nil
 }
+
 func (c *ChannelBind) MarshalBinary() ([]byte, error) {
 	serialized := c.serialize()
 	var buf bytes.Buffer
-	var enc = gob.NewEncoder(&buf)
+	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(serialized); err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
+
 func (c *ChannelBind) UnmarshalBinary(data []byte) error {
 	var serialized serializedChannelBind
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
 	if err := dec.Decode(&serialized); err != nil {
 		return err
 	}
+
 	return c.deserialize(&serialized)
 }
 
@@ -109,6 +118,7 @@ func (c *ChannelBind) refresh(lifetime time.Duration) {
 		c.log.Errorf("Failed to reset ChannelBind timer for %v %x %v", c.Number, c.Peer, c.allocation.fiveTuple)
 	}
 }
+
 func (c *ChannelBind) stop() {
 	if c.lifetimeTimer != nil {
 		c.expiresAt = time.Now()
