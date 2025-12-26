@@ -544,16 +544,13 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
 	)
 
-	_, hasAuth, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
+	_, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
 	if !hasAuth {
 		return err
 	}
 
 	var connectionID proto.ConnectionID
-	usernameAttr := &stun.Username{}
-	if err = usernameAttr.GetFrom(stunMsg); err != nil {
-		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
-	} else if err = connectionID.GetFrom(stunMsg); err != nil {
+	if err = connectionID.GetFrom(stunMsg); err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
@@ -561,7 +558,7 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 	// and credentials as for the control connection.
 	//
 	// GetTCPConnection asserts that userName used for auth is same as allocation
-	tcpConn := req.AllocationManager.GetTCPConnection(usernameAttr.String(), connectionID)
+	tcpConn := req.AllocationManager.GetTCPConnection(username, connectionID)
 	if tcpConn == nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
