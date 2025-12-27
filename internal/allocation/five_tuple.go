@@ -4,6 +4,8 @@
 package allocation
 
 import (
+	"bytes"
+	"encoding/gob"
 	"net"
 )
 
@@ -38,26 +40,84 @@ type FiveTuple struct {
 	SrcAddr, DstAddr net.Addr
 }
 
+type serializedFiveTuple struct {
+	SrcIP    []byte
+	SrcPort  uint16
+	DstIP    []byte
+	DstPort  uint16
+	Protocol Protocol
+}
+
 // Equal asserts if two FiveTuples are equal.
 func (f *FiveTuple) Equal(b *FiveTuple) bool {
 	return f.Fingerprint() == b.Fingerprint()
 }
 
+func (f *FiveTuple) serialize() *serializedFiveTuple {
+	srcIP, srcPort := netAddrIPAndPort(f.SrcAddr)
+	dstIP, dstPort := netAddrIPAndPort(f.DstAddr)
+
+	return &serializedFiveTuple{
+		SrcIP:    srcIP,
+		SrcPort:  srcPort,
+		DstIP:    dstIP,
+		DstPort:  dstPort,
+		Protocol: f.Protocol,
+	}
+}
+
+func (f *FiveTuple) deserialize(s *serializedFiveTuple) error {
+	switch s.Protocol {
+	case UDP:
+		f.SrcAddr = &net.UDPAddr{IP: s.SrcIP, Port: int(s.SrcPort)}
+		f.DstAddr = &net.UDPAddr{IP: s.DstIP, Port: int(s.DstPort)}
+	case TCP:
+		f.SrcAddr = &net.TCPAddr{IP: s.SrcIP, Port: int(s.SrcPort)}
+		f.DstAddr = &net.TCPAddr{IP: s.DstIP, Port: int(s.DstPort)}
+	default:
+		return errUnsupportedProtocol
+	}
+	f.Protocol = s.Protocol
+
+	return nil
+}
+
+func (f *FiveTuple) MarshalBinary() ([]byte, error) {
+	serialized := f.serialize()
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(*serialized); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (f *FiveTuple) UnmarshalBinary(data []byte) error {
+	var serialized serializedFiveTuple
+	enc := gob.NewDecoder(bytes.NewBuffer(data))
+	if err := enc.Decode(&serialized); err != nil {
+		return err
+	}
+
+	return f.deserialize(&serialized)
+}
+
 // FiveTupleFingerprint is a comparable representation of a FiveTuple.
 type FiveTupleFingerprint struct {
-	srcIP, dstIP     [16]byte
-	srcPort, dstPort uint16
+	SrcIP, DstIP     [16]byte
+	SrcPort, DstPort uint16
 	protocol         Protocol
 }
 
 // Fingerprint is the identity of a FiveTuple.
 func (f *FiveTuple) Fingerprint() (fp FiveTupleFingerprint) {
 	srcIP, srcPort := netAddrIPAndPort(f.SrcAddr)
-	copy(fp.srcIP[:], srcIP)
-	fp.srcPort = srcPort
+	copy(fp.SrcIP[:], srcIP)
+	fp.SrcPort = srcPort
 	dstIP, dstPort := netAddrIPAndPort(f.DstAddr)
-	copy(fp.dstIP[:], dstIP)
-	fp.dstPort = dstPort
+	copy(fp.DstIP[:], dstIP)
+	fp.DstPort = dstPort
 	fp.protocol = f.Protocol
 
 	return
