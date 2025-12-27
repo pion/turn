@@ -6,7 +6,6 @@ package allocation
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -41,47 +40,53 @@ func (c *ChannelBind) serialize() *serializedChannelBind {
 		ExpiresAt: c.expiresAt,
 	}
 }
-func (c *ChannelBind) deserialize(s *serializedChannelBind) error {
-	network := strings.ToLower(s.Protocol.String())
-	switch s.Protocol {
+
+func (c *ChannelBind) deserialize(serialized *serializedChannelBind) error {
+	network := strings.ToLower(serialized.Protocol.String())
+	switch serialized.Protocol {
 	case UDP:
-		peerAddr, err := net.ResolveUDPAddr(network, s.Peer)
+		peerAddr, err := net.ResolveUDPAddr(network, serialized.Peer)
 		if err != nil {
 			return err
 		}
 		c.Peer = peerAddr
 	case TCP:
-		peerAddr, err := net.ResolveTCPAddr(network, s.Peer)
+		peerAddr, err := net.ResolveTCPAddr(network, serialized.Peer)
 		if err != nil {
 			return err
 		}
 		c.Peer = peerAddr
 	default:
-		return fmt.Errorf("Unsupported protocol %v", s.Protocol)
+		return errUnsupportedProtocol
 	}
-	c.expiresAt = s.ExpiresAt
-	c.Number = s.Number
-	remaningTime := time.Until(s.ExpiresAt)
+	c.expiresAt = serialized.ExpiresAt
+	c.Number = serialized.Number
+	remaningTime := time.Until(serialized.ExpiresAt)
 	if remaningTime > 0 {
 		c.start(remaningTime)
 	}
+
 	return nil
 }
+
 func (c *ChannelBind) MarshalBinary() ([]byte, error) {
 	serialized := c.serialize()
 	var buf bytes.Buffer
-	var enc = gob.NewEncoder(&buf)
+	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(serialized); err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
+
 func (c *ChannelBind) UnmarshalBinary(data []byte) error {
 	var serialized serializedChannelBind
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
 	if err := dec.Decode(&serialized); err != nil {
 		return err
 	}
+
 	return c.deserialize(&serialized)
 }
 
@@ -109,6 +114,7 @@ func (c *ChannelBind) refresh(lifetime time.Duration) {
 		c.log.Errorf("Failed to reset ChannelBind timer for %v %x %v", c.Number, c.Peer, c.allocation.fiveTuple)
 	}
 }
+
 func (c *ChannelBind) stop() {
 	if c.lifetimeTimer != nil {
 		c.expiresAt = time.Now()

@@ -67,6 +67,7 @@ func TestFiveTupleEqual(t *testing.T) {
 		})
 	}
 }
+
 func TestFiveTuple_MarshalUnmarshalBinary(t *testing.T) {
 	t.Run("UDP", func(t *testing.T) {
 		srcAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:1234")

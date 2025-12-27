@@ -91,18 +91,20 @@ func (a *Allocation) serialize() *serilaziedAlloaction {
 		data, err = p.MarshalBinary()
 		if err != nil {
 			a.log.Errorf("failed to marshal Permission: %v", err)
+
 			return nil
 		}
-		serilazied.Permissions = append(serilazied.Permissions, data[:])
+		serilazied.Permissions = append(serilazied.Permissions, data)
 	}
 	serilazied.ChannelBindings = make([][]byte, 0, len(a.channelBindings))
 	for _, cb := range a.channelBindings {
 		data, err = cb.MarshalBinary()
 		if err != nil {
 			a.log.Errorf("failed to marshal ChannelBind: %v", err)
+
 			return nil
 		}
-		serilazied.ChannelBindings = append(serilazied.ChannelBindings, data[:])
+		serilazied.ChannelBindings = append(serilazied.ChannelBindings, data)
 	}
 	serilazied.Realm = a.realm
 	serilazied.Username = a.username
@@ -110,34 +112,29 @@ func (a *Allocation) serialize() *serilaziedAlloaction {
 	serilazied.RelayAdd = a.RelayAddr.String()
 	serilazied.ExpiresAt = a.expiresAt
 	a.tcpConnections = make(map[proto.ConnectionID]net.Conn)
+
 	return &serilazied
 }
+
 func (a *Allocation) deserialize(serilazied *serilaziedAlloaction) {
-	a.fiveTuple.UnmarshalBinary(serilazied.FiveTuple)
-	a.permissions = make(map[string]*Permission, 64)
-	a.channelBindings = make([]*ChannelBind, 0, 64)
-	for _, p := range serilazied.Permissions {
-		perm := &Permission{}
-		perm.UnmarshalBinary(p)
-		a.permissions[ipnet.FingerprintAddr(perm.Addr)] = perm
+	if err := a.fiveTuple.UnmarshalBinary(serilazied.FiveTuple); err != nil {
+		a.log.Errorf("failed to unmarshal FiveTuple: %v", err)
+
+		return
 	}
-	for _, cb := range serilazied.ChannelBindings {
-		channelBind := &ChannelBind{}
-		channelBind.UnmarshalBinary(cb)
-		a.channelBindings = append(a.channelBindings, channelBind)
+
+	if err := a.deserializePermissions(serilazied.Permissions); err != nil {
+		a.log.Errorf("failed to unmarshal permissions: %v", err)
 	}
+
+	if err := a.deserializeChannelBindings(serilazied.ChannelBindings); err != nil {
+		a.log.Errorf("failed to unmarshal channel bindings: %v", err)
+	}
+
 	a.realm = serilazied.Realm
 	a.username = serilazied.Username
 	a.Protocol = serilazied.Protocol
-	network := strings.ToLower(a.Protocol.String())
-	switch serilazied.Protocol {
-	case UDP:
-		a.RelayAddr, _ = net.ResolveUDPAddr(network, serilazied.RelayAdd)
-	case TCP:
-		a.RelayAddr, _ = net.ResolveTCPAddr(network, serilazied.RelayAdd)
-	default:
-		a.log.Errorf("unknown protocol %v", serilazied.Protocol)
-	}
+	a.setRelayAddr(serilazied.Protocol, serilazied.RelayAdd)
 	a.expiresAt = serilazied.ExpiresAt
 	remaningTime := time.Until(a.expiresAt)
 	if remaningTime > 0 {
@@ -146,15 +143,56 @@ func (a *Allocation) deserialize(serilazied *serilaziedAlloaction) {
 		}
 	}
 }
+
+func (a *Allocation) setRelayAddr(protocol Protocol, relayAdd string) {
+	network := strings.ToLower(protocol.String())
+	switch protocol {
+	case UDP:
+		a.RelayAddr, _ = net.ResolveUDPAddr(network, relayAdd)
+	case TCP:
+		a.RelayAddr, _ = net.ResolveTCPAddr(network, relayAdd)
+	default:
+		a.log.Errorf("%s %v", errUnsupportedProtocol, protocol)
+	}
+}
+
+func (a *Allocation) deserializePermissions(permissions [][]byte) error {
+	a.permissions = make(map[string]*Permission, 64)
+	for _, p := range permissions {
+		perm := &Permission{}
+		if err := perm.UnmarshalBinary(p); err != nil {
+			return err
+		}
+		a.permissions[ipnet.FingerprintAddr(perm.Addr)] = perm
+	}
+
+	return nil
+}
+
+func (a *Allocation) deserializeChannelBindings(channelBindings [][]byte) error {
+	a.channelBindings = make([]*ChannelBind, 0, 64)
+	for _, cb := range channelBindings {
+		channelBind := &ChannelBind{}
+		if err := channelBind.UnmarshalBinary(cb); err != nil {
+			return err
+		}
+		a.channelBindings = append(a.channelBindings, channelBind)
+	}
+
+	return nil
+}
+
 func (a *Allocation) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
-	var enc = gob.NewEncoder(&buf)
+	enc := gob.NewEncoder(&buf)
 	serialized := a.serialize()
 	if err := enc.Encode(*serialized); err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
+
 func (a *Allocation) UnmarshalBinary(data []byte) error {
 	var serialized serilaziedAlloaction
 	dec := gob.NewDecoder(bytes.NewBuffer(data))
@@ -162,6 +200,7 @@ func (a *Allocation) UnmarshalBinary(data []byte) error {
 		return err
 	}
 	a.deserialize(&serialized)
+
 	return nil
 }
 
@@ -333,9 +372,11 @@ func (a *Allocation) Refresh(lifetime time.Duration) {
 		a.log.Errorf("Failed to reset allocation timer for %v", a.fiveTuple)
 	}
 }
+
 func (a *Allocation) Stop() {
 	if a.lifetimeTimer == nil {
 		a.log.Errorf("Allocation timer was nil for %v", a.fiveTuple)
+
 		return
 	}
 	if !a.lifetimeTimer.Stop() {

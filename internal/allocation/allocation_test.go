@@ -7,6 +7,7 @@
 package allocation
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -27,7 +28,7 @@ func TestAllocation_MarshalUnmarshalBinary(t *testing.T) {
 			DstAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5678},
 		}
 
-		turnSocket, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		turnSocket, err := (&net.ListenConfig{}).ListenPacket(context.Background(), "udp4", "127.0.0.1:0")
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, turnSocket.Close())
@@ -52,7 +53,10 @@ func TestAllocation_MarshalUnmarshalBinary(t *testing.T) {
 
 		chanAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3000")
 		assert.NoError(t, err)
-		err = alloc.AddChannelBind(NewChannelBind(proto.MinChannelNumber, chanAddr, log), proto.DefaultLifetime, DefaultPermissionTimeout)
+		err = alloc.AddChannelBind(NewChannelBind(proto.MinChannelNumber, chanAddr, log),
+			proto.DefaultLifetime,
+			DefaultPermissionTimeout,
+		)
 		assert.NoError(t, err)
 
 		data, err := alloc.MarshalBinary()
@@ -248,7 +252,7 @@ func TestAllocationRefresh(t *testing.T) {
 func TestAllocationClose(t *testing.T) {
 	network := "udp"
 
-	l, err := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+	l, err := (&net.ListenConfig{}).ListenPacket(context.Background(), network, "0.0.0.0:0")
 	assert.NoError(t, err)
 
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
@@ -276,11 +280,11 @@ func TestPacketHandler(t *testing.T) {
 	manager, _ := newTestManager()
 
 	// TURN server initialization
-	turnSocket, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
+	turnSocket, err := (&net.ListenConfig{}).ListenPacket(context.Background(), network, "127.0.0.1:0")
 	assert.NoError(t, err)
 
 	// Client listener initialization
-	clientListener, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
+	clientListener, err := (&net.ListenConfig{}).ListenPacket(context.Background(), network, "127.0.0.1:0")
 	assert.NoError(t, err)
 
 	dataCh := make(chan []byte)
@@ -304,10 +308,10 @@ func TestPacketHandler(t *testing.T) {
 
 	assert.NoError(t, err, "should succeed")
 
-	peerListener1, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
+	peerListener1, err := (&net.ListenConfig{}).ListenPacket(context.Background(), network, "127.0.0.1:0")
 	assert.NoError(t, err)
 
-	peerListener2, err := net.ListenPacket(network, "127.0.0.1:0") // nolint: noctx
+	peerListener2, err := (&net.ListenConfig{}).ListenPacket(context.Background(), network, "127.0.0.1:0")
 	assert.NoError(t, err)
 
 	// Add permission with peer1 address

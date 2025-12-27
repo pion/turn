@@ -57,7 +57,9 @@ func TestChannelBind_MarshalUnmarshalBinary(t *testing.T) {
 		SrcAddr:  &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234},
 		DstAddr:  &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5678},
 	}
-	mockAllocation := NewAllocation(nil, mockFiveTuple, EventHandler{}, logging.NewDefaultLeveledLoggerForScope("test", logging.LogLevelTrace, nil))
+	mockAllocation := NewAllocation(nil, mockFiveTuple, EventHandler{},
+		logging.NewDefaultLeveledLoggerForScope("test", logging.LogLevelTrace, nil),
+	)
 
 	t.Run("UDP", func(t *testing.T) {
 		addr, _ := net.ResolveUDPAddr("udp", "192.168.1.100:1000")
@@ -78,7 +80,13 @@ func TestChannelBind_MarshalUnmarshalBinary(t *testing.T) {
 		assert.Equal(t, original.Peer.String(), unmarshaled.Peer.String())
 		assert.Equal(t, original.Number, unmarshaled.Number)
 		assert.NotNil(t, unmarshaled.lifetimeTimer, "lifetimeTimer should be restarted after unmarshal")
-		assert.WithinDuration(t, original.expiresAt, unmarshaled.expiresAt, 10*time.Millisecond, "expiresAt should be preserved")
+		assert.WithinDuration(
+			t,
+			original.expiresAt,
+			unmarshaled.expiresAt,
+			10*time.Millisecond,
+			"expiresAt should be preserved",
+		)
 
 		unmarshaled.lifetimeTimer.Stop()
 	})

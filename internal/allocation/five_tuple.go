@@ -6,7 +6,6 @@ package allocation
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	"net"
 )
 
@@ -53,18 +52,20 @@ type serializedFiveTuple struct {
 func (f *FiveTuple) Equal(b *FiveTuple) bool {
 	return f.Fingerprint() == b.Fingerprint()
 }
-func (f *FiveTuple) serialize() (*serializedFiveTuple, error) {
+
+func (f *FiveTuple) serialize() *serializedFiveTuple {
 	srcIP, srcPort := netAddrIPAndPort(f.SrcAddr)
 	dstIP, dstPort := netAddrIPAndPort(f.DstAddr)
+
 	return &serializedFiveTuple{
 		SrcIP:    srcIP,
 		SrcPort:  srcPort,
 		DstIP:    dstIP,
 		DstPort:  dstPort,
 		Protocol: f.Protocol,
-	}, nil
-
+	}
 }
+
 func (f *FiveTuple) deserialize(s *serializedFiveTuple) error {
 	switch s.Protocol {
 	case UDP:
@@ -74,17 +75,15 @@ func (f *FiveTuple) deserialize(s *serializedFiveTuple) error {
 		f.SrcAddr = &net.TCPAddr{IP: s.SrcIP, Port: int(s.SrcPort)}
 		f.DstAddr = &net.TCPAddr{IP: s.DstIP, Port: int(s.DstPort)}
 	default:
-		return fmt.Errorf("Unsupported protocol %v", s.Protocol)
-
+		return errUnsupportedProtocol
 	}
 	f.Protocol = s.Protocol
+
 	return nil
 }
+
 func (f *FiveTuple) MarshalBinary() ([]byte, error) {
-	serialized, err := f.serialize()
-	if err != nil {
-		return nil, err
-	}
+	serialized := f.serialize()
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(*serialized); err != nil {
@@ -93,12 +92,14 @@ func (f *FiveTuple) MarshalBinary() ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
+
 func (f *FiveTuple) UnmarshalBinary(data []byte) error {
 	var serialized serializedFiveTuple
 	enc := gob.NewDecoder(bytes.NewBuffer(data))
 	if err := enc.Decode(&serialized); err != nil {
 		return err
 	}
+
 	return f.deserialize(&serialized)
 }
 
