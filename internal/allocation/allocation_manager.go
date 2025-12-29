@@ -18,7 +18,7 @@ import (
 type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	AllocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	AllocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
 }
@@ -37,7 +37,7 @@ type Manager struct {
 	reservations []*reservation
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	allocateConn       func(network string, requestedPort int) (net.Conn, net.Addr, error)
+	allocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
 }
@@ -47,8 +47,8 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 	switch {
 	case config.AllocatePacketConn == nil:
 		return nil, errAllocatePacketConnMustBeSet
-	case config.AllocateConn == nil:
-		return nil, errAllocateConnMustBeSet
+	case config.AllocateListener == nil:
+		return nil, errAllocateListenerMustBeSet
 	case config.LeveledLogger == nil:
 		return nil, errLeveledLoggerMustBeSet
 	}
@@ -57,7 +57,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		log:                config.LeveledLogger,
 		allocations:        make(map[FiveTupleFingerprint]*Allocation, 64),
 		allocatePacketConn: config.AllocatePacketConn,
-		allocateConn:       config.AllocateConn,
+		allocateListener:   config.AllocateListener,
 		permissionHandler:  config.PermissionHandler,
 		EventHandler:       config.EventHandler,
 	}, nil
@@ -104,9 +104,10 @@ func (m *Manager) Close() error {
 }
 
 // CreateAllocation creates a new allocation and starts relaying.
-func (m *Manager) CreateAllocation(
+func (m *Manager) CreateAllocation( // nolint: cyclop
 	fiveTuple *FiveTuple,
 	turnSocket net.PacketConn,
+	protocol proto.Protocol,
 	requestedPort int,
 	lifetime time.Duration,
 	username, realm string,
@@ -131,13 +132,23 @@ func (m *Manager) CreateAllocation(
 	alloc.username = username
 	alloc.realm = realm
 
-	conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
-	if err != nil {
-		return nil, err
-	}
+	if protocol == proto.ProtoUDP {
+		conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
+		if err != nil {
+			return nil, err
+		}
 
-	alloc.RelaySocket = conn
-	alloc.RelayAddr = relayAddr
+		alloc.relayPacketConn = conn
+		alloc.RelayAddr = relayAddr
+	} else if protocol == proto.ProtoTCP {
+		ln, relayAddr, err := m.allocateListener("tcp4", requestedPort)
+		if err != nil {
+			return nil, err
+		}
+
+		alloc.relayListener = ln
+		alloc.RelayAddr = relayAddr
+	}
 
 	m.log.Debugf("Listening on relay address: %s", alloc.RelayAddr)
 
@@ -151,10 +162,17 @@ func (m *Manager) CreateAllocation(
 
 	if m.EventHandler.OnAllocationCreated != nil {
 		m.EventHandler.OnAllocationCreated(fiveTuple.SrcAddr, fiveTuple.DstAddr,
-			fiveTuple.Protocol.String(), username, realm, relayAddr, requestedPort)
+			fiveTuple.Protocol.String(), username, realm, alloc.RelayAddr, requestedPort)
 	}
 
-	go alloc.packetHandler(m)
+	// Only start the UDP relay loop for UDP allocations.
+	if alloc.relayPacketConn != nil {
+		go alloc.packetConnHandler(m)
+	}
+	// For TCP allocations, accept inbound connections on the relayed listener and notify the client.
+	if alloc.relayListener != nil {
+		go alloc.connHandler(m)
+	}
 
 	return alloc, nil
 }
@@ -257,19 +275,14 @@ func (m *Manager) GrantPermission(sourceAddr net.Addr, peerIP net.IP) error {
 	return errAdminProhibited
 }
 
-// AddTCPConnection creates a new outbound TCP Connection and returns the Connection-ID
+// CreateTCPConnection creates a new outbound TCP Connection and returns the Connection-ID
 // if it succeeds.
-func (m *Manager) AddTCPConnection( // nolint: cyclop
+func (m *Manager) CreateTCPConnection( // nolint: cyclop
 	allocation *Allocation,
 	peerAddress proto.PeerAddress,
 ) (proto.ConnectionID, error) {
 	if len(peerAddress.IP) == 0 || peerAddress.Port == 0 {
 		return 0, errInvalidPeerAddress
-	}
-
-	rand64, err := randutil.CryptoUint64()
-	if err != nil {
-		return 0, err
 	}
 
 	conn, err := net.DialTCP("tcp4", nil, &net.TCPAddr{IP: peerAddress.IP, Port: peerAddress.Port}) // nolint: noctx
@@ -278,10 +291,21 @@ func (m *Manager) AddTCPConnection( // nolint: cyclop
 
 		return 0, ErrTCPConnectionTimeoutOrFailure
 	}
-	closeConn := func() {
+
+	connectionID, err := m.addTCPConnection(allocation, conn)
+	if err != nil {
 		if closeErr := conn.Close(); closeErr != nil {
 			m.log.Warnf("Failed to close TCP connection after ConnectionID generation failed: %v", closeErr)
 		}
+	}
+
+	return connectionID, err
+}
+
+func (m *Manager) addTCPConnection(allocation *Allocation, conn net.Conn) (proto.ConnectionID, error) {
+	rand64, err := randutil.CryptoUint64()
+	if err != nil {
+		return 0, err
 	}
 
 	connectionID := proto.ConnectionID(uint32(rand64 >> 32)) // nolint: gosec
@@ -289,23 +313,22 @@ func (m *Manager) AddTCPConnection( // nolint: cyclop
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	for i := range m.allocations {
-		if _, ok := m.allocations[i].tcpConnections[connectionID]; ok {
-			closeConn()
-
+	for _, a := range m.allocations {
+		if _, ok := a.tcpConnections[connectionID]; ok {
 			return 0, errFailedToGenerateConnectionID
 		}
+	}
+
+	newConnAddr, ok := conn.RemoteAddr().(*net.TCPAddr)
+	if !ok {
+		return 0, ErrDupeTCPConnection
 	}
 
 	for i := range allocation.tcpConnections {
 		tcpAddr, ok := allocation.tcpConnections[i].RemoteAddr().(*net.TCPAddr)
 		if !ok {
-			closeConn()
-
 			return 0, ErrDupeTCPConnection
-		} else if tcpAddr.IP.Equal(peerAddress.IP) && tcpAddr.Port == peerAddress.Port {
-			closeConn()
-
+		} else if tcpAddr.IP.Equal(newConnAddr.IP) && tcpAddr.Port == newConnAddr.Port {
 			return 0, ErrDupeTCPConnection
 		}
 	}

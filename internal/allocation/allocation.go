@@ -27,7 +27,6 @@ type Allocation struct {
 	RelayAddr           net.Addr
 	Protocol            Protocol
 	TurnSocket          net.PacketConn
-	RelaySocket         net.PacketConn
 	fiveTuple           *FiveTuple
 	permissionsLock     sync.RWMutex
 	permissions         map[string]*Permission
@@ -38,6 +37,12 @@ type Allocation struct {
 	username, realm     string
 	eventHandler        EventHandler
 	log                 logging.LeveledLogger
+
+	// Relay Transport for UDP
+	relayPacketConn net.PacketConn
+
+	// Relay Transport for TCP
+	relayListener net.Listener
 
 	tcpConnections map[proto.ConnectionID]net.Conn // Guarded by AllocationManager lock
 
@@ -251,6 +256,21 @@ func (a *Allocation) GetResponseCache() (id [stun.TransactionIDSize]byte, attrs 
 	return
 }
 
+func (a *Allocation) removeTCPConnection(m *Manager, connectionID proto.ConnectionID) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	if conn, ok := a.tcpConnections[connectionID]; ok {
+		if err := conn.Close(); err != nil {
+			a.log.Errorf("Failed to close relay socket for %s %v",
+				a.fiveTuple,
+				err)
+		}
+	}
+
+	delete(a.tcpConnections, connectionID)
+}
+
 // Close closes the allocation.
 func (a *Allocation) Close() error {
 	select {
@@ -272,7 +292,24 @@ func (a *Allocation) Close() error {
 		c.lifetimeTimer.Stop()
 	}
 
-	return a.RelaySocket.Close()
+	if a.relayPacketConn != nil {
+		return a.relayPacketConn.Close()
+	}
+
+	if a.relayListener != nil {
+		return a.relayListener.Close()
+	}
+
+	return nil
+}
+
+// WriteTo writes a packet with payload p to addr via the Relay socket.
+func (a *Allocation) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	if a.relayPacketConn == nil {
+		return 0, errNilRelaySocket
+	}
+
+	return a.relayPacketConn.WriteTo(p, addr)
 }
 
 //  https://tools.ietf.org/html/rfc5766#section-10.3
@@ -297,11 +334,11 @@ func (a *Allocation) Close() error {
 
 const rtpMTU = 1600
 
-func (a *Allocation) packetHandler(manager *Manager) {
+func (a *Allocation) packetConnHandler(manager *Manager) {
 	buffer := make([]byte, rtpMTU)
 
 	for {
-		n, srcAddr, err := a.RelaySocket.ReadFrom(buffer)
+		n, srcAddr, err := a.relayPacketConn.ReadFrom(buffer)
 		if err != nil {
 			manager.DeleteAllocation(a.fiveTuple)
 
@@ -309,7 +346,7 @@ func (a *Allocation) packetHandler(manager *Manager) {
 		}
 
 		a.log.Debugf("Relay socket %s received %d bytes from %s",
-			a.RelaySocket.LocalAddr(),
+			a.relayPacketConn.LocalAddr(),
 			n,
 			srcAddr)
 
@@ -353,6 +390,55 @@ func (a *Allocation) packetHandler(manager *Manager) {
 			}
 		} else {
 			a.log.Infof("No Permission or Channel exists for %v on allocation %v", srcAddr, a.RelayAddr)
+		}
+	}
+}
+
+func (a *Allocation) connHandler(manager *Manager) {
+	for {
+		conn, err := a.relayListener.Accept()
+		if err != nil {
+			manager.DeleteAllocation(a.fiveTuple)
+
+			return
+		}
+
+		tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr)
+		if !ok {
+			_ = conn.Close()
+			a.log.Errorf("Failed to accept TCP Connection for Allocation %v %v", a.fiveTuple.SrcAddr, err)
+
+			continue
+		}
+		a.log.Debugf("Relay %s accepted connection from %s", a.relayListener.Addr(), tcpAddr)
+
+		cid, err := manager.addTCPConnection(a, conn)
+		if err != nil {
+			a.log.Errorf("Failed to create inbound TCP Connection for Allocation %v %v", a.fiveTuple.SrcAddr, err)
+
+			_ = conn.Close()
+
+			continue
+		}
+
+		msg, err := stun.Build(
+			stun.TransactionID,
+			stun.NewType(stun.MethodConnectionAttempt, stun.ClassIndication),
+			proto.PeerAddress{IP: tcpAddr.IP, Port: tcpAddr.Port},
+			cid,
+		)
+		if err != nil {
+			a.log.Errorf("Failed to ConnectionAttempt for Allocation %v %v", a.fiveTuple.SrcAddr, err)
+
+			a.removeTCPConnection(manager, cid)
+
+			continue
+		}
+
+		if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
+			a.log.Errorf("Failed to send ConnectionAttempt for Allocation %v %v", a.fiveTuple.SrcAddr, err)
+
+			a.removeTCPConnection(manager, cid)
 		}
 	}
 }

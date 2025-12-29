@@ -66,8 +66,36 @@ func (r *RelayAddressGeneratorStatic) AllocatePacketConn(
 	return conn, relayAddr, nil
 }
 
-// AllocateConn generates a new Conn to receive traffic on and the IP/Port
+// AllocateListener generates a new Listener to receive traffic on and the IP/Port
 // to populate the allocation response with.
-func (r *RelayAddressGeneratorStatic) AllocateConn(string, int) (net.Conn, net.Addr, error) {
-	return nil, nil, errTODO
+func (r *RelayAddressGeneratorStatic) AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error) { // nolint: lll
+	// AllocateListener can be called independently of Validate (e.g. in tests),
+	// so ensure we're initialized to avoid nil dereferences.
+	if r.Net == nil || r.Address == "" || r.RelayAddress == nil {
+		if err := r.Validate(); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	tcpAddr, err := r.Net.ResolveTCPAddr(network, r.Address+":"+strconv.Itoa(requestedPort))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ln, err := r.Net.ListenTCP(network, tcpAddr) // nolint: noctx
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Replace actual listening IP with the user requested one of RelayAddressGeneratorStatic
+	relayAddr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = ln.Close()
+
+		return nil, nil, errNilConn
+	}
+
+	relayAddr.IP = r.RelayAddress
+
+	return ln, relayAddr, nil
 }

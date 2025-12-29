@@ -154,11 +154,19 @@ func TestServerConfig(t *testing.T) {
 		}).validate(), errRelayAddressGeneratorUnset)
 	})
 
-	_, _, err = (&RelayAddressGeneratorNone{}).AllocateConn("", 0)
-	assert.ErrorIs(t, err, errTODO)
+	_, _, err = (&RelayAddressGeneratorNone{}).AllocateListener("tcp4", 0)
+	assert.ErrorIs(t, err, errListeningAddressInvalid)
 
-	_, _, err = (&RelayAddressGeneratorStatic{}).AllocateConn("", 0)
-	assert.ErrorIs(t, err, errTODO)
+	listener, _, err := (&RelayAddressGeneratorNone{Address: "0.0.0.0"}).AllocateListener("tcp4", 0)
+	assert.NoError(t, err)
+	assert.NoError(t, listener.Close())
+
+	_, _, err = (&RelayAddressGeneratorStatic{}).AllocateListener("tcp4", 0)
+	assert.ErrorIs(t, err, errRelayAddressInvalid)
+
+	listener, _, err = (&RelayAddressGeneratorStatic{RelayAddress: net.IP("127.0.0.1"), Address: "0.0.0.0"}).AllocateListener("tcp4", 0) // nolint: lll
+	assert.NoError(t, err)
+	assert.NoError(t, listener.Close())
 
 	assert.NoError(t, tcpListener.Close())
 	assert.NoError(t, udpListener.Close())
@@ -1620,15 +1628,32 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 		assert.Equal(t, udpAddr.Port, 3478)
 
 		assert.NoError(t, conn.Close())
+
+		tcpConn, addr, err := relayAddressGeneratorPortRange.AllocateListener("tcp4", 3478)
+		assert.NoError(t, err)
+		assert.NotNil(t, addr)
+
+		tcpAddr, ok := tcpConn.Addr().(*net.TCPAddr)
+		assert.True(t, ok)
+		assert.Equal(t, tcpAddr.Port, 3478)
+
+		assert.NoError(t, tcpConn.Close())
 	})
 
 	t.Run("Range", func(t *testing.T) {
 		conns := []net.PacketConn{}
+		listeners := []net.Listener{}
+
 		for i := 0; i < 25; i++ {
 			conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn("udp", 0)
 			assert.NoError(t, err)
 			assert.NotNil(t, addr)
 			conns = append(conns, conn)
+
+			listener, addr, err := relayAddressGeneratorPortRange.AllocateListener("tcp", 0)
+			assert.NoError(t, err)
+			assert.NotNil(t, addr)
+			listeners = append(listeners, listener)
 		}
 
 		for i := range conns {
@@ -1637,6 +1662,12 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 			assert.True(t, udpAddr.Port >= 5000 && udpAddr.Port <= 6000)
 
 			assert.NoError(t, conns[i].Close())
+
+			tcpAddr, ok := listeners[i].Addr().(*net.TCPAddr)
+			assert.True(t, ok)
+			assert.True(t, tcpAddr.Port >= 5000 && tcpAddr.Port <= 6000)
+
+			assert.NoError(t, listeners[i].Close())
 		}
 	})
 }
@@ -1649,7 +1680,7 @@ func TestNilAddressGenerator(t *testing.T) {
 	_, _, err := generator.AllocatePacketConn("", 0)
 	assert.ErrorIs(t, err, errRelayAddressGeneratorNil)
 
-	_, _, err = generator.AllocateConn("", 0)
+	_, _, err = generator.AllocateListener("", 0)
 	assert.ErrorIs(t, err, errRelayAddressGeneratorNil)
 }
 

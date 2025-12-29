@@ -381,7 +381,7 @@ func TestClientReadTimout(t *testing.T) {
 	assert.Contains(t, err.Error(), "use of closed network connection")
 }
 
-func TestTCPClientDialTCP(t *testing.T) {
+func TestTCPClientDial(t *testing.T) {
 	tcpListener, err := net.Listen("tcp4", "0.0.0.0:3478") //nolint: gosec,noctx
 	require.NoError(t, err)
 
@@ -442,7 +442,7 @@ func TestTCPClientDialTCP(t *testing.T) {
 	remotePeerAddr, ok := remotePeerConn.Addr().(*net.TCPAddr)
 	assert.True(t, ok)
 
-	channelBindConn, err := allocation.DialTCP("tcp4", nil, remotePeerAddr)
+	channelBindConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
 	assert.NoError(t, err)
 
 	channelBindConnBuffer := make([]byte, len(expectedMsg))
@@ -456,6 +456,80 @@ func TestTCPClientDialTCP(t *testing.T) {
 
 	// Shutdown
 	assert.NoError(t, remotePeerConn.Close())
+	assert.NoError(t, allocation.Close())
+	assert.NoError(t, clientConn.Close())
+	assert.NoError(t, server.Close())
+}
+
+func TestTCPClientAccept(t *testing.T) {
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:3478") //nolint: gosec,noctx
+	require.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(username, realm string, _ net.Addr) (key []byte, ok bool) {
+			return GenerateAuthKey(username, realm, "pass"), true
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: tcpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+
+	clientConn, err := net.Dial("tcp", testAddr) // nolint: noctx
+	require.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           NewSTUNConn(clientConn),
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "foo",
+		Password:       "pass",
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+
+	allocation, err := client.AllocateTCP()
+	assert.NoError(t, err)
+
+	expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+
+	peerConn, err := net.Dial("tcp4", allocation.Addr().String()) // nolint: noctx
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_, wErr := peerConn.Write(expectedMsg)
+		assert.NoError(t, wErr)
+
+		peerBuf := make([]byte, len(expectedMsg))
+		_, rErr := peerConn.Read(peerBuf)
+		assert.NoError(t, rErr)
+		assert.Equal(t, expectedMsg, peerBuf)
+
+		cancel()
+	}()
+
+	allocationConn, err := allocation.Accept()
+	assert.NoError(t, err)
+
+	allocationConnBuffer := make([]byte, len(expectedMsg))
+	_, err = allocationConn.Read(allocationConnBuffer)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg, allocationConnBuffer)
+
+	_, err = allocationConn.Write(expectedMsg)
+	assert.NoError(t, err)
+	<-ctx.Done()
+
+	// Shutdown
+	assert.NoError(t, peerConn.Close())
 	assert.NoError(t, allocation.Close())
 	assert.NoError(t, clientConn.Close())
 	assert.NoError(t, server.Close())

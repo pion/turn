@@ -191,7 +191,7 @@ func (n *nilAddressGenerator) AllocatePacketConn(string, int) (net.PacketConn, n
 	return nil, nil, errRelayAddressGeneratorNil
 }
 
-func (n *nilAddressGenerator) AllocateConn(string, int) (net.Conn, net.Addr, error) {
+func (n *nilAddressGenerator) AllocateListener(string, int) (net.Listener, net.Addr, error) {
 	return nil, nil, errRelayAddressGeneratorNil
 }
 
@@ -208,7 +208,7 @@ func (s *Server) createAllocationManager(
 
 	am, err := allocation.NewManager(allocation.ManagerConfig{
 		AllocatePacketConn: addrGenerator.AllocatePacketConn,
-		AllocateConn:       addrGenerator.AllocateConn,
+		AllocateListener:   addrGenerator.AllocateListener,
 		PermissionHandler:  handler,
 		EventHandler:       s.eventHandler,
 		LeveledLogger:      s.log,

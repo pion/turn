@@ -23,8 +23,8 @@ type RelayAddressGenerator interface {
 	// Allocate a PacketConn (UDP) RelayAddress
 	AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 
-	// Allocate a Conn (TCP) RelayAddress
-	AllocateConn(network string, requestedPort int) (net.Conn, net.Addr, error)
+	// Allocate a Listener (TCP) RelayAddress
+	AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error)
 }
 
 // PermissionHandler is a callback to filter incoming CreatePermission and ChannelBindRequest
@@ -75,7 +75,7 @@ type ListenerConfig struct {
 	Listener net.Listener
 
 	// When an allocation is generated the RelayAddressGenerator
-	// creates the net.PacketConn and returns the IP/Port it is available at
+	// creates the net.Listener and returns the IP/Port it is available at
 	RelayAddressGenerator RelayAddressGenerator
 
 	// PermissionHandler is a callback to filter peer addresses. Can be set as nil, in which

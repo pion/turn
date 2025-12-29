@@ -67,7 +67,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 				return con, con.LocalAddr(), nil
 			},
-			AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
+			AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 				return nil, nil, nil
 			},
 			LeveledLogger: logger,
@@ -92,7 +92,7 @@ func TestAllocationLifeTime(t *testing.T) {
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour, "test", "")
+		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP, 0, time.Hour, "test", "")
 		assert.NoError(t, err)
 
 		assert.NotNil(t, req.AllocationManager.GetAllocation(fiveTuple))
@@ -126,7 +126,7 @@ func TestRequestedTransport(t *testing.T) {
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
 		LeveledLogger: logger,
@@ -178,7 +178,7 @@ func TestConnectRequest(t *testing.T) {
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
 		LeveledLogger: logger,
@@ -212,7 +212,7 @@ func TestConnectRequest(t *testing.T) {
 
 	fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour, "", "")
+	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP, 0, time.Hour, "", "")
 	assert.NoError(t, err)
 
 	m := &stun.Message{}
@@ -248,7 +248,7 @@ func TestConnectionBindRequest(t *testing.T) {
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateConn: func(string, int) (net.Conn, net.Addr, error) {
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
 		LeveledLogger: logger,
@@ -282,7 +282,7 @@ func TestConnectionBindRequest(t *testing.T) {
 
 	fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, 0, time.Hour, "", "")
+	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP, 0, time.Hour, "", "")
 	assert.NoError(t, err)
 
 	m := &stun.Message{}
