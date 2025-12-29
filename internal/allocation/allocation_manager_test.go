@@ -20,6 +20,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewManagerValidation(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	cfg := ManagerConfig{}
+
+	manager, err := NewManager(cfg)
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, errAllocatePacketConnMustBeSet)
+
+	cfg.AllocatePacketConn = func(string, int) (net.PacketConn, net.Addr, error) { return nil, nil, nil }
+	manager, err = NewManager(cfg)
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, errAllocateListenerMustBeSet)
+
+	cfg.AllocateListener = func(string, int) (net.Listener, net.Addr, error) { return nil, nil, nil }
+	manager, err = NewManager(cfg)
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, errLeveledLoggerMustBeSet)
+
+	cfg.LeveledLogger = loggerFactory.NewLogger("test")
+	manager, err = NewManager(cfg)
+	assert.NotNil(t, manager)
+	assert.NoError(t, err)
+	assert.NoError(t, manager.Close())
+}
+
 // Test invalid Allocation creations.
 func TestCreateInvalidAllocation(t *testing.T) {
 	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
@@ -28,15 +54,15 @@ func TestCreateInvalidAllocation(t *testing.T) {
 	manager, err := newTestManager()
 	assert.NoError(t, err)
 
-	a, err := manager.CreateAllocation(nil, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err := manager.CreateAllocation(nil, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.Nil(t, a, "Illegally created allocation with nil FiveTuple")
 	assert.Error(t, err, "Illegally created allocation with nil FiveTuple")
 
-	a, err = manager.CreateAllocation(randomFiveTuple(), nil, 0, proto.DefaultLifetime, "", "")
+	a, err = manager.CreateAllocation(randomFiveTuple(), nil, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.Nil(t, a, "Illegally created allocation with nil turnSocket")
 	assert.Error(t, err, "Illegally created allocation with nil turnSocket")
 
-	a, err = manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, 0, "", "")
+	a, err = manager.CreateAllocation(randomFiveTuple(), turnSocket, proto.ProtoUDP, 0, 0, "", "")
 	assert.Nil(t, a, "Illegally created allocation with 0 lifetime")
 	assert.Error(t, err, "Illegally created allocation with 0 lifetime")
 
@@ -53,7 +79,7 @@ func TestCreateAllocation(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
@@ -73,11 +99,11 @@ func TestCreateAllocationDuplicateFiveTuple(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
-	a, err = manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err = manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.Nil(t, a, "Was able to create allocation with same FiveTuple twice")
 	assert.Error(t, err, "Was able to create allocation with same FiveTuple twice")
 
@@ -93,7 +119,7 @@ func TestDeleteAllocation(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	a, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.NotNil(t, a, "Failed to create allocation")
 	assert.NoError(t, err, "Failed to create allocation")
 
@@ -122,7 +148,7 @@ func TestAllocationTimeout(t *testing.T) {
 	for index := range allocations {
 		fiveTuple := randomFiveTuple()
 
-		a, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, lifetime, "", "")
+		a, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, lifetime, "", "")
 		assert.NoErrorf(t, err, "Failed to create allocation with %v", fiveTuple)
 
 		allocations[index] = a
@@ -131,7 +157,7 @@ func TestAllocationTimeout(t *testing.T) {
 	// Make sure all allocations timeout
 	time.Sleep(lifetime + time.Second)
 	for _, alloc := range allocations {
-		assert.True(t, isClose(alloc.RelaySocket), "Allocation relay socket should be closed if lifetime timeout")
+		assert.True(t, isClose(alloc.relayPacketConn), "Allocation relay socket should be closed if lifetime timeout")
 	}
 
 	assert.NoError(t, manager.Close())
@@ -148,9 +174,9 @@ func TestManagerClose(t *testing.T) {
 
 	allocations := make([]*Allocation, 2)
 
-	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Second, "", "")
+	a1, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, proto.ProtoUDP, 0, time.Second, "", "")
 	allocations[0] = a1
-	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, 0, time.Minute, "", "")
+	a2, _ := manager.CreateAllocation(randomFiveTuple(), turnSocket, proto.ProtoUDP, 0, time.Minute, "", "")
 	allocations[1] = a2
 
 	// Make a1 timeout
@@ -158,7 +184,7 @@ func TestManagerClose(t *testing.T) {
 	assert.NoError(t, manager.Close())
 
 	for _, alloc := range allocations {
-		assert.True(t, isClose(alloc.RelaySocket), "Manager's allocations should be closed")
+		assert.True(t, isClose(alloc.relayPacketConn), "Manager's allocations should be closed")
 	}
 
 	assert.NoError(t, turnSocket.Close())
@@ -185,7 +211,7 @@ func newTestManager() (*Manager, error) {
 
 			return conn, conn.LocalAddr(), nil
 		},
-		AllocateConn: func(string, int) (net.Conn, net.Addr, error) { return nil, nil, nil },
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) { return nil, nil, nil },
 	}
 
 	return NewManager(config)
@@ -209,7 +235,7 @@ func TestGetRandomEvenPort(t *testing.T) {
 	assert.NoError(t, manager.Close())
 }
 
-func TestAddTCPConnection(t *testing.T) {
+func TestCreateTCPConnection(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
@@ -235,14 +261,14 @@ func TestAddTCPConnection(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
 
-	connectionID, err := manager.AddTCPConnection(allocation, peer)
+	connectionID, err := manager.CreateTCPConnection(allocation, peer)
 	assert.NoError(t, err)
 	assert.NotZero(t, connectionID)
 
-	_, err = manager.AddTCPConnection(allocation, peer)
+	_, err = manager.CreateTCPConnection(allocation, peer)
 	assert.ErrorIs(t, err, ErrDupeTCPConnection)
 
 	assert.Nil(t, manager.GetTCPConnection("bad-username", connectionID))
@@ -258,7 +284,7 @@ func TestAddTCPConnection(t *testing.T) {
 	assert.NoError(t, turnSocket.Close())
 }
 
-func TestAddTCPConnectionInvalidPeerAddress(t *testing.T) {
+func TestCreateTCPConnectionInvalidPeerAddress(t *testing.T) {
 	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
@@ -266,19 +292,19 @@ func TestAddTCPConnectionInvalidPeerAddress(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
 
-	_, err = manager.AddTCPConnection(allocation, proto.PeerAddress{IP: nil, Port: 1234})
+	_, err = manager.CreateTCPConnection(allocation, proto.PeerAddress{IP: nil, Port: 1234})
 	assert.ErrorIs(t, err, errInvalidPeerAddress)
 
-	_, err = manager.AddTCPConnection(allocation, proto.PeerAddress{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	_, err = manager.CreateTCPConnection(allocation, proto.PeerAddress{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 	assert.ErrorIs(t, err, errInvalidPeerAddress)
 
 	assert.NoError(t, turnSocket.Close())
 }
 
-func TestAddTCPConnectionInvalid(t *testing.T) {
+func TestCreateTCPConnectionInvalid(t *testing.T) {
 	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 
@@ -286,12 +312,12 @@ func TestAddTCPConnectionInvalid(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
 
 	peerAddress := proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5000}
 
-	connectionID, err := manager.AddTCPConnection(allocation, peerAddress)
+	connectionID, err := manager.CreateTCPConnection(allocation, peerAddress)
 	assert.ErrorIs(t, err, ErrTCPConnectionTimeoutOrFailure)
 	assert.Zero(t, connectionID)
 

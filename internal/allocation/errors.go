@@ -10,7 +10,7 @@ var (
 	ErrDupeTCPConnection             = errors.New("tcp connection already exists for peer address")
 
 	errAllocatePacketConnMustBeSet  = errors.New("AllocatePacketConn must be set")
-	errAllocateConnMustBeSet        = errors.New("AllocateConn must be set")
+	errAllocateListenerMustBeSet    = errors.New("AllocateListener must be set")
 	errLeveledLoggerMustBeSet       = errors.New("LeveledLogger must be set")
 	errSameChannelDifferentPeer     = errors.New("you cannot use the same channel number with different peer")
 	errNilFiveTuple                 = errors.New("allocations must not be created with nil FivTuple")
@@ -24,4 +24,5 @@ var (
 	errAdminProhibited              = errors.New("permission request administratively prohibited")
 	errFailedToGenerateConnectionID = errors.New("failed to generate a unique connection id")
 	errInvalidPeerAddress           = errors.New("invalid peer address")
+	errNilRelaySocket               = errors.New("allocation has no relay socket")
 )

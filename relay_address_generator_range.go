@@ -109,8 +109,56 @@ func (r *RelayAddressGeneratorPortRange) AllocatePacketConn(
 	return nil, nil, errMaxRetriesExceeded
 }
 
-// AllocateConn generates a new Conn to receive traffic on and the IP/Port
+// AllocateListener generates a new Listener to receive traffic on and the IP/Port
 // to populate the allocation response with.
-func (r *RelayAddressGeneratorPortRange) AllocateConn(string, int) (net.Conn, net.Addr, error) {
-	return nil, nil, errTODO
+func (r *RelayAddressGeneratorPortRange) AllocateListener( // nolint: cyclop
+	network string,
+	requestedPort int,
+) (net.Listener, net.Addr, error) {
+	// AllocateListener can be called independently of Validate (e.g. in tests),
+	// so ensure we're initialized to avoid nil dereferences.
+	if r.Net == nil || r.Address == "" || r.RelayAddress == nil || r.Rand == nil {
+		if err := r.Validate(); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	listen := func(port int) (net.Listener, net.Addr, error) {
+		tcpAddr, err := r.Net.ResolveTCPAddr(network, fmt.Sprintf("%s:%d", r.Address, port))
+		if err != nil {
+			return nil, nil, err
+		}
+
+		ln, err := r.Net.ListenTCP(network, tcpAddr) // nolint: noctx
+		if err != nil {
+			return nil, nil, err
+		}
+
+		relayAddr, ok := ln.Addr().(*net.TCPAddr)
+		if !ok {
+			_ = ln.Close()
+
+			return nil, nil, errNilConn
+		}
+
+		relayAddr.IP = r.RelayAddress
+
+		return ln, relayAddr, nil
+	}
+
+	if requestedPort != 0 {
+		return listen(requestedPort)
+	}
+
+	for try := 0; try < r.MaxRetries; try++ {
+		port := int(r.MinPort + uint16(r.Rand.Intn(int((r.MaxPort+1)-r.MinPort)))) // nolint:gosec // G115 false positive
+		ln, addr, err := listen(port)
+		if err != nil {
+			continue
+		}
+
+		return ln, addr, nil
+	}
+
+	return nil, nil, errMaxRetriesExceeded
 }

@@ -8,11 +8,14 @@ package allocation
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
 	"github.com/pion/turn/v4/internal/ipnet"
 	"github.com/pion/turn/v4/internal/proto"
@@ -196,7 +199,7 @@ func TestAllocationClose(t *testing.T) {
 	assert.NoError(t, err)
 
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
-	alloc.RelaySocket = l
+	alloc.relayPacketConn = l
 	// Add mock lifetimeTimer
 	alloc.lifetimeTimer = time.AfterFunc(proto.DefaultLifetime, func() {})
 
@@ -211,7 +214,7 @@ func TestAllocationClose(t *testing.T) {
 	alloc.AddPermission(NewPermission(addr, nil, DefaultPermissionTimeout))
 
 	assert.Nil(t, alloc.Close(), "should succeed")
-	assert.True(t, isClose(alloc.RelaySocket), "should be closed")
+	assert.True(t, isClose(alloc.relayPacketConn), "should be closed")
 }
 
 func TestPacketHandler(t *testing.T) {
@@ -244,7 +247,7 @@ func TestPacketHandler(t *testing.T) {
 	alloc, err := manager.CreateAllocation(&FiveTuple{
 		SrcAddr: clientListener.LocalAddr(),
 		DstAddr: turnSocket.LocalAddr(),
-	}, turnSocket, 0, proto.DefaultLifetime, "", "")
+	}, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
 
 	assert.NoError(t, err, "should succeed")
 
@@ -260,7 +263,7 @@ func TestPacketHandler(t *testing.T) {
 	channelBind := NewChannelBind(proto.MinChannelNumber, peerListener2.LocalAddr(), manager.log)
 	_ = alloc.AddChannelBind(channelBind, proto.DefaultLifetime, DefaultPermissionTimeout)
 
-	_, port, _ := ipnet.AddrIPPort(alloc.RelaySocket.LocalAddr())
+	_, port, _ := ipnet.AddrIPPort(alloc.relayPacketConn.LocalAddr())
 	relayAddrWithHostStr := fmt.Sprintf("127.0.0.1:%d", port)
 	relayAddrWithHost, _ := net.ResolveUDPAddr(network, relayAddrWithHostStr)
 
@@ -314,4 +317,223 @@ func TestResponseCache(t *testing.T) {
 	cacheID, cacheAttr := alloc.GetResponseCache()
 	assert.Equal(t, transactionID, cacheID)
 	assert.Equal(t, responseAttrs, cacheAttr)
+}
+
+type mockAddr string
+
+func (d mockAddr) Network() string { return "" }
+func (d mockAddr) String() string  { return string(d) }
+
+type mockConn struct {
+	remoteAddr net.Addr
+	localAddr  net.Addr
+	closed     atomic.Bool
+}
+
+func (c *mockConn) Read([]byte) (int, error)  { return 0, io.EOF }
+func (c *mockConn) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func (c *mockConn) Close() error {
+	c.closed.Store(true)
+
+	return nil
+}
+
+func (c *mockConn) LocalAddr() net.Addr {
+	if c.localAddr != nil {
+		return c.localAddr
+	}
+
+	return mockAddr("local")
+}
+
+func (c *mockConn) RemoteAddr() net.Addr { return c.remoteAddr }
+
+func (c *mockConn) SetDeadline(time.Time) error      { return nil }
+func (c *mockConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *mockConn) SetWriteDeadline(time.Time) error { return nil }
+
+func (c *mockConn) wasClosed() bool {
+	return c.closed.Load()
+}
+
+type mockRelayListener struct {
+	conn net.Conn
+
+	haveAccepted atomic.Bool
+
+	acceptErr  bool
+	closeCalls atomic.Int32
+	addr       net.Addr
+}
+
+func (l *mockRelayListener) Accept() (net.Conn, error) {
+	if !l.haveAccepted.Swap(true) {
+		if l.acceptErr {
+			return nil, io.EOF
+		}
+		if l.conn == nil {
+			return nil, io.EOF
+		}
+
+		return l.conn, nil
+	}
+
+	return nil, io.EOF
+}
+
+func (l *mockRelayListener) Close() error {
+	l.closeCalls.Add(1)
+
+	return nil
+}
+
+func (l *mockRelayListener) Addr() net.Addr {
+	if l.addr != nil {
+		return l.addr
+	}
+
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+}
+
+func (l *mockRelayListener) closeCount() int {
+	return int(l.closeCalls.Load())
+}
+
+type writeErrHolder struct {
+	err error
+}
+
+type mockTurnSocket struct {
+	writeErr atomic.Pointer[writeErrHolder]
+	writes   atomic.Int32
+}
+
+func (m *mockTurnSocket) ReadFrom([]byte) (int, net.Addr, error) { return 0, nil, io.EOF }
+
+func (m *mockTurnSocket) WriteTo([]byte, net.Addr) (int, error) {
+	m.writes.Add(1)
+	if h := m.writeErr.Load(); h != nil {
+		return 0, h.err
+	}
+
+	return 0, nil
+}
+
+func (m *mockTurnSocket) Close() error                     { return nil }
+func (m *mockTurnSocket) LocalAddr() net.Addr              { return mockAddr("turnsocket") }
+func (m *mockTurnSocket) SetDeadline(time.Time) error      { return nil }
+func (m *mockTurnSocket) SetReadDeadline(time.Time) error  { return nil }
+func (m *mockTurnSocket) SetWriteDeadline(time.Time) error { return nil }
+func (m *mockTurnSocket) writeCount() int                  { return int(m.writes.Load()) }
+func (m *mockTurnSocket) setWriteErr(err error) {
+	if err == nil {
+		m.writeErr.Store(nil)
+
+		return
+	}
+	m.writeErr.Store(&writeErrHolder{err: err})
+}
+
+func newTestAllocationForConnHandler(t *testing.T, ln net.Listener, turnSocket net.PacketConn) (*Manager, *Allocation) {
+	t.Helper()
+	log := logging.NewDefaultLoggerFactory().NewLogger("test")
+
+	fiveTuple := &FiveTuple{
+		Protocol: TCP,
+		SrcAddr:  &net.UDPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 1111},
+		DstAddr:  &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 2222},
+	}
+
+	a := NewAllocation(turnSocket, fiveTuple, EventHandler{}, log)
+	a.relayListener = ln
+	a.RelayAddr = ln.Addr()
+	a.lifetimeTimer = time.NewTimer(time.Hour)
+
+	m := &Manager{
+		log:         log,
+		allocations: map[FiveTupleFingerprint]*Allocation{fiveTuple.Fingerprint(): a},
+	}
+
+	return m, a
+}
+
+func TestAllocationConnHandler_AcceptErrorDeletesAllocation(t *testing.T) {
+	ln := &mockRelayListener{
+		acceptErr: true,
+	}
+	turnSocket := &mockTurnSocket{}
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+
+	a.connHandler(m)
+
+	assert.Nil(t, m.GetAllocation(a.fiveTuple))
+	assert.Equal(t, 1, ln.closeCount())
+}
+
+func TestAllocationConnHandler_RemoteAddrCastFailureClosesConn(t *testing.T) {
+	badConn := &mockConn{remoteAddr: mockAddr("")}
+	ln := &mockRelayListener{
+		conn: badConn,
+	}
+	turnSocket := &mockTurnSocket{}
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+
+	a.connHandler(m)
+
+	assert.True(t, badConn.wasClosed())
+	assert.Equal(t, 0, turnSocket.writeCount())
+}
+
+func TestAllocationConnHandler_AddTCPConnectionErrorClosesConn(t *testing.T) {
+	remote := &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5555}
+	existingConn := &mockConn{remoteAddr: remote}
+	newConn := &mockConn{remoteAddr: remote}
+
+	ln := &mockRelayListener{
+		conn: newConn,
+	}
+	turnSocket := &mockTurnSocket{}
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+
+	a.tcpConnections[proto.ConnectionID(1)] = existingConn
+
+	a.connHandler(m)
+
+	assert.True(t, newConn.wasClosed())
+	assert.Equal(t, 0, turnSocket.writeCount())
+}
+
+func TestAllocationConnHandler_StunBuildErrorRemovesConnection(t *testing.T) {
+	conn := &mockConn{remoteAddr: &net.TCPAddr{IP: net.IP{1, 2, 3}, Port: 5555}}
+
+	ln := &mockRelayListener{
+		conn: conn,
+	}
+	turnSocket := &mockTurnSocket{}
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+
+	a.connHandler(m)
+
+	assert.True(t, conn.wasClosed())
+	assert.Empty(t, a.tcpConnections)
+	assert.Equal(t, 0, turnSocket.writeCount())
+}
+
+func TestAllocationConnHandler_TurnSocketWriteErrorRemovesConnection(t *testing.T) {
+	conn := &mockConn{remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5555}}
+
+	ln := &mockRelayListener{
+		conn: conn,
+	}
+	turnSocket := &mockTurnSocket{}
+	turnSocket.setWriteErr(io.EOF)
+
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+
+	a.connHandler(m)
+
+	assert.True(t, conn.wasClosed())
+	assert.Empty(t, a.tcpConnections)
+	assert.Equal(t, 1, turnSocket.writeCount())
 }

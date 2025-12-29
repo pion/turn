@@ -179,6 +179,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	alloc, err := req.AllocationManager.CreateAllocation(
 		fiveTuple,
 		req.Conn,
+		requestedTransport.Protocol,
 		requestedPort,
 		lifetimeDuration,
 		username,
@@ -369,7 +370,7 @@ func handleSendIndication(req Request, stunMsg *stun.Message) error {
 		return fmt.Errorf("%w: %v", errNoPermission, msgDst)
 	}
 
-	l, err := alloc.RelaySocket.WriteTo(dataAttr, msgDst)
+	l, err := alloc.WriteTo(dataAttr, msgDst)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errFailedWriteSocket, err.Error())
 	} else if l != len(dataAttr) {
@@ -457,7 +458,7 @@ func handleChannelData(req Request, channelData *proto.ChannelData) error {
 		return fmt.Errorf("%w %x", errNoSuchChannelBind, uint16(channelData.Number))
 	}
 
-	l, err := alloc.RelaySocket.WriteTo(channelData.Data, channel.Peer)
+	l, err := alloc.WriteTo(channelData.Data, channel.Peer)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errFailedWriteSocket, err.Error())
 	} else if l != len(channelData.Data) {
@@ -491,7 +492,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 		)...)
 	}
 
-	connectionID, err := req.AllocationManager.AddTCPConnection(alloc, peerAddr)
+	connectionID, err := req.AllocationManager.CreateTCPConnection(alloc, peerAddr)
 	if err != nil {
 		// If the server is currently processing a Connect request for this
 		// allocation with the same XOR-PEER-ADDRESS, it MUST return a 446

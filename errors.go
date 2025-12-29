@@ -16,7 +16,6 @@ var (
 	errMaxPortNotZero                = errors.New("turn: MaxPort must be not 0")
 	errMinPortNotZero                = errors.New("turn: MaxPort must be not 0")
 	errNilConn                       = errors.New("turn: conn cannot not be nil")
-	errTODO                          = errors.New("turn: TODO")
 	errAlreadyListening              = errors.New("turn: already listening")
 	errFailedToClose                 = errors.New("turn: Server failed to close")
 	errFailedToRetransmitTransaction = errors.New("turn: failed to retransmit transaction")
