@@ -87,7 +87,7 @@ func handleTURNPacket(req Request) error {
 		)
 	}
 
-	unknownAttributes := []stun.AttrType{}
+	unknownAttributes := []stun.AttrType(nil)
 	for _, attr := range stunMsg.Attributes {
 		if attr.Type.Required() && !attr.Type.Known() {
 			unknownAttributes = append(unknownAttributes, attr.Type)
