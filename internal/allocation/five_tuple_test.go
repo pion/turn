@@ -67,3 +67,47 @@ func TestFiveTupleEqual(t *testing.T) {
 		})
 	}
 }
+
+func TestFiveTuple_MarshalUnmarshalBinary(t *testing.T) {
+	t.Run("UDP", func(t *testing.T) {
+		srcAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:1234")
+		dstAddr, _ := net.ResolveUDPAddr("udp", "192.168.1.1:5678")
+		original := &FiveTuple{
+			Protocol: UDP,
+			SrcAddr:  srcAddr,
+			DstAddr:  dstAddr,
+		}
+
+		data, err := original.MarshalBinary()
+		assert.NoError(t, err)
+
+		unmarshaled := &FiveTuple{}
+		err = unmarshaled.UnmarshalBinary(data)
+		assert.NoError(t, err)
+
+		assert.Equal(t, original.Protocol, unmarshaled.Protocol)
+		assert.Equal(t, original.SrcAddr.String(), unmarshaled.SrcAddr.String())
+		assert.Equal(t, original.DstAddr.String(), unmarshaled.DstAddr.String())
+	})
+
+	t.Run("TCP", func(t *testing.T) {
+		srcAddr, _ := net.ResolveTCPAddr("tcp", "10.0.0.1:1111")
+		dstAddr, _ := net.ResolveTCPAddr("tcp", "10.0.0.2:2222")
+		original := &FiveTuple{
+			Protocol: TCP,
+			SrcAddr:  srcAddr,
+			DstAddr:  dstAddr,
+		}
+
+		data, err := original.MarshalBinary()
+		assert.NoError(t, err)
+
+		unmarshaled := &FiveTuple{}
+		err = unmarshaled.UnmarshalBinary(data)
+		assert.NoError(t, err)
+
+		assert.Equal(t, original.Protocol, unmarshaled.Protocol)
+		assert.Equal(t, original.SrcAddr.String(), unmarshaled.SrcAddr.String())
+		assert.Equal(t, original.DstAddr.String(), unmarshaled.DstAddr.String())
+	})
+}

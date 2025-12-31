@@ -24,4 +24,5 @@ var (
 	errAdminProhibited              = errors.New("permission request administratively prohibited")
 	errFailedToGenerateConnectionID = errors.New("failed to generate a unique connection id")
 	errInvalidPeerAddress           = errors.New("invalid peer address")
+	errUnsupportedProtocol          = errors.New("unsupported protocol")
 )
