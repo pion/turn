@@ -65,9 +65,9 @@ Yes.
 #### Implemented
 * **RFC 5389**: [Session Traversal Utilities for NAT (STUN)][rfc5389]
 * **RFC 5766**: [Traversal Using Relays around NAT (TURN): Relay Extensions to Session Traversal Utilities for NAT (STUN)][rfc5766]
+* **RFC 6062**: [Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations][rfc6062]
 
 #### Planned
-* **RFC 6062**: [Traversal Using Relays around NAT (TURN) Extensions for TCP Allocations][rfc6062]
 * **RFC 6156**: [Traversal Using Relays around NAT (TURN) Extension for IPv6][rfc6156]
 
 [rfc5389]: https://tools.ietf.org/html/rfc5389
