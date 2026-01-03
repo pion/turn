@@ -427,6 +427,9 @@ func TestTCPClientDial(t *testing.T) {
 		inboundTCPConn, inboundErr := remotePeerConn.Accept()
 		assert.NoError(t, inboundErr)
 
+		remoteAddr := inboundTCPConn.RemoteAddr()
+		assert.Equal(t, allocation.Addr().String(), remoteAddr.String(), "peer conn: remote address = relay address")
+
 		_, inboundErr = inboundTCPConn.Write(expectedMsg)
 		assert.NoError(t, inboundErr)
 
@@ -444,6 +447,9 @@ func TestTCPClientDial(t *testing.T) {
 
 	channelBindConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
 	assert.NoError(t, err)
+
+	localAddr := channelBindConn.LocalAddr()
+	assert.Equal(t, allocation.Addr().String(), localAddr.String(), "client conn: local address = relay address")
 
 	channelBindConnBuffer := make([]byte, len(expectedMsg))
 	_, err = channelBindConn.Read(channelBindConnBuffer)
