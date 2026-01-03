@@ -48,11 +48,13 @@ type ClientConfig struct {
 	Net            transport.Net
 	LoggerFactory  logging.LoggerFactory
 
-	evenPort                  bool   // If EVEN-PORT Attribute should be sent in Allocation
-	reservationToken          []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
-	permissionRefreshInterval time.Duration
-	bindingRefreshInterval    time.Duration
-	bindingCheckInterval      time.Duration
+	// PermissionTimeout sets the refresh interval of permissions. Defaults to 2 minutes.
+	PermissionRefreshInterval time.Duration
+
+	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
+	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	bindingRefreshInterval time.Duration
+	bindingCheckInterval   time.Duration
 }
 
 // Client is a STUN server client.
@@ -146,7 +148,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		log:                       log,
 		evenPort:                  config.evenPort,
 		reservationToken:          config.reservationToken,
-		permissionRefreshInterval: config.permissionRefreshInterval,
+		permissionRefreshInterval: config.PermissionRefreshInterval,
 		bindingRefreshInterval:    config.bindingRefreshInterval,
 		bindingCheckInterval:      config.bindingCheckInterval,
 	}
