@@ -590,7 +590,7 @@ func TestClientE2E(t *testing.T) {
 			TURNServerAddr:            testAddr,
 			Username:                  "foo",
 			Password:                  "pass",
-			permissionRefreshInterval: time.Millisecond * 50,
+			PermissionRefreshInterval: time.Millisecond * 50,
 			bindingRefreshInterval:    time.Millisecond * 50,
 			bindingCheckInterval:      time.Millisecond * 50,
 		})
