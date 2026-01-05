@@ -7,12 +7,18 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/randutil"
 	"github.com/pion/turn/v4/internal/proto"
 )
+
+// If no ConnectionBind request associated with this peer data
+// connection is received after 30 seconds, the peer data connection
+// MUST be closed.
+const defaultTCPConnectionBindTimeout = time.Second * 30
 
 // ManagerConfig a bag of config params for Manager.
 type ManagerConfig struct {
@@ -21,6 +27,8 @@ type ManagerConfig struct {
 	AllocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
+
+	tcpConnectionBindTimeout time.Duration
 }
 
 type reservation struct {
@@ -30,8 +38,9 @@ type reservation struct {
 
 // Manager is used to hold active allocations.
 type Manager struct {
-	lock sync.RWMutex
-	log  logging.LeveledLogger
+	lock                     sync.RWMutex
+	log                      logging.LeveledLogger
+	tcpConnectionBindTimeout time.Duration
 
 	allocations  map[FiveTupleFingerprint]*Allocation
 	reservations []*reservation
@@ -53,13 +62,19 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		return nil, errLeveledLoggerMustBeSet
 	}
 
+	tcpConnectionBindTimeout := config.tcpConnectionBindTimeout
+	if tcpConnectionBindTimeout == 0 {
+		tcpConnectionBindTimeout = defaultTCPConnectionBindTimeout
+	}
+
 	return &Manager{
-		log:                config.LeveledLogger,
-		allocations:        make(map[FiveTupleFingerprint]*Allocation, 64),
-		allocatePacketConn: config.AllocatePacketConn,
-		allocateListener:   config.AllocateListener,
-		permissionHandler:  config.PermissionHandler,
-		EventHandler:       config.EventHandler,
+		log:                      config.LeveledLogger,
+		allocations:              make(map[FiveTupleFingerprint]*Allocation, 64),
+		allocatePacketConn:       config.AllocatePacketConn,
+		allocateListener:         config.AllocateListener,
+		permissionHandler:        config.PermissionHandler,
+		EventHandler:             config.EventHandler,
+		tcpConnectionBindTimeout: tcpConnectionBindTimeout,
 	}, nil
 }
 
@@ -190,9 +205,11 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 		return
 	}
 
+	m.lock.Lock()
 	if err := allocation.Close(); err != nil {
 		m.log.Errorf("Failed to close allocation: %v", err)
 	}
+	m.lock.Unlock()
 
 	if m.EventHandler.OnAllocationDeleted != nil {
 		m.EventHandler.OnAllocationDeleted(fiveTuple.SrcAddr, fiveTuple.DstAddr,
@@ -333,7 +350,14 @@ func (m *Manager) addTCPConnection(allocation *Allocation, conn net.Conn) (proto
 		}
 	}
 
-	allocation.tcpConnections[connectionID] = conn
+	tcpConn := &tcpConnection{conn, atomic.Bool{}, nil}
+	allocation.tcpConnections[connectionID] = tcpConn
+	tcpConn.bindTimer = time.AfterFunc(m.tcpConnectionBindTimeout, func() {
+		if !tcpConn.isBound.Load() {
+			m.log.Warnf("Removing TCP Connection that was never bound %v %v", connectionID, allocation.fiveTuple)
+			allocation.RemoveTCPConnection(m, connectionID)
+		}
+	})
 
 	return connectionID, nil
 }
@@ -344,8 +368,14 @@ func (m *Manager) GetTCPConnection(username string, connectionID proto.Connectio
 	defer m.lock.Unlock()
 
 	for _, a := range m.allocations {
-		if _, ok := a.tcpConnections[connectionID]; ok && a.username == username {
-			return a.tcpConnections[connectionID]
+		if tcpConnection, ok := a.tcpConnections[connectionID]; ok {
+			if a.username != username || tcpConnection.isBound.Swap(true) {
+				return nil
+			}
+
+			tcpConnection.bindTimer.Stop()
+
+			return tcpConnection
 		}
 	}
 
