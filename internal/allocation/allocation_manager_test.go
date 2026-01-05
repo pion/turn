@@ -274,6 +274,8 @@ func TestCreateTCPConnection(t *testing.T) {
 	assert.Nil(t, manager.GetTCPConnection("bad-username", connectionID))
 	c1 := manager.GetTCPConnection("", connectionID)
 
+	assert.Nil(t, manager.GetTCPConnection("", connectionID))
+
 	assert.NotNil(t, c1)
 	assert.NoError(t, c1.Close())
 
@@ -321,5 +323,49 @@ func TestCreateTCPConnectionInvalid(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTCPConnectionTimeoutOrFailure)
 	assert.Zero(t, connectionID)
 
+	assert.NoError(t, turnSocket.Close())
+}
+
+func TestCreateTCPConnectionTimeout(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var acceptedConn net.Conn
+	var acceptErr error
+	go func() {
+		acceptedConn, acceptErr = ln.Accept()
+		cancel()
+	}()
+
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	assert.True(t, ok)
+
+	peer := proto.PeerAddress{IP: addr.IP, Port: addr.Port}
+
+	manager, err := newTestManager()
+	assert.NoError(t, err)
+	manager.tcpConnectionBindTimeout = time.Millisecond
+
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
+	assert.NoError(t, err)
+
+	connectionID, err := manager.CreateTCPConnection(allocation, peer)
+	assert.NoError(t, err)
+	assert.NotZero(t, connectionID)
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Nil(t, manager.GetTCPConnection("", connectionID))
+
+	<-ctx.Done()
+	assert.NoError(t, acceptErr)
+	assert.NoError(t, acceptedConn.Close())
+	assert.NoError(t, ln.Close())
 	assert.NoError(t, turnSocket.Close())
 }

@@ -21,6 +21,13 @@ type allocationResponse struct {
 	responseAttrs []stun.Setter
 }
 
+type tcpConnection struct {
+	net.Conn
+
+	isBound   atomic.Bool // ConnectionBind has been done for this TCP Connection
+	bindTimer *time.Timer
+}
+
 // Allocation is tied to a FiveTuple and relays traffic
 // use CreateAllocation and GetAllocation to operate.
 type Allocation struct {
@@ -44,7 +51,7 @@ type Allocation struct {
 	// Relay Transport for TCP
 	relayListener net.Listener
 
-	tcpConnections map[proto.ConnectionID]net.Conn // Guarded by AllocationManager lock
+	tcpConnections map[proto.ConnectionID]*tcpConnection // Guarded by AllocationManager lock
 
 	// Some clients (Firefox or others using resiprocate's nICE lib) may retry allocation
 	// with same 5 tuple when received 413, for compatible with these clients,
@@ -67,7 +74,7 @@ func NewAllocation(
 		closed:         make(chan any),
 		eventHandler:   eventHandler,
 		log:            log,
-		tcpConnections: make(map[proto.ConnectionID]net.Conn),
+		tcpConnections: make(map[proto.ConnectionID]*tcpConnection),
 	}
 }
 
@@ -256,19 +263,32 @@ func (a *Allocation) GetResponseCache() (id [stun.TransactionIDSize]byte, attrs 
 	return
 }
 
-func (a *Allocation) removeTCPConnection(m *Manager, connectionID proto.ConnectionID) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
+func (a *Allocation) removeTCPConnection(connectionID proto.ConnectionID) {
 	if conn, ok := a.tcpConnections[connectionID]; ok {
+		conn.bindTimer.Stop()
+
+		if err := conn.SetDeadline(time.Now()); err != nil {
+			a.log.Errorf("Failed to set deadline on TCP Connection %s %v",
+				a.fiveTuple,
+				err)
+		}
+
 		if err := conn.Close(); err != nil {
-			a.log.Errorf("Failed to close relay socket for %s %v",
+			a.log.Errorf("Failed to TCP Socket for %s %v",
 				a.fiveTuple,
 				err)
 		}
 	}
 
 	delete(a.tcpConnections, connectionID)
+}
+
+// RemoveTCPConnection closes and removes the TCP Connection.
+func (a *Allocation) RemoveTCPConnection(m *Manager, connectionID proto.ConnectionID) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	a.removeTCPConnection(connectionID)
 }
 
 // Close closes the allocation.
@@ -281,6 +301,10 @@ func (a *Allocation) Close() error {
 	close(a.closed)
 
 	a.lifetimeTimer.Stop()
+
+	for tcpConnection := range a.tcpConnections {
+		a.removeTCPConnection(tcpConnection)
+	}
 
 	for _, p := range a.ListPermissions() {
 		a.RemovePermission(p.Addr)
@@ -430,7 +454,7 @@ func (a *Allocation) connHandler(manager *Manager) {
 		if err != nil {
 			a.log.Errorf("Failed to ConnectionAttempt for Allocation %v %v", a.fiveTuple.SrcAddr, err)
 
-			a.removeTCPConnection(manager, cid)
+			a.RemoveTCPConnection(manager, cid)
 
 			continue
 		}
@@ -438,7 +462,7 @@ func (a *Allocation) connHandler(manager *Manager) {
 		if _, err = a.TurnSocket.WriteTo(msg.Raw, a.fiveTuple.SrcAddr); err != nil {
 			a.log.Errorf("Failed to send ConnectionAttempt for Allocation %v %v", a.fiveTuple.SrcAddr, err)
 
-			a.removeTCPConnection(manager, cid)
+			a.RemoveTCPConnection(manager, cid)
 		}
 	}
 }

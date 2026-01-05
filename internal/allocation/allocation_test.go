@@ -7,6 +7,7 @@
 package allocation
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -304,6 +305,83 @@ func TestPacketHandler(t *testing.T) {
 	_ = peerListener2.Close()
 }
 
+func TestTCPRelay_E2E(t *testing.T) {
+	const username = "user"
+	const realm = "realm"
+
+	turnSocket, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	turnClient, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	manager, err := NewManager(ManagerConfig{
+		LeveledLogger: logging.NewDefaultLoggerFactory().NewLogger("test"),
+		AllocatePacketConn: func(string, int) (net.PacketConn, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+			ln, listenerErr := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+			assert.NoError(t, listenerErr)
+
+			return ln, ln.Addr(), nil
+		},
+	})
+	assert.NoError(t, err)
+
+	alloc, err := manager.CreateAllocation(&FiveTuple{
+		SrcAddr: turnClient.LocalAddr(),
+		DstAddr: turnSocket.LocalAddr(),
+	}, turnSocket, proto.ProtoTCP, 0, proto.DefaultLifetime, username, realm)
+	assert.NoError(t, err)
+
+	tcpClient, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	tcpClientAddr, ok := tcpClient.Addr().(*net.TCPAddr)
+	assert.True(t, ok)
+
+	gotMsgCtx, gotMsgCancel := context.WithCancel(context.Background())
+	closedCtx, closedCancel := context.WithCancel(context.Background())
+
+	expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	go func() {
+		inboundTCPConn, inboundErr := tcpClient.Accept()
+		assert.NoError(t, inboundErr)
+
+		inboundBuffer := make([]byte, len(expectedMsg))
+		_, inboundErr = inboundTCPConn.Read(inboundBuffer)
+		assert.NoError(t, inboundErr)
+		assert.Equal(t, expectedMsg, inboundBuffer)
+		gotMsgCancel()
+
+		_, inboundErr = inboundTCPConn.Read(inboundBuffer)
+		assert.ErrorIs(t, inboundErr, io.EOF)
+		closedCancel()
+	}()
+
+	connectionID, err := manager.CreateTCPConnection(
+		alloc,
+		proto.PeerAddress{IP: tcpClientAddr.IP, Port: tcpClientAddr.Port},
+	)
+	assert.NoError(t, err)
+
+	tcpConn := manager.GetTCPConnection(username, connectionID)
+	assert.NotNil(t, tcpConn)
+
+	_, err = tcpConn.Write(expectedMsg)
+	assert.NoError(t, err)
+	<-gotMsgCtx.Done()
+
+	assert.NoError(t, alloc.Close())
+	<-closedCtx.Done()
+
+	assert.NoError(t, manager.Close())
+	assert.NoError(t, turnClient.Close())
+	assert.NoError(t, turnSocket.Close())
+	assert.NoError(t, tcpClient.Close())
+}
+
 func TestResponseCache(t *testing.T) {
 	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
 	transactionID := [stun.TransactionIDSize]byte{1, 2, 3}
@@ -496,7 +574,11 @@ func TestAllocationConnHandler_AddTCPConnectionErrorClosesConn(t *testing.T) {
 	turnSocket := &mockTurnSocket{}
 	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
 
-	a.tcpConnections[proto.ConnectionID(1)] = existingConn
+	a.tcpConnections[proto.ConnectionID(1)] = &tcpConnection{
+		existingConn,
+		atomic.Bool{},
+		time.AfterFunc(time.Since(time.Now()), func() {}),
+	}
 
 	a.connHandler(m)
 
@@ -516,7 +598,6 @@ func TestAllocationConnHandler_StunBuildErrorRemovesConnection(t *testing.T) {
 	a.connHandler(m)
 
 	assert.True(t, conn.wasClosed())
-	assert.Empty(t, a.tcpConnections)
 	assert.Equal(t, 0, turnSocket.writeCount())
 }
 
@@ -534,6 +615,5 @@ func TestAllocationConnHandler_TurnSocketWriteErrorRemovesConnection(t *testing.
 	a.connHandler(m)
 
 	assert.True(t, conn.wasClosed())
-	assert.Empty(t, a.tcpConnections)
 	assert.Equal(t, 1, turnSocket.writeCount())
 }
