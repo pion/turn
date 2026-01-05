@@ -103,12 +103,12 @@ func handleTURNPacket(req Request) error {
 			unknownAttributes,
 		)
 
-		return buildAndSend(
-			req.Conn,
-			req.SrcAddr,
+		return buildAndSend(req.Conn, req.SrcAddr, buildMsg(
+			stunMsg.TransactionID,
+			stun.NewType(stunMsg.Type.Method, stun.ClassErrorResponse),
 			stun.CodeUnknownAttribute,
 			stun.UnknownAttributes(unknownAttributes),
-		)
+		)...)
 	}
 
 	if err = handler(req, stunMsg); err != nil {
