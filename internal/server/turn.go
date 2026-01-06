@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -577,15 +578,31 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 		return err
 	}
 
+	copyCompleteCtx, copyCompleteCancel := context.WithCancel(context.Background())
 	go func() {
 		if _, ioErr := io.Copy(tcpConn, stunConn.Conn()); ioErr != nil {
-			req.Log.Debugf("Exit read loop on error: %s", err)
+			req.Log.Debugf("Exit tcpConn->stunConn read loop on error: %s", ioErr)
 		}
+		copyCompleteCancel()
 	}()
 
-	if _, err = io.Copy(stunConn.Conn(), tcpConn); err != nil {
-		req.Log.Debugf("Exit read loop on error: %s", err)
+	go func() {
+		if _, ioErr := io.Copy(stunConn.Conn(), tcpConn); ioErr != nil {
+			req.Log.Debugf("Exit stunConn->tcpConn read loop on error: %s", ioErr)
+		}
+		copyCompleteCancel()
+	}()
+
+	// When either side has failed close both
+	<-copyCompleteCtx.Done()
+	if err = tcpConn.Close(); err != nil {
+		req.Log.Debugf("Close tcpConn error: %s", err)
 	}
+	if err = stunConn.Conn().Close(); err != nil {
+		req.Log.Debugf("Close stunConn error: %s", err)
+	}
+
+	req.AllocationManager.RemoveTCPConnection(connectionID)
 
 	return nil
 }

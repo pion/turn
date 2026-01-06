@@ -381,3 +381,14 @@ func (m *Manager) GetTCPConnection(username string, connectionID proto.Connectio
 
 	return nil
 }
+
+func (m *Manager) RemoveTCPConnection(connectionID proto.ConnectionID) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for _, a := range m.allocations {
+		if _, ok := a.tcpConnections[connectionID]; ok {
+			a.removeTCPConnection(connectionID)
+		}
+	}
+}

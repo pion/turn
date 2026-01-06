@@ -8,6 +8,7 @@ package turn
 
 import (
 	"context"
+	"io"
 	"net"
 	"runtime"
 	"sync/atomic"
@@ -421,8 +422,10 @@ func TestTCPClientDial(t *testing.T) {
 	remotePeerConn, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
+	hasReadCtx, hasReadCancel := context.WithCancel(context.Background())
+	hasClosedCtx, hasClosedCancel := context.WithCancel(context.Background())
+
 	expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		inboundTCPConn, inboundErr := remotePeerConn.Accept()
 		assert.NoError(t, inboundErr)
@@ -434,31 +437,37 @@ func TestTCPClientDial(t *testing.T) {
 		_, inboundErr = inboundTCPConn.Read(inboundBuffer)
 		assert.NoError(t, inboundErr)
 		assert.Equal(t, expectedMsg, inboundBuffer)
+		hasReadCancel()
 
-		assert.NoError(t, inboundTCPConn.Close())
-		cancel()
+		_, inboundErr = inboundTCPConn.Read(inboundBuffer)
+		assert.ErrorIs(t, inboundErr, io.EOF)
+		hasClosedCancel()
 	}()
 
 	remotePeerAddr, ok := remotePeerConn.Addr().(*net.TCPAddr)
 	assert.True(t, ok)
 
-	channelBindConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
+	connectionBindConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
 	assert.NoError(t, err)
 
 	channelBindConnBuffer := make([]byte, len(expectedMsg))
-	_, err = channelBindConn.Read(channelBindConnBuffer)
+	_, err = connectionBindConn.Read(channelBindConnBuffer)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg, channelBindConnBuffer)
 
-	_, err = channelBindConn.Write(expectedMsg)
+	_, err = connectionBindConn.Write(expectedMsg)
 	assert.NoError(t, err)
-	<-ctx.Done()
+	<-hasReadCtx.Done()
+
+	// Closing the ConnectionBind must close the TCP Socket
+	assert.NoError(t, connectionBindConn.Close())
 
 	// Shutdown
-	assert.NoError(t, remotePeerConn.Close())
+	<-hasClosedCtx.Done()
 	assert.NoError(t, allocation.Close())
 	assert.NoError(t, clientConn.Close())
 	assert.NoError(t, server.Close())
+	assert.NoError(t, remotePeerConn.Close())
 }
 
 func TestTCPClientAccept(t *testing.T) {
