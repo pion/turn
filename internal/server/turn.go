@@ -472,11 +472,16 @@ func handleChannelData(req Request, channelData *proto.ChannelData) error {
 func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 	req.Log.Debugf("Received Connect from %s", req.SrcAddr)
 
-	alloc := req.AllocationManager.GetAllocation(&allocation.FiveTuple{
+	messageIntegrity, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodConnect)
+	if !hasAuth {
+		return err
+	}
+
+	alloc := req.AllocationManager.GetAllocationForUsername(&allocation.FiveTuple{
 		SrcAddr:  req.SrcAddr,
 		DstAddr:  req.Conn.LocalAddr(),
 		Protocol: allocation.UDP,
-	})
+	}, username)
 	if alloc == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
 	}
@@ -485,7 +490,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 	// such attribute is invalid, the server MUST return a 400 (Bad Request)
 	// error.
 	var peerAddr proto.PeerAddress
-	if err := peerAddr.GetFrom(stunMsg); err != nil {
+	if err = peerAddr.GetFrom(stunMsg); err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
@@ -535,6 +540,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 		stunMsg.TransactionID,
 		stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse),
 		connectionID,
+		messageIntegrity,
 	)...)
 }
 
@@ -572,7 +578,7 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 
 	if err = buildAndSend(req.Conn, req.SrcAddr, buildMsg(
 		stunMsg.TransactionID,
-		stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse),
+		stun.NewType(stun.MethodConnectionBind, stun.ClassSuccessResponse),
 		connectionID,
 	)...); err != nil {
 		return err
