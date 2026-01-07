@@ -7,6 +7,7 @@
 package server
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -204,31 +205,44 @@ func TestConnectRequest(t *testing.T) {
 	tcpListener, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		tcpConn, tcpErr := tcpListener.Accept()
-		assert.NoError(t, tcpConn.Close())
 		assert.NoError(t, tcpErr)
+		assert.NoError(t, tcpConn.Close())
+		cancel()
 	}()
 
 	fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
-	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP, 0, time.Hour, "", "")
+	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP, 0, time.Hour, "test", "")
 	assert.NoError(t, err)
 
-	m := &stun.Message{}
-	assert.ErrorIs(t, handleConnectRequest(req, m), stun.ErrAttributeNotFound)
+	stunMsg := &stun.Message{}
+	assert.NoError(t, (proto.Lifetime{}).AddTo(stunMsg))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Username("test")).AddTo(stunMsg))
+	assert.ErrorIs(t, handleConnectRequest(req, stunMsg), stun.ErrAttributeNotFound)
 
-	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5000}).AddTo(m))
-	assert.ErrorIs(t, handleConnectRequest(req, m), allocation.ErrTCPConnectionTimeoutOrFailure)
+	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5000}).AddTo(stunMsg))
+	assert.ErrorIs(t, handleConnectRequest(req, stunMsg), allocation.ErrTCPConnectionTimeoutOrFailure)
 
 	tcpAddr, ok := tcpListener.Addr().(*net.TCPAddr)
 	assert.True(t, ok)
 
-	m = &stun.Message{}
-	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: tcpAddr.Port}).AddTo(m))
-	assert.NoError(t, handleConnectRequest(req, m))
-	assert.ErrorIs(t, handleConnectRequest(req, m), allocation.ErrDupeTCPConnection)
+	stunMsg = &stun.Message{}
+	assert.NoError(t, (proto.Lifetime{}).AddTo(stunMsg))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Username("test")).AddTo(stunMsg))
+	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: tcpAddr.Port}).AddTo(stunMsg))
+	assert.NoError(t, handleConnectRequest(req, stunMsg))
+	assert.ErrorIs(t, handleConnectRequest(req, stunMsg), allocation.ErrDupeTCPConnection)
 
+	<-ctx.Done()
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, tcpListener.Close())
 }
