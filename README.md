@@ -54,9 +54,14 @@ Also take a look at the [Pion WebRTC FAQ](https://github.com/pion/webrtc/wiki/FA
 Yes.
 
 #### How do I implement token-based authentication?
-Replace the username with a token in the [AuthHandler](https://github.com/pion/turn/blob/6d0ff435910870eb9024b18321b93b61844fcfec/examples/turn-server/simple/main.go#L49).
-The password sent by the client can be any non-empty string, as long as it matches that used by the [GenerateAuthKey](https://github.com/pion/turn/blob/6d0ff435910870eb9024b18321b93b61844fcfec/examples/turn-server/simple/main.go#L41)
+Replace the username with a token in the [AuthHandler](examples/turn-server/simple/main.go#L53).
+The password sent by the client can be any non-empty string, as long as it matches that used by the [GenerateAuthKey](examples/turn-server/simple/main.go#L45)
 function.
+
+#### How do I implement mTLS (mutual TLS) authentication?
+You can use client certificates for authentication by checking the TLS connection state in your [AuthHandler](examples/turn-server/tls-auth/main.go#L29).
+See the [tls-auth example](examples/turn-server/tls-auth/main.go) for a complete implementation that validates client certificates
+and matches the certificate's Common Name to the TURN username.
 
 #### Will WebRTC prioritize using STUN over TURN?
 Yes.

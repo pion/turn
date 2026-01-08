@@ -5,7 +5,7 @@
 package main
 
 import (
-	"crypto/md5"
+	"crypto/md5" // nolint: gosec
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
@@ -52,7 +52,7 @@ func getClientTLSAuthHandler(verifyOpts x509.VerifyOptions) turn.AuthHandler {
 			// in this example, we generate the turn auth key based only on the
 			// certificate's common name, but you can use any attributes from the
 			// certificate's contents and/or request attributes.
-			hash := md5.New()
+			hash := md5.New()                                                      // nolint: gosec
 			fmt.Fprint(hash, strings.Join([]string{cert.Subject.CommonName}, ":")) // nolint: errcheck
 			key := hash.Sum(nil)
 
