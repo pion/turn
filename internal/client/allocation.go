@@ -12,7 +12,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v3"
+	"github.com/pion/transport/v4"
 	"github.com/pion/turn/v4/internal/proto"
 )
 
