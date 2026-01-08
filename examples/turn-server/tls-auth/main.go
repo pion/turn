@@ -5,37 +5,31 @@
 package main
 
 import (
+	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/pion/turn/v4"
 )
 
-// newTLSAuthHandler returns an auth handler that validates client TLS certificates
+// getClientTLSAuthHandler returns an AuthHandler that validates client TLS certificates
 //
-// This handler ensures that the client presents a valid TLS certificate
-// for which the CommonName must match the TURN request's username attribute.
-func newTLSAuthHandler(
-	verifyOpts x509.VerifyOptions,
-	getKeyForUserFunc func(string) ([]byte, bool),
-) turn.AuthHandler {
+// This handler ensures that the client presents a valid TLS certificate (valid meaning
+// that it is compliant with the given x509.VerifyOptions object e.g. signed by a trusted
+// CA) for which for which the CommonName must match the TURN request's username attribute.
+func getClientTLSAuthHandler(verifyOpts x509.VerifyOptions) turn.AuthHandler {
 	return func(ra *turn.RequestAttributes) ([]byte, bool) {
 		if ra.TLS == nil || len(ra.TLS.PeerCertificates) == 0 {
 			log.Printf("Request not allowed: no TLS state metadata")
-
-			return nil, false
-		}
-
-		key, ok := getKeyForUserFunc(ra.Username)
-		if !ok {
-			log.Printf("Request not allowed: no key for username %q", ra.Username)
 
 			return nil, false
 		}
@@ -54,6 +48,13 @@ func newTLSAuthHandler(
 			}
 
 			log.Printf("Certificate validated for username %q", ra.Username)
+
+			// in this example, we generate the turn auth key based only on the
+			// certificate's common name, but you can use any attributes from the
+			// certificate's contents and/or request attributes.
+			hash := md5.New()
+			fmt.Fprint(hash, strings.Join([]string{cert.Subject.CommonName}, ":")) // nolint: errcheck
+			key := hash.Sum(nil)
 
 			return key, true
 		}
@@ -105,25 +106,9 @@ func main() {
 		log.Fatalf("Failed to create TLS listener: %v", err)
 	}
 
-	// Simple user database mapping username to auth key
-	usersMap := map[string][]byte{
-		"user1": turn.GenerateAuthKey("user1", *realm, "pass1"),
-		"user2": turn.GenerateAuthKey("user2", *realm, "pass2"),
-	}
-
 	server, err := turn.NewServer(turn.ServerConfig{
-		Realm: *realm,
-		// Use TLS certificate-based authentication
-		AuthHandler: newTLSAuthHandler(
-			x509.VerifyOptions{
-				Roots: caCertPool,
-			},
-			func(username string) ([]byte, bool) {
-				key, ok := usersMap[username]
-
-				return key, ok
-			},
-		),
+		Realm:       *realm,
+		AuthHandler: getClientTLSAuthHandler(x509.VerifyOptions{Roots: caCertPool}),
 		ListenerConfigs: []turn.ListenerConfig{
 			{
 				Listener: tlsListener,
