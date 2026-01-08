@@ -13,8 +13,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v3"
-	"github.com/pion/transport/v3/stdnet"
+	"github.com/pion/transport/v4"
+	"github.com/pion/transport/v4/stdnet"
 	"github.com/pion/turn/v4/internal/client"
 	"github.com/pion/turn/v4/internal/proto"
 )

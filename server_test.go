@@ -17,8 +17,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v3/test"
-	"github.com/pion/transport/v3/vnet"
+	"github.com/pion/transport/v4/test"
+	"github.com/pion/transport/v4/vnet"
 	"github.com/pion/turn/v4/internal/allocation"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
@@ -753,7 +753,7 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 	}
 
 	net0, err := vnet.NewNet(&vnet.NetConfig{
-		StaticIP: "1.2.3.4", // Will be assigned to eth0
+		StaticIPs: []string{"1.2.3.4"}, // Will be assigned to eth0
 	})
 	if err != nil {
 		return nil, err
@@ -765,7 +765,7 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 	}
 
 	net1, err := vnet.NewNet(&vnet.NetConfig{
-		StaticIP: "1.2.3.5", // Will be assigned to eth0
+		StaticIPs: []string{"1.2.3.5"}, // Will be assigned to eth0
 	})
 	if err != nil {
 		return nil, err
@@ -778,8 +778,8 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 
 	// LAN
 	lan, err := vnet.NewRouter(&vnet.RouterConfig{
-		StaticIP: "5.6.7.8", // This router's external IP on eth0
-		CIDR:     "192.168.0.0/24",
+		StaticIPs: []string{"5.6.7.8"}, // This router's external IP on eth0
+		CIDR:      "192.168.0.0/24",
 		NATType: &vnet.NATType{
 			MappingBehavior:   vnet.EndpointIndependent,
 			FilteringBehavior: vnet.EndpointIndependent,
