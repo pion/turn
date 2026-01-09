@@ -11,12 +11,12 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
+	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/transport/v4/test"
 	"github.com/pion/transport/v4/vnet"
 	"github.com/pion/turn/v4/internal/allocation"
@@ -302,13 +302,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		// make sure we can reuse the client port
-		dialer := &net.Dialer{
-			Control: func(_, _ string, conn syscall.RawConn) error {
-				return conn.Control(func(descriptor uintptr) {
-					_ = syscall.SetsockoptInt(Handle(descriptor), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-				})
-			},
-		}
+		dialer := &net.Dialer{Control: reuseport.Control}
 		conn, err := dialer.Dial("tcp", testAddr)
 		assert.NoError(t, err)
 
@@ -365,6 +359,10 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
 		assert.NoError(t, err)
 
+		// Enforce correct client IP and port
+		clientConn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+		assert.NoError(t, err)
+
 		server, err := NewServer(ServerConfig{
 			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
 				if pw, ok := credMap[ra.Username]; ok {
@@ -381,7 +379,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 						Address:      "127.0.0.1",
 					},
 					PermissionHandler: func(src net.Addr, peer net.IP) bool {
-						return src.String() == "127.0.0.1:54321" &&
+						return src.String() == clientConn.LocalAddr().String() &&
 							peer.Equal(net.IPv4(127, 0, 0, 4))
 					},
 				},
@@ -391,14 +389,10 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		})
 		assert.NoError(t, err)
 
-		// Enforce correct client IP and port
-		conn, err := net.ListenPacket("udp4", "127.0.0.1:54321") // nolint: noctx
-		assert.NoError(t, err)
-
 		client, err := NewClient(&ClientConfig{
 			STUNServerAddr: testAddr,
 			TURNServerAddr: testAddr,
-			Conn:           conn,
+			Conn:           clientConn,
 			Username:       "user",
 			Password:       "pass",
 			Realm:          "pion.ly",
@@ -456,7 +450,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, relayConn.Close())
 
 		client.Close()
-		assert.NoError(t, conn.Close())
+		assert.NoError(t, clientConn.Close())
 
 		// Enforce filtered source address
 		conn2, err := net.ListenPacket("udp4", "127.0.0.1:12321") // nolint: noctx

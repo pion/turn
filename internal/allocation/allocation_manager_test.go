@@ -12,10 +12,12 @@ import (
 	"math/rand"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
@@ -35,6 +37,11 @@ func TestNewManagerValidation(t *testing.T) {
 	assert.ErrorIs(t, err, errAllocateListenerMustBeSet)
 
 	cfg.AllocateListener = func(string, int) (net.Listener, net.Addr, error) { return nil, nil, nil }
+	manager, err = NewManager(cfg)
+	assert.Nil(t, manager)
+	assert.ErrorIs(t, err, errAllocateConnMustBeSet)
+
+	cfg.AllocateConn = func(network string, laddr, raddr net.Addr) (net.Conn, error) { return nil, nil } //nolint:nilnil
 	manager, err = NewManager(cfg)
 	assert.Nil(t, manager)
 	assert.ErrorIs(t, err, errLeveledLoggerMustBeSet)
@@ -212,6 +219,14 @@ func newTestManager() (*Manager, error) {
 			return conn, conn.LocalAddr(), nil
 		},
 		AllocateListener: func(string, int) (net.Listener, net.Addr, error) { return nil, nil, nil },
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			dialer := net.Dialer{
+				LocalAddr: laddr,
+				Control:   reuseport.Control,
+			}
+
+			return dialer.Dial(network, raddr.String())
+		},
 	}
 
 	return NewManager(config)
@@ -236,6 +251,78 @@ func TestGetRandomEvenPort(t *testing.T) {
 }
 
 func TestCreateTCPConnection(t *testing.T) {
+	lns := make([]net.Listener, 3)
+	mu := sync.Mutex{} // make the race detector happy
+	acceptedConns := make([]net.Conn, 3)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var err error
+	for i := 0; i < 3; i++ {
+		lns[i], err = net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
+		assert.NoError(t, err)
+
+		go func(j int) {
+			conn, connErr := lns[j].Accept()
+			assert.NoError(t, connErr)
+
+			mu.Lock()
+			acceptedConns[j] = conn
+			mu.Unlock()
+
+			if j == 2 {
+				cancel()
+			}
+		}(i)
+	}
+
+	manager, err := newTestManager()
+	assert.NoError(t, err)
+
+	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	fiveTuple := randomFiveTuple()
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoTCP, 0, proto.DefaultLifetime, "", "")
+	assert.NoError(t, err)
+	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
+
+	for i := 0; i < 3; i++ {
+		addr, ok := lns[i].Addr().(*net.TCPAddr)
+		assert.True(t, ok)
+		peer := proto.PeerAddress{IP: addr.IP, Port: addr.Port}
+
+		connectionID, err := manager.CreateTCPConnection(allocation, peer)
+		assert.NoError(t, err)
+		assert.NotZero(t, connectionID)
+
+		conn := manager.GetTCPConnection("", connectionID)
+		assert.NotNil(t, conn)
+
+		laddr, ok := conn.LocalAddr().(*net.TCPAddr)
+		assert.True(t, ok)
+		relayAddr, ok := allocation.RelayAddr.(*net.TCPAddr)
+		assert.True(t, ok)
+		assert.Equal(t, laddr.IP.String(), relayAddr.IP.String())
+		assert.Equal(t, laddr.IP.String(), relayAddr.IP.String())
+
+		assert.NoError(t, conn.Close())
+	}
+
+	<-ctx.Done()
+
+	assert.NoError(t, turnSocket.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	for i := 0; i < 3; i++ {
+		assert.NoError(t, acceptedConns[i].Close())
+		assert.NoError(t, lns[i].Close())
+	}
+}
+
+func TestCreateTCPConnectionDuplicateTCPConn(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
 
@@ -261,23 +348,16 @@ func TestCreateTCPConnection(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoTCP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
 
+	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
 	connectionID, err := manager.CreateTCPConnection(allocation, peer)
 	assert.NoError(t, err)
 	assert.NotZero(t, connectionID)
 
 	_, err = manager.CreateTCPConnection(allocation, peer)
 	assert.ErrorIs(t, err, ErrDupeTCPConnection)
-
-	assert.Nil(t, manager.GetTCPConnection("bad-username", connectionID))
-	c1 := manager.GetTCPConnection("", connectionID)
-
-	assert.Nil(t, manager.GetTCPConnection("", connectionID))
-
-	assert.NotNil(t, c1)
-	assert.NoError(t, c1.Close())
 
 	<-ctx.Done()
 	assert.NoError(t, acceptErr)
@@ -294,8 +374,9 @@ func TestCreateTCPConnectionInvalidPeerAddress(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoTCP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
+	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
 
 	_, err = manager.CreateTCPConnection(allocation, proto.PeerAddress{IP: nil, Port: 1234})
 	assert.ErrorIs(t, err, errInvalidPeerAddress)
@@ -314,8 +395,9 @@ func TestCreateTCPConnectionInvalid(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoTCP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
+	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
 
 	peerAddress := proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5000}
 
@@ -353,8 +435,9 @@ func TestCreateTCPConnectionTimeout(t *testing.T) {
 	assert.NoError(t, err)
 
 	fiveTuple := randomFiveTuple()
-	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoUDP, 0, proto.DefaultLifetime, "", "")
+	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoTCP, 0, proto.DefaultLifetime, "", "")
 	assert.NoError(t, err)
+	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
 
 	connectionID, err := manager.CreateTCPConnection(allocation, peer)
 	assert.NoError(t, err)

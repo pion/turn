@@ -430,6 +430,9 @@ func TestTCPClientDial(t *testing.T) {
 		inboundTCPConn, inboundErr := remotePeerConn.Accept()
 		assert.NoError(t, inboundErr)
 
+		remoteAddr := inboundTCPConn.RemoteAddr()
+		assert.Equal(t, allocation.Addr().String(), remoteAddr.String(), "peer conn: remote address = relay address")
+
 		_, inboundErr = inboundTCPConn.Write(expectedMsg)
 		assert.NoError(t, inboundErr)
 
@@ -449,6 +452,9 @@ func TestTCPClientDial(t *testing.T) {
 
 	connectionBindConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
 	assert.NoError(t, err)
+
+	localAddr := connectionBindConn.LocalAddr()
+	assert.Equal(t, allocation.Addr().String(), localAddr.String(), "client conn: local address = relay address")
 
 	channelBindConnBuffer := make([]byte, len(expectedMsg))
 	_, err = connectionBindConn.Read(channelBindConnBuffer)
@@ -542,6 +548,154 @@ func TestTCPClientAccept(t *testing.T) {
 	assert.NoError(t, allocation.Close())
 	assert.NoError(t, clientConn.Close())
 	assert.NoError(t, server.Close())
+}
+
+func TestTCPClientMultipleConns(t *testing.T) {
+	tcpListener, err := net.Listen("tcp4", "0.0.0.0:3478") //nolint: gosec,noctx
+	require.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			return GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: tcpListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+
+	clientConn, err := net.Dial("tcp", testAddr) // nolint: noctx
+	require.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           NewSTUNConn(clientConn),
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "foo",
+		Password:       "pass",
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+
+	allocation, err := client.AllocateTCP()
+	assert.NoError(t, err)
+
+	runPeerDialer := func(i int) net.Conn {
+		relayAddr, ok := allocation.Addr().(*net.TCPAddr)
+		assert.True(t, ok)
+
+		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		peerConn, peerErr := net.DialTCP("tcp4", nil, relayAddr)
+		assert.NoError(t, peerErr)
+
+		peerBuffer := make([]byte, len(expectedMsg))
+		_, peerErr = peerConn.Read(peerBuffer)
+		assert.NoError(t, peerErr)
+		assert.Equal(t, expectedMsg, peerBuffer)
+
+		_, peerErr = peerConn.Write(expectedMsg)
+		assert.NoError(t, peerErr)
+
+		return peerConn
+	}
+
+	runPeerAcceptor := func(ctx context.Context, i int) (net.Listener, net.Addr) {
+		remotePeerListener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+		assert.NoError(t, err)
+
+		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		go func() {
+			peerConn, peerErr := remotePeerListener.Accept()
+			assert.NoError(t, peerErr)
+
+			peerBuffer := make([]byte, len(expectedMsg))
+			_, peerErr = peerConn.Read(peerBuffer)
+			assert.NoError(t, peerErr)
+			assert.Equal(t, expectedMsg, peerBuffer)
+
+			_, peerErr = peerConn.Write(expectedMsg)
+			assert.NoError(t, peerErr)
+
+			<-ctx.Done()
+
+			assert.NoError(t, peerConn.Close())
+		}()
+
+		return remotePeerListener, remotePeerListener.Addr()
+	}
+
+	runClientDialer := func(remotePeerAddr net.Addr, i int) net.Conn {
+		dialerConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
+		assert.NoError(t, err)
+
+		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		_, err = dialerConn.Write(expectedMsg)
+		assert.NoError(t, err)
+
+		clientBuffer := make([]byte, len(expectedMsg))
+		_, err = dialerConn.Read(clientBuffer)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedMsg, clientBuffer)
+
+		return dialerConn
+	}
+
+	runClientAcceptor := func(ctx context.Context, i int) {
+		go func() {
+			acceptorConn, err := allocation.Accept()
+			assert.NoError(t, err)
+
+			expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+			_, err = acceptorConn.Write(expectedMsg)
+			assert.NoError(t, err)
+
+			clientBuffer := make([]byte, len(expectedMsg))
+			_, err = acceptorConn.Read(clientBuffer)
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg, clientBuffer)
+
+			<-ctx.Done()
+
+			assert.NoError(t, acceptorConn.Close())
+		}()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	clientConns := []net.Conn{}
+	peerConns := []net.Conn{}
+	peerListeners := []net.Listener{}
+	for i := 0; i < 3; i += 1 {
+		// client -> server -> peer
+		peerListener, peerAddr := runPeerAcceptor(ctx, i)
+		time.Sleep(time.Second)
+		peerListeners = append(peerListeners, peerListener)
+		dialerConn := runClientDialer(peerAddr, i)
+		clientConns = append(clientConns, dialerConn)
+
+		// peer -> server -> client
+		runClientAcceptor(ctx, i)
+		peerConn := runPeerDialer(i)
+		peerConns = append(peerConns, peerConn)
+	}
+
+	cancel()
+
+	// Shutdown
+	for i := 0; i < 3; i += 1 {
+		assert.NoError(t, peerListeners[i].Close())
+		assert.NoError(t, peerConns[i].Close())
+		assert.NoError(t, clientConns[i].Close())
+	}
+	assert.NoError(t, allocation.Close())
+	assert.NoError(t, server.Close())
+	assert.NoError(t, clientConn.Close())
 }
 
 type channelBindFilterConn struct {
