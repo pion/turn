@@ -4,11 +4,13 @@
 package turn
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
 
 	"github.com/pion/transport/v4"
+	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/transport/v4/stdnet"
 )
 
@@ -82,7 +84,12 @@ func (r *RelayAddressGeneratorStatic) AllocateListener(network string, requested
 		return nil, nil, err
 	}
 
-	ln, err := r.Net.ListenTCP(network, tcpAddr) // nolint: noctx
+	listenConfig := r.Net.CreateListenConfig(&net.ListenConfig{
+		// Enable SO_REUSEADDR and SO_REUSEPORT where needed to let multiple connnections
+		// bind to the same relay address.
+		Control: reuseport.Control,
+	})
+	ln, err := listenConfig.Listen(context.TODO(), network, tcpAddr.String())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,4 +105,16 @@ func (r *RelayAddressGeneratorStatic) AllocateListener(network string, requested
 	relayAddr.IP = r.RelayAddress
 
 	return ln, relayAddr, nil
+}
+
+// AllocateConn creates a new outgoing TCP connection bound to the relay address to send traffic to a peer.
+func (r *RelayAddressGeneratorStatic) AllocateConn(network string, laddr, raddr net.Addr) (net.Conn, error) {
+	dialer := r.Net.CreateDialer(&net.Dialer{
+		LocalAddr: laddr,
+		// Enable SO_REUSEADDR and SO_REUSEPORT where needed to let multiple connnections
+		// bind to the same relay address.
+		Control: reuseport.Control,
+	})
+
+	return dialer.Dial(network, raddr.String())
 }

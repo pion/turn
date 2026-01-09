@@ -18,6 +18,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
+	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/turn/v4/internal/ipnet"
 	"github.com/pion/turn/v4/internal/proto"
 	"github.com/stretchr/testify/assert"
@@ -321,10 +322,19 @@ func TestTCPRelay_E2E(t *testing.T) {
 			return nil, nil, nil
 		},
 		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
-			ln, listenerErr := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+			ln, listenerErr := (&net.ListenConfig{Control: reuseport.Control}).
+				Listen(context.TODO(), "tcp4", "127.0.0.1:0")
 			assert.NoError(t, listenerErr)
 
 			return ln, ln.Addr(), nil
+		},
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			dialer := net.Dialer{
+				LocalAddr: laddr,
+				Control:   reuseport.Control,
+			}
+
+			return dialer.Dial(network, raddr.String())
 		},
 	})
 	assert.NoError(t, err)

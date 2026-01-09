@@ -25,6 +25,7 @@ type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
 	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	AllocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
+	AllocateConn       func(network string, laddr, raddr net.Addr) (net.Conn, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
 
@@ -47,6 +48,7 @@ type Manager struct {
 
 	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
 	allocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
+	allocateConn       func(network string, laddr, raddr net.Addr) (net.Conn, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
 }
@@ -58,6 +60,8 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		return nil, errAllocatePacketConnMustBeSet
 	case config.AllocateListener == nil:
 		return nil, errAllocateListenerMustBeSet
+	case config.AllocateConn == nil:
+		return nil, errAllocateConnMustBeSet
 	case config.LeveledLogger == nil:
 		return nil, errLeveledLoggerMustBeSet
 	}
@@ -72,6 +76,7 @@ func NewManager(config ManagerConfig) (*Manager, error) {
 		allocations:              make(map[FiveTupleFingerprint]*Allocation, 64),
 		allocatePacketConn:       config.AllocatePacketConn,
 		allocateListener:         config.AllocateListener,
+		allocateConn:             config.AllocateConn,
 		permissionHandler:        config.PermissionHandler,
 		EventHandler:             config.EventHandler,
 		tcpConnectionBindTimeout: tcpConnectionBindTimeout,
@@ -302,7 +307,22 @@ func (m *Manager) CreateTCPConnection( // nolint: cyclop
 		return 0, errInvalidPeerAddress
 	}
 
-	conn, err := net.DialTCP("tcp4", nil, &net.TCPAddr{IP: peerAddress.IP, Port: peerAddress.Port}) // nolint: noctx
+	relayAddr := allocation.RelayAddr
+	if allocation.RelayAddr == nil {
+		m.log.Warn("Failed to create TCP Connection: Relay address not available")
+
+		return 0, ErrTCPConnectionTimeoutOrFailure
+	}
+
+	remoteAddr := &net.TCPAddr{IP: peerAddress.IP, Port: peerAddress.Port}
+
+	m.lock.Lock()
+	if m.isDupeTCPConnection(allocation, remoteAddr) {
+		return 0, ErrDupeTCPConnection
+	}
+	m.lock.Unlock()
+
+	conn, err := m.allocateConn("tcp4", relayAddr, remoteAddr) // nolint: noctx
 	if err != nil {
 		m.log.Warnf("Failed to create TCP Connection: %v", err)
 
@@ -341,13 +361,8 @@ func (m *Manager) addTCPConnection(allocation *Allocation, conn net.Conn) (proto
 		return 0, ErrDupeTCPConnection
 	}
 
-	for i := range allocation.tcpConnections {
-		tcpAddr, ok := allocation.tcpConnections[i].RemoteAddr().(*net.TCPAddr)
-		if !ok {
-			return 0, ErrDupeTCPConnection
-		} else if tcpAddr.IP.Equal(newConnAddr.IP) && tcpAddr.Port == newConnAddr.Port {
-			return 0, ErrDupeTCPConnection
-		}
+	if m.isDupeTCPConnection(allocation, newConnAddr) {
+		return 0, ErrDupeTCPConnection
 	}
 
 	tcpConn := &tcpConnection{conn, atomic.Bool{}, nil}
@@ -360,6 +375,19 @@ func (m *Manager) addTCPConnection(allocation *Allocation, conn net.Conn) (proto
 	})
 
 	return connectionID, nil
+}
+
+func (m *Manager) isDupeTCPConnection(allocation *Allocation, remoteAddr *net.TCPAddr) bool {
+	for i := range allocation.tcpConnections {
+		tcpAddr, ok := allocation.tcpConnections[i].RemoteAddr().(*net.TCPAddr)
+		if !ok {
+			return true
+		} else if tcpAddr.IP.Equal(remoteAddr.IP) && tcpAddr.Port == remoteAddr.Port {
+			return true
+		}
+	}
+
+	return false
 }
 
 // GetTCPConnection returns the TCP Connection for the given ConnectionID.

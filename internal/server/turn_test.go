@@ -72,6 +72,9 @@ func TestAllocationLifeTime(t *testing.T) {
 			AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 				return nil, nil, nil
 			},
+			AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+				return nil, nil //nolint:nilnil
+			},
 			LeveledLogger: logger,
 		})
 		assert.NoError(t, err)
@@ -131,6 +134,9 @@ func TestRequestedTransport(t *testing.T) {
 		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			return nil, nil //nolint:nilnil
+		},
 		LeveledLogger: logger,
 	})
 	assert.NoError(t, err)
@@ -182,6 +188,9 @@ func TestConnectRequest(t *testing.T) {
 		},
 		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
+		},
+		AllocateConn: func(network string, _, raddr net.Addr) (net.Conn, error) {
+			return net.Dial("tcp4", raddr.String()) // nolint: noctx
 		},
 		LeveledLogger: logger,
 	})
@@ -265,6 +274,9 @@ func TestConnectionBindRequest(t *testing.T) {
 		},
 		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
+		},
+		AllocateConn: func(network string, _, raddr net.Addr) (net.Conn, error) {
+			return net.Dial("tcp4", raddr.String()) // nolint: noctx
 		},
 		LeveledLogger: logger,
 	})

@@ -4,11 +4,13 @@
 package turn
 
 import (
+	"context"
 	"fmt"
 	"net"
 
 	"github.com/pion/randutil"
 	"github.com/pion/transport/v4"
+	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/transport/v4/stdnet"
 )
 
@@ -123,13 +125,18 @@ func (r *RelayAddressGeneratorPortRange) AllocateListener( // nolint: cyclop
 		}
 	}
 
+	listenConfig := r.Net.CreateListenConfig(&net.ListenConfig{
+		// Enable SO_REUSEADDR and SO_REUSEPORT where needed to let multiple connnections
+		// bind to the same relay address.
+		Control: reuseport.Control,
+	})
 	listen := func(port int) (net.Listener, net.Addr, error) {
 		tcpAddr, err := r.Net.ResolveTCPAddr(network, fmt.Sprintf("%s:%d", r.Address, port))
 		if err != nil {
 			return nil, nil, err
 		}
 
-		ln, err := r.Net.ListenTCP(network, tcpAddr) // nolint: noctx
+		ln, err := listenConfig.Listen(context.TODO(), network, tcpAddr.String())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -161,4 +168,16 @@ func (r *RelayAddressGeneratorPortRange) AllocateListener( // nolint: cyclop
 	}
 
 	return nil, nil, errMaxRetriesExceeded
+}
+
+// AllocateConn creates a new outgoing TCP connection bound to the relay address to send traffic to a peer.
+func (r *RelayAddressGeneratorPortRange) AllocateConn(network string, laddr, raddr net.Addr) (net.Conn, error) {
+	dialer := r.Net.CreateDialer(&net.Dialer{
+		LocalAddr: laddr,
+		// Enable SO_REUSEADDR and SO_REUSEPORT where needed to let multiple connnections
+		// bind to the same relay address.
+		Control: reuseport.Control,
+	})
+
+	return dialer.Dial(network, raddr.String())
 }

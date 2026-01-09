@@ -11,6 +11,7 @@ var (
 
 	errAllocatePacketConnMustBeSet  = errors.New("AllocatePacketConn must be set")
 	errAllocateListenerMustBeSet    = errors.New("AllocateListener must be set")
+	errAllocateConnMustBeSet        = errors.New("AllocateConn must be set")
 	errLeveledLoggerMustBeSet       = errors.New("LeveledLogger must be set")
 	errSameChannelDifferentPeer     = errors.New("you cannot use the same channel number with different peer")
 	errNilFiveTuple                 = errors.New("allocations must not be created with nil FivTuple")

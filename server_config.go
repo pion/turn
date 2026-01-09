@@ -26,6 +26,9 @@ type RelayAddressGenerator interface {
 
 	// Allocate a Listener (TCP) RelayAddress
 	AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error)
+
+	// Allocate a Conn (TCP) RelayAddress
+	AllocateConn(network string, laddr, raddr net.Addr) (net.Conn, error)
 }
 
 // PermissionHandler is a callback to filter incoming CreatePermission and ChannelBindRequest
