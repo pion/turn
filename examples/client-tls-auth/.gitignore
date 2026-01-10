@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
+# SPDX-License-Identifier: MIT
+
+ca.key
+ca.crt
+client.crt
+client.key
+server.crt
+server.key
