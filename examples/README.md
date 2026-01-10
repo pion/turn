@@ -2,7 +2,7 @@
 
 ## turn-server
 
-The `turn-server` directory contains 5 examples that show common Pion
+The `turn-server` directory contains examples that show common Pion
 TURN usages.
 
 All of these except `lt-creds` take the following arguments.
@@ -21,7 +21,7 @@ $ go build
 $ ./simple -public-ip 127.0.0.1 -users username=password,foo=bar
 ```
 
-The five example servers are
+The example servers are
 
 #### add-software-attribute
 
@@ -45,6 +45,20 @@ traffic going to/from specific peers.
 This example is the most minimal invocation of a Pion TURN instance
 possible. It has no custom behavior, and could be a good starting place
 for running your own TURN server.
+
+#### simple-quota
+
+This example extends `simple` by adding a quota handler that limits
+concurrent allocations per user.
+
+Run two instances of `examples/turn-client/udp` and you can see the behavior
+of when a quota is exceeded.
+
+```
+go run ./examples/turn-client/udp -host=127.0.0.1 -user foo=bar -ping
+
+2026/01/10 14:28:09 Failed to allocate: Allocate error response (error 486: )
+```
 
 #### simple-multithreaded
 
