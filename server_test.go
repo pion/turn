@@ -7,8 +7,15 @@
 package turn
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -1591,6 +1598,214 @@ func TestRelayAddressGeneratorStatic(t *testing.T) {
 
 	relayAddressGeneratorStatic.Address = "127.0.0.1"
 	assert.NoError(t, relayAddressGeneratorStatic.Validate())
+}
+
+func TestTLSHandshakeConnectionState(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	username := "testuser"
+
+	// Generate CA certificate
+	caCert, caKey, err := generateCACert(t)
+	assert.NoError(t, err)
+
+	// Create CA cert pool for client cert verification
+	caCertPool := x509.NewCertPool()
+	caCertPool.AddCert(caCert)
+
+	// Generate server certificate signed by CA
+	serverCert, err := generateSignedCert(t, "server", caCert, caKey)
+	assert.NoError(t, err)
+
+	// Generate client certificate signed by CA
+	clientCert, err := generateSignedCert(t, username, caCert, caKey)
+	assert.NoError(t, err)
+
+	// Track whether the TLS connection state was received by the auth handler
+	tlsStateReceived := false
+	var receivedCerts []*x509.Certificate
+
+	// Create TLS listener with mTLS (mutual TLS) - server requires client certs
+	tlsListener, err := tls.Listen("tcp4", "127.0.0.1:0", &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{serverCert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    caCertPool,
+	})
+	assert.NoError(t, err)
+	defer tlsListener.Close() //nolint:errcheck
+
+	// Create TURN server with TLS listener and auth handler that validates client certs
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			// Check if TLS connection state is present and has peer certificates
+			if ra.TLS == nil || len(ra.TLS.PeerCertificates) == 0 {
+				return nil, false
+			}
+
+			tlsStateReceived = true
+			receivedCerts = ra.TLS.PeerCertificates
+
+			// Validate that the certificate CN matches the username
+			for _, cert := range ra.TLS.PeerCertificates {
+				if cert.Subject.CommonName != ra.Username {
+					continue
+				}
+
+				// Verify the certificate against our CA
+				if _, verifyErr := cert.Verify(x509.VerifyOptions{Roots: caCertPool}); verifyErr != nil {
+					continue
+				}
+
+				// Generate auth key based on the certificate CN
+				return GenerateAuthKey(cert.Subject.CommonName, "pion.ly", ""), true
+			}
+
+			return nil, false
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: tlsListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "127.0.0.1",
+				},
+			},
+		},
+		Realm:         "pion.ly",
+		LoggerFactory: loggerFactory,
+	})
+	assert.NoError(t, err)
+	defer server.Close() //nolint:errcheck
+
+	// Connect to the TLS server with a client certificate
+	conn, err := tls.Dial("tcp", tlsListener.Addr().String(), &tls.Config{ // nolint: noctx
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      caCertPool,
+		ServerName:   "server",
+	})
+	assert.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	// Create TURN client over the TLS connection, using the certificate CN as username
+	client, err := NewClient(&ClientConfig{
+		STUNServerAddr: tlsListener.Addr().String(),
+		TURNServerAddr: tlsListener.Addr().String(),
+		Conn:           NewSTUNConn(conn),
+		Username:       username, // Our test Authhandler requires it matches cert's CN
+		Password:       "",       // Empty password, auth based on certificate
+		Realm:          "pion.ly",
+		LoggerFactory:  loggerFactory,
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+	defer client.Close()
+
+	// Make an allocation request which will trigger the auth handler
+	relayConn, err := client.Allocate()
+	assert.NoError(t, err)
+	assert.NotNil(t, relayConn)
+	defer relayConn.Close() //nolint:errcheck
+
+	// Verify that the TLS connection state was properly extracted
+	assert.True(t, tlsStateReceived, "TLS connection state should have been received by auth handler")
+
+	// Verify that peer certificates were received (this validates the fix)
+	assert.NotNil(t, receivedCerts, "Peer certificates should be present in TLS connection state")
+	assert.NotEmpty(t, receivedCerts, "Should have at least one peer certificate")
+
+	// Verify the certificate CN matches what we expect
+	assert.Equal(t, username, receivedCerts[0].Subject.CommonName, "Certificate CN should match")
+}
+
+// generateCACert generates a CA certificate for testing.
+func generateCACert(t *testing.T) (*x509.Certificate, *rsa.PrivateKey, error) {
+	t.Helper()
+
+	// Generate a new RSA private key for CA
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create a CA certificate template
+	caTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"Pion TURN Test CA"},
+			CommonName:   "Test CA",
+		},
+		NotBefore:             time.Now().Add(-5 * time.Minute), // Account for clock skew
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	// Create the CA certificate (self-signed)
+	caCertDER, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Parse the DER-encoded certificate
+	caCert, err := x509.ParseCertificate(caCertDER)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return caCert, caKey, nil
+}
+
+// generateSignedCert generates a certificate signed by the provided CA.
+func generateSignedCert(
+	t *testing.T,
+	commonName string,
+	caCert *x509.Certificate,
+	caKey *rsa.PrivateKey,
+) (tls.Certificate, error) {
+	t.Helper()
+
+	// Generate a new RSA private key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	// Create a certificate template
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject: pkix.Name{
+			Organization: []string{"Pion TURN Test"},
+			CommonName:   commonName,
+		},
+		NotBefore:             time.Now().Add(-5 * time.Minute), // Account for clock skew
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{commonName},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+	}
+
+	// Create the certificate signed by the CA
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, caCert, &privateKey.PublicKey, caKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	// Encode the certificate and private key to PEM format
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+
+	// Create a tls.Certificate
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	return cert, nil
 }
 
 func TestRelayAddressGeneratorPortRange(t *testing.T) {
