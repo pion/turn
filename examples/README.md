@@ -103,6 +103,28 @@ This example demonstrates listening on TLS. You could combine this
 example with `simple` and you will have a Pion TURN instance that is
 available via TLS and UDP.
 
+#### ipv6 (server)
+
+This example demonstrates a TURN server with IPv6 support (RFC 6156).
+The server listens on all IPv6 interfaces (`[::]`) and allocates IPv6
+relay addresses to clients that request them.
+
+``` sh
+$ cd ipv6
+$ go build
+$ ./ipv6 -public-ip 2001:db8::1 -users username=password
+```
+
+For local testing with IPv6 localhost:
+
+``` sh
+$ ./ipv6 -public-ip ::1 -users username=password
+```
+
+This example shows how to configure a TURN server for IPv6 clients,
+which is essential for environments where IPv4 addresses are limited or
+IPv6-only networks.
+
 #### lt-creds
 
 This example shows how to use long term credentials. You can issue
@@ -171,6 +193,33 @@ By adding `-ping`, it will perform a ping test. (it internally creates a
 $ go build
 ./turn-client -host <turn-server-name> -user=user=pass -ping
 ```
+
+#### ipv6 (client)
+
+Dials the requested TURN server via IPv6 (RFC 6156). This example
+demonstrates how to request IPv6 relay allocations from a TURN server.
+
+``` sh
+$ cd ipv6
+$ go build
+$ ./ipv6 -host 2001:db8::1 -user username=password
+```
+
+For local testing with IPv6 localhost:
+
+``` sh
+$ ./ipv6 -host ::1 -user username=password
+```
+
+With `-ping`, it will perform a ping test over IPv6:
+
+``` sh
+$ ./ipv6 -host ::1 -user username=password -ping
+```
+
+This client sets `RequestedAddressFamily` to `proto.RequestedFamilyIPv6`
+to request an IPv6 relay allocation. The server must support IPv6 and be
+configured to listen on IPv6 addresses.
 
 Following diagram shows what turn-client does:
 

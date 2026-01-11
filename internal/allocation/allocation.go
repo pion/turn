@@ -44,6 +44,7 @@ type Allocation struct {
 	username, realm     string
 	eventHandler        EventHandler
 	log                 logging.LeveledLogger
+	addressFamily       proto.RequestedAddressFamily // RFC 6156
 
 	// Relay Transport for UDP
 	relayPacketConn net.PacketConn
@@ -244,6 +245,11 @@ func (a *Allocation) Refresh(lifetime time.Duration) {
 	if !a.lifetimeTimer.Reset(lifetime) {
 		a.log.Errorf("Failed to reset allocation timer for %v", a.fiveTuple)
 	}
+}
+
+// AddressFamily returns the address family of the allocation (RFC 6156).
+func (a *Allocation) AddressFamily() proto.RequestedAddressFamily {
+	return a.addressFamily
 }
 
 // SetResponseCache cache allocation response for retransmit allocation request.

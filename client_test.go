@@ -698,6 +698,92 @@ func TestTCPClientMultipleConns(t *testing.T) {
 	assert.NoError(t, clientConn.Close())
 }
 
+func TestInferAddressFamilyFromConn(t *testing.T) {
+	t.Run("IPv4 UDP connection", func(t *testing.T) {
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0") //nolint:noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		family, err := inferAddressFamilyFromConn(conn)
+		assert.NoError(t, err)
+		assert.Equal(t, proto.RequestedFamilyIPv4, family)
+	})
+
+	t.Run("IPv6 UDP connection", func(t *testing.T) {
+		conn, err := net.ListenPacket("udp6", "[::]:0") //nolint:noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		family, err := inferAddressFamilyFromConn(conn)
+		assert.NoError(t, err)
+		assert.Equal(t, proto.RequestedFamilyIPv6, family)
+	})
+}
+
+func TestGetRequestedAddressFamily(t *testing.T) {
+	log := logging.NewDefaultLoggerFactory().NewLogger("test")
+
+	t.Run("Explicit IPv4 in config", func(t *testing.T) {
+		conn, err := net.ListenPacket("udp6", "[::]:0") //nolint:noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		config := &ClientConfig{
+			Conn:                   conn,
+			RequestedAddressFamily: proto.RequestedFamilyIPv4,
+		}
+
+		// Should use explicit config even though conn is IPv6
+		family := getRequestedAddressFamily(log, config)
+		assert.Equal(t, proto.RequestedFamilyIPv4, family)
+	})
+
+	t.Run("Explicit IPv6 in config", func(t *testing.T) {
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0") //nolint:noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		config := &ClientConfig{
+			Conn:                   conn,
+			RequestedAddressFamily: proto.RequestedFamilyIPv6,
+		}
+
+		// Should use explicit config even though conn is IPv4
+		family := getRequestedAddressFamily(log, config)
+		assert.Equal(t, proto.RequestedFamilyIPv6, family)
+	})
+
+	t.Run("Infer IPv4 from connection", func(t *testing.T) {
+		conn, err := net.ListenPacket("udp4", "0.0.0.0:0") //nolint:noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		config := &ClientConfig{
+			Conn: conn,
+			// RequestedAddressFamily not set (zero value)
+		}
+
+		// Should infer IPv4 from connection
+		family := getRequestedAddressFamily(log, config)
+		assert.Equal(t, proto.RequestedFamilyIPv4, family)
+	})
+
+	t.Run("Infer IPv6 from connection", func(t *testing.T) {
+		conn, err := net.ListenPacket("udp6", "[::]:0") //nolint:noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		config := &ClientConfig{
+			Conn: conn,
+			// RequestedAddressFamily not set (zero value)
+		}
+
+		// Should infer IPv6 from connection
+		family := getRequestedAddressFamily(log, config)
+		assert.Equal(t, proto.RequestedFamilyIPv6, family)
+	})
+}
+
 type channelBindFilterConn struct {
 	net.PacketConn
 
