@@ -268,6 +268,30 @@ To run the example:
 make generate-certs
 ```
 
+<details>
+
+<summary>Show step-by-step with `openssl` commands</summary>
+
+- i) Generate CA certificate:
+
+```
+openssl req -new -x509 -days 365 -keyout ca.key -out ca.crt -nodes -subj "/O=pion.ly/CN=Pion Certificate Authority Root"
+```
+
+- ii) Generate client's certificate:
+
+```
+openssl req -new -newkey rsa:2048 -nodes -keyout client.key -subj "/O=pion.ly/CN=turn-client" | openssl x509 -req -CA ca.crt -CAkey ca.key -set_serial $RANDOM -out client.crt -days 1
+```
+
+- iii) Generate server's certificate:
+
+```
+openssl req -new -newkey rsa:2048 -nodes -keyout server.key -subj "/O=pion.ly/CN=turn-server" -addext "subjectAltName=DNS:localhost" | openssl x509 -req -CA ca.crt -CAkey ca.key -set_serial $RANDOM -out server.crt -days 1 -copy_extensions copyall
+```
+
+</details>
+
 2) Run the TURN server
 
 ```

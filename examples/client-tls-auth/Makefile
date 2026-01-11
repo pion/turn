@@ -8,17 +8,17 @@ turn_server_host ?= localhost
 turn_server_port ?= 5349
 
 ca_cert_cn ?= Pion Certificate Authority Root
-ca_cert_lifetime_seconds ?= $(shell echo $$((60 * 60 * 24 * 365 * 3)))
+ca_cert_lifetime_days ?= 365
 ca_cert ?= ca.crt
 ca_key ?= ca.key
 
 client_cert_cn ?= turn-client
-client_cert_lifetime_seconds ?= $(shell echo $$((60 * 60 * 12)))
+client_cert_lifetime_days ?= 1
 client_cert ?= client.crt
 client_key ?= client.key
 
 server_cert_cn ?= turn-server
-server_cert_lifetime_seconds ?= $(shell echo $$((60 * 60 * 12)))
+server_cert_lifetime_days ?= 1
 server_cert ?= server.crt
 server_key ?= server.key
 
@@ -28,35 +28,32 @@ help: ## Print help menu
 
 .PHONY: generate-ca-cert
 generate-ca-cert: ## Generate CA certificate and private key
-	@go run ./scripts/generate-ca-cert/main.go \
-		-cert-org "$(turn_realm)" \
-		-cert-cn "$(ca_cert_cn)" \
-		-cert-lifetime-seconds "$(ca_cert_lifetime_seconds)" \
-		-cert-out "$(ca_cert)" \
-		-key-out "$(ca_key)"
+	@openssl req -new -x509 \
+		-days "$(ca_cert_lifetime_days)" \
+		-keyout "$(ca_key)" \
+		-out "$(ca_cert)" \
+		-nodes \
+		-subj "/O=$(turn_realm)/CN=$(ca_cert_cn)"
 
 .PHONY: generate-client-cert
 generate-client-cert: ## Generate client certificate and private key
-	@go run ./scripts/generate-and-sign-cert/main.go \
-		-cert-org "$(turn_realm)" \
-		-cert-cn "$(client_cert_cn)" \
-		-cert-lifetime-seconds "$(client_cert_lifetime_seconds)" \
-		-cert-out "$(client_cert)" \
-		-key-out "$(client_key)" \
-		-ca-cert "$(ca_cert)" \
-		-ca-key "$(ca_key)"
+	@openssl req -new -newkey rsa:2048 -nodes \
+		-keyout "$(client_key)" \
+		-subj "/O=$(turn_realm)/CN=$(client_cert_cn)" | \
+	openssl x509 -req \
+		-CA "$(ca_cert)" -CAkey "$(ca_key)" -set_serial $$RANDOM \
+		-out "$(client_cert)" -days "$(client_cert_lifetime_days)"
 
 .PHONY: generate-server-cert
 generate-server-cert: ## Generate server certificate and private key
-	@go run ./scripts/generate-and-sign-cert/main.go \
-		-cert-org "$(turn_realm)" \
-		-cert-cn "$(server_cert_cn)" \
-		-cert-sans "$(turn_server_host)" \
-		-cert-lifetime-seconds "$(server_cert_lifetime_seconds)" \
-		-cert-out "$(server_cert)" \
-		-key-out "$(server_key)" \
-		-ca-cert "$(ca_cert)" \
-		-ca-key "$(ca_key)"
+	@openssl req -new -newkey rsa:2048 -nodes \
+		-keyout "$(server_key)" \
+		-subj "/O=$(turn_realm)/CN=$(server_cert_cn)" \
+		-addext "subjectAltName=DNS:$(turn_server_host)" | \
+	openssl x509 -req \
+		-CA "$(ca_cert)" -CAkey "$(ca_key)" -set_serial $$RANDOM \
+		-out "$(server_cert)" -days "$(server_cert_lifetime_days)" \
+		-copy_extensions copyall
 
 .PHONY: generate-certs
 generate-certs: generate-ca-cert generate-client-cert generate-server-cert ## Generate ALL certificates and keys (CA, client, server)
