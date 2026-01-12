@@ -11,8 +11,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/pion/stun/v3"
@@ -75,8 +75,12 @@ func main() {
 	// Cache -users flag for easy lookup later
 	// If passwords are stored they should be saved to your DB hashed using turn.GenerateAuthKey
 	usersMap := map[string][]byte{}
-	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(*users, -1) {
-		usersMap[kv[1]] = turn.GenerateAuthKey(kv[1], *realm, kv[2])
+	for _, userPass := range strings.Split(*users, ",") {
+		parts := strings.SplitN(userPass, "=", 2)
+		if len(parts) != 2 {
+			log.Fatalf("Invalid user credential format '%s': expected 'username=password'", userPass)
+		}
+		usersMap[parts[0]] = turn.GenerateAuthKey(parts[0], *realm, parts[1])
 	}
 
 	server, err := turn.NewServer(turn.ServerConfig{
