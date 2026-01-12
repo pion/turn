@@ -10,8 +10,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -20,7 +20,7 @@ import (
 
 const maxAllocationsPerUser = 1
 
-func main() {
+func main() { // nolint:cyclop
 	publicIP := flag.String("public-ip", "", "IP Address that TURN can be contacted by.")
 	port := flag.Int("port", 3478, "Listening port.")
 	users := flag.String("users", "", "List of username and password (e.g. \"user=pass,user=pass\")")
@@ -44,8 +44,12 @@ func main() {
 	// Cache -users flag for easy lookup later
 	// If passwords are stored they should be saved to your DB hashed using turn.GenerateAuthKey
 	usersMap := map[string][]byte{}
-	for _, kv := range regexp.MustCompile(`(\w+)=(\w+)`).FindAllStringSubmatch(*users, -1) {
-		usersMap[kv[1]] = turn.GenerateAuthKey(kv[1], *realm, kv[2])
+	for _, userPass := range strings.Split(*users, ",") {
+		parts := strings.SplitN(userPass, "=", 2)
+		if len(parts) != 2 {
+			log.Fatalf("Invalid user credential format '%s': expected 'username=password'", userPass)
+		}
+		usersMap[parts[0]] = turn.GenerateAuthKey(parts[0], *realm, parts[1])
 	}
 
 	// Track sessions count per user.
