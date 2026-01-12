@@ -1,11 +1,10 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package main implements an example TURN server with TLS certificate-based authentication
 package main
 
 import (
-	"crypto/md5" // nolint: gosec
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
@@ -14,8 +13,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/pion/turn/v4"
@@ -23,9 +20,14 @@ import (
 
 // getClientTLSAuthHandler returns an AuthHandler that validates client TLS certificates
 //
-// This handler ensures that the client presents a valid TLS certificate (valid meaning
-// that it is compliant with the given x509.VerifyOptions object e.g. signed by a trusted
-// CA) for which for which the CommonName must match the TURN request's username attribute.
+// This handler ensures that the client presents at least one valid TLS certificate
+// (valid meaning that it is compliant with the given x509.VerifyOptions object e.g.
+// signed by a trusted CA) for which for which the CommonName must match the TURN
+// request's username attribute.
+//
+// Using the CommonName as the username is just what we chose to do in this example.
+// In your own code, you may choose to use some other uniquely-identifying property
+// in the certificate e.g. serial number or combination of SANs.
 func getClientTLSAuthHandler(verifyOpts x509.VerifyOptions) turn.AuthHandler {
 	return func(ra *turn.RequestAttributes) ([]byte, bool) {
 		if ra.TLS == nil || len(ra.TLS.PeerCertificates) == 0 {
@@ -49,14 +51,8 @@ func getClientTLSAuthHandler(verifyOpts x509.VerifyOptions) turn.AuthHandler {
 
 			log.Printf("Certificate validated for username %q", ra.Username)
 
-			// in this example, we generate the turn auth key based only on the
-			// certificate's common name, but you can use any attributes from the
-			// certificate's contents and/or request attributes.
-			hash := md5.New()                                                      // nolint: gosec
-			fmt.Fprint(hash, strings.Join([]string{cert.Subject.CommonName}, ":")) // nolint: errcheck
-			key := hash.Sum(nil)
-
-			return key, true
+			// Note the empty password for certificate-based auth
+			return turn.GenerateAuthKey(ra.Username, ra.Realm, ""), true
 		}
 
 		log.Printf("Request not allowed: no valid certificates found")
@@ -79,7 +75,7 @@ func main() {
 	}
 
 	// Load server certificate
-	cer, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+	serverCert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
 	if err != nil {
 		log.Fatalf("Failed to load server certificate: %v", err)
 	}
@@ -95,16 +91,43 @@ func main() {
 		log.Fatalf("Failed to parse CA certificate")
 	}
 
-	// Create TLS listener that requires client certificates
-	tlsListener, err := tls.Listen("tcp4", "0.0.0.0:"+strconv.Itoa(*port), &tls.Config{
+	// Create TLS config for listener to require client certificates.
+	tlsConfig := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
-		Certificates: []tls.Certificate{cer},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    caCertPool,
-	})
+		Certificates: []tls.Certificate{serverCert},
+
+		// NOTE: The setting below is very important. Make sure
+		// the value you choose suits your use case well:
+		//
+		// - tls.RequestClientCert indicates that a client certificate should be requested
+		// during the handshake, but does not require that the client send any
+		// certificates.
+		//
+		// - tls.RequireAnyClientCert indicates that a client certificate should be requested
+		// during the handshake, and that at least one certificate is required to be
+		// sent by the client, but that certificate is not required to be valid.
+		//
+		// - tls.VerifyClientCertIfGiven indicates that a client certificate should be requested
+		// during the handshake, but does not require that the client sends a
+		// certificate. If the client does send a certificate it is required to be
+		// valid.
+		//
+		// - tls.RequireAndVerifyClientCert indicates that a client certificate should be requested
+		// during the handshake, and that at least one valid certificate is required
+		// to be sent by the client.
+		ClientAuth: tls.RequireAnyClientCert,
+		ClientCAs:  caCertPool,
+	}
+
+	// Listen on all IPv4 interfaces.
+	tlsListener, err := tls.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", *port), tlsConfig)
 	if err != nil {
 		log.Fatalf("Failed to create TLS listener: %v", err)
 	}
+
+	log.Printf("TURN Server listening on 0.0.0.0:%d with TLS client certificate authentication", *port)
+	log.Printf("Realm: %s", *realm)
+	log.Printf("Relay IP: %s", *publicIP)
 
 	server, err := turn.NewServer(turn.ServerConfig{
 		Realm:       *realm,

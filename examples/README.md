@@ -1,5 +1,22 @@
 # Examples
 
+- [turn-server](#turn-server)
+	- [add-software-attribute](#add-software-attribute) - Add custom SOFTWARE attribute to STUN packets
+	- [log](#log) - Log all inbound/outbound STUN packets
+	- [simple](#simple) - Minimal TURN server implementation
+	- [simple-quota](#simple-quota) - TURN server with per-user allocation limits
+	- [simple-multithreaded](#simple-multithreaded) - Multi-threaded TURN server for multiple CPU cores
+	- [tcp](#tcp-server) - TURN server listening on TCP
+	- [tls](#tls) - TURN server listening on TLS
+	- [lt-creds](#lt-creds) - Long-term credentials with automatic expiration
+	- [lt-cred-turn-rest](#lt-cred-turn-rest) - Ephemeral REST API credentials
+	- [perm-filter](#perm-filter) - Filter connections with permission handler
+- [turn-client](#turn-client)
+	- [tcp](#tcp-client) - Connect to TURN server via TCP
+	- [tcp-alloc](#tcp-alloc) - Create TCP allocations between peers
+	- [udp](#udp) - Connect to TURN server via UDP
+- [mutual-tls-auth](#mutual-tls-auth) - Mutual TLS authentication example
+
 ## turn-server
 
 The `turn-server` directory contains examples that show common Pion
@@ -74,7 +91,7 @@ the `address:port` pair across the sockets by the IP 5-tuple, which
 makes sure that all packets of a TURN allocation will be correctly
 processed in a single readloop.
 
-#### tcp
+#### tcp (server)
 
 This example demonstrates listening on TCP. You could combine this
 example with `simple` and you will have a Pion TURN instance that is
@@ -133,7 +150,7 @@ All of these examples except `tcp-alloc` take the following arguments.
 - -realm : Realm name (defaults to "pion.ly")
 - -user : \<username\>=\<password\> pair
 
-#### tcp
+#### tcp (client)
 
 Dials the requested TURN server via TCP
 
@@ -234,3 +251,55 @@ server and should not be used for production):
 
 > If using this Coturn TURN server deployment: \* turn-server-name :
 > 127.0.0.1 \* port : 3478
+
+## mutual-tls-auth
+
+The `mutual-tls-auth` directory contains an end-to-end example of how to use client TLS certificates for authentication of TURN clients. To be precise, the example demonstrates mutual TLS (mTLS) where both the client and server ensure each other present a TLS certificate signed by the same trusted Certificate Authority (CA).
+
+**Authentication Model:** Unlike other examples that use a static list of username/password pairs, this example uses certificate-based authentication. The server trusts any client with a certificate signed by the trusted CA. Normally, the username:password combination is used for message integrity, but this is unnecessary here because TLS itself provides integrity and authentication through the certificate validation.
+
+> In this example, the AuthHandler derives the auth key from the certificate's CommonName (treating it as the username) and an empty string as the password. Note that it doesn't matter which part of the certificate is used to derive the auth key (CommonName, serial number, SANs, etc.), or even if no part of the certificate is used, as long as the client and server agree on the scheme and arrive at the same value.
+
+To run the example:
+
+1) Generate demo certificates (CA, server, and client certificates)
+
+```
+make generate-certs
+```
+
+<details>
+
+<summary>Show step-by-step with `openssl` commands</summary>
+
+- i) Generate CA certificate:
+
+```
+openssl req -new -x509 -days 365 -keyout ca.key -out ca.crt -nodes -subj "/O=pion.ly/CN=Pion Certificate Authority Root"
+```
+
+- ii) Generate client's certificate:
+
+```
+openssl req -new -newkey rsa:2048 -nodes -keyout client.key -subj "/O=pion.ly/CN=turn-client" | openssl x509 -req -CA ca.crt -CAkey ca.key -set_serial $RANDOM -out client.crt -days 1
+```
+
+- iii) Generate server's certificate:
+
+```
+openssl req -new -newkey rsa:2048 -nodes -keyout server.key -subj "/O=pion.ly/CN=turn-server" -addext "subjectAltName=DNS:localhost" | openssl x509 -req -CA ca.crt -CAkey ca.key -set_serial $RANDOM -out server.crt -days 1 -copy_extensions copyall
+```
+
+</details>
+
+2) Run the TURN server
+
+```
+make run-server
+```
+
+3) Run the TURN client
+
+```
+make run-client
+```

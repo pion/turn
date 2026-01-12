@@ -59,8 +59,8 @@ The password sent by the client can be any non-empty string, as long as it match
 function.
 
 #### How do I implement mTLS (mutual TLS) authentication?
-You can use client certificates for authentication by checking the TLS connection state in your [AuthHandler](examples/turn-server/tls-auth/main.go#L29).
-See the [tls-auth example](examples/turn-server/tls-auth/main.go) for a complete implementation that validates client certificates
+You can use client certificates for authentication by checking the TLS connection state in your [AuthHandler](examples/mutual-tls-auth/turn-server/main.go#L31).
+See the [mutual-tls-auth example](examples/mutual-tls-auth) for a complete implementation that validates client certificates
 and matches the certificate's Common Name to the TURN username.
 
 #### Will WebRTC prioritize using STUN over TURN?
