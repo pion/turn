@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/pion/logging"
@@ -79,7 +80,7 @@ func main() { //nolint:cyclop
 	}
 
 	// Dial TURN Server
-	turnServerAddrStr := fmt.Sprintf("%s:%d", *host, *port)
+	turnServerAddrStr := net.JoinHostPort(*host, strconv.Itoa(*port))
 
 	turnServerAddr, err := net.ResolveTCPAddr("tcp", turnServerAddrStr)
 	if err != nil {

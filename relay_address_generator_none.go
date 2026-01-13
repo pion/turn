@@ -46,7 +46,7 @@ func (r *RelayAddressGeneratorNone) AllocatePacketConn(network string, requested
 	net.Addr,
 	error,
 ) {
-	conn, err := r.Net.ListenPacket(network, r.Address+":"+strconv.Itoa(requestedPort)) // nolint: noctx
+	conn, err := r.Net.ListenPacket(network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort))) // nolint: noctx
 	if err != nil {
 		return nil, nil, err
 	}
@@ -65,7 +65,7 @@ func (r *RelayAddressGeneratorNone) AllocateListener(network string, requestedPo
 		}
 	}
 
-	tcpAddr, err := r.Net.ResolveTCPAddr(network, r.Address+":"+strconv.Itoa(requestedPort))
+	tcpAddr, err := r.Net.ResolveTCPAddr(network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort)))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -6,6 +6,7 @@ package proto
 import (
 	"fmt"
 	"net"
+	"strconv"
 )
 
 // Addr is ip:port.
@@ -38,7 +39,7 @@ func (a Addr) EqualIP(b Addr) bool {
 }
 
 func (a Addr) String() string {
-	return fmt.Sprintf("%s:%d", a.IP, a.Port)
+	return net.JoinHostPort(a.IP.String(), strconv.Itoa(a.Port))
 }
 
 // FiveTuple represents 5-TUPLE value.

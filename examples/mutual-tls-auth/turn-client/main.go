@@ -9,10 +9,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/pion/logging"
@@ -70,7 +70,7 @@ func main() { //nolint:cyclop
 	}
 
 	// Dial TURN Server with TLS
-	turnServerAddr := net.JoinHostPort(*host, fmt.Sprintf("%d", *port))
+	turnServerAddr := net.JoinHostPort(*host, strconv.Itoa(*port))
 	dialer := &tls.Dialer{Config: tlsConfig}
 	conn, err := dialer.DialContext(context.Background(), "tcp", turnServerAddr)
 	if err != nil {

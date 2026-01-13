@@ -35,7 +35,7 @@ func main() { //nolint:cyclop
 		log.Fatalf("'users' is required")
 	}
 
-	addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:"+strconv.Itoa(*port))
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort("0.0.0.0", strconv.Itoa(*port)))
 	if err != nil {
 		log.Fatalf("Failed to parse server address: %s", err)
 	}

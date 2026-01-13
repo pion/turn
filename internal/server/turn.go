@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 
 	"github.com/pion/randutil"
 	"github.com/pion/stun/v3"
@@ -362,8 +363,8 @@ func handleCreatePermissionRequest(req Request, stunMsg *stun.Message) error {
 			return err
 		}
 
-		req.Log.Debugf("Adding permission for %s", fmt.Sprintf("%s:%d",
-			peerAddress.IP, peerAddress.Port))
+		req.Log.Debugf("Adding permission for %s", net.JoinHostPort(
+			peerAddress.IP.String(), strconv.Itoa(peerAddress.Port)))
 
 		alloc.AddPermission(allocation.NewPermission(
 			&net.UDPAddr{

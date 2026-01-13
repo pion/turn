@@ -33,7 +33,7 @@ func main() {
 	// Create a TCP listener to pass into pion/turn
 	// pion/turn itself doesn't allocate any TCP listeners, but lets the user pass them in
 	// this allows us to add logging, storage or modify inbound/outbound traffic
-	tcpListener, err := net.Listen("tcp4", "0.0.0.0:"+strconv.Itoa(*port)) // nolint: noctx
+	tcpListener, err := net.Listen("tcp4", net.JoinHostPort("0.0.0.0", strconv.Itoa(*port))) // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to create TURN server listener: %s", err)
 	}

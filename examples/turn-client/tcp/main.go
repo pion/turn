@@ -6,9 +6,9 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,7 +33,7 @@ func main() { //nolint:cyclop
 	}
 
 	// Dial TURN Server
-	turnServerAddr := net.JoinHostPort(*host, fmt.Sprintf("%d", *port))
+	turnServerAddr := net.JoinHostPort(*host, strconv.Itoa(*port))
 	conn, err := net.Dial("tcp", turnServerAddr) // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to connect to TURN server: %s", err)

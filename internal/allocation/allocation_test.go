@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -280,7 +281,7 @@ func TestPacketHandler(t *testing.T) {
 	_ = alloc.AddChannelBind(channelBind, proto.DefaultLifetime, DefaultPermissionTimeout)
 
 	_, port, _ := ipnet.AddrIPPort(alloc.relayPacketConn.LocalAddr())
-	relayAddrWithHostStr := fmt.Sprintf("127.0.0.1:%d", port)
+	relayAddrWithHostStr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	relayAddrWithHost, _ := net.ResolveUDPAddr(network, relayAddrWithHostStr)
 
 	// Test for permission and data message
