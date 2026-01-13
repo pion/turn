@@ -51,6 +51,11 @@ type ClientConfig struct {
 	// PermissionTimeout sets the refresh interval of permissions. Defaults to 2 minutes.
 	PermissionRefreshInterval time.Duration
 
+	// RequestedAddressFamily is the address family to request in allocations (IPv4 or IPv6).
+	// If not specified (zero value), the client will attempt to infer from the PacketConn's
+	// local address, falling back to IPv4 if inference fails. See RFC 6156.
+	RequestedAddressFamily RequestedAddressFamily
+
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
 	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
 	bindingRefreshInterval time.Duration
@@ -79,16 +84,76 @@ type Client struct {
 	mutexTrMap    sync.Mutex             // Thread-safe
 	log           logging.LeveledLogger  // Read-only
 
-	evenPort                  bool   // If EVEN-PORT Attribute should be sent in Allocation
-	reservationToken          []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	// If EVEN-PORT Attribute should be sent in Allocation
+	evenPort bool
+
+	// If Server responds with RESERVATION-TOKEN or if Client wishes to send one
+	reservationToken []byte
+
+	// REQUESTED-ADDRESS-FAMILY attribute for allocations (RFC 6156)
+	requestedAddressFamily proto.RequestedAddressFamily
+
 	permissionRefreshInterval time.Duration
 	bindingRefreshInterval    time.Duration
 	bindingCheckInterval      time.Duration
 }
 
+// inferAddressFamilyFromConn attempts to determine the address
+// family (IPv4 or IPv6) from a PacketConn's local address.
+// Returns an error if the address type is not IP-based.
+func inferAddressFamilyFromConn(
+	conn net.PacketConn,
+) (proto.RequestedAddressFamily, error) {
+	addr := conn.LocalAddr()
+
+	switch a := addr.(type) {
+	case *net.UDPAddr:
+		if a.IP.To4() != nil {
+			return proto.RequestedFamilyIPv4, nil
+		}
+
+		return proto.RequestedFamilyIPv6, nil
+	case *net.TCPAddr:
+		if a.IP.To4() != nil {
+			return proto.RequestedFamilyIPv4, nil
+		}
+
+		return proto.RequestedFamilyIPv6, nil
+	default:
+		return 0, fmt.Errorf("cannot infer address family from %T", addr) //nolint:err113
+	}
+}
+
+// getRequestedAddressFamily determines the address family to use
+// for TURN allocations. It follows this priority:
+//  1. Use explicitly configured RequestedAddressFamily if set
+//  2. Try to infer from the PacketConn's local address
+//  3. Fall back to IPv4 default per RFC 6156
+func getRequestedAddressFamily(
+	log logging.LeveledLogger,
+	config *ClientConfig,
+) proto.RequestedAddressFamily {
+	// If explicitly set, use it
+	if config.RequestedAddressFamily != 0 {
+		return config.RequestedAddressFamily
+	}
+
+	// Try to infer from the PacketConn
+	if inferred, err := inferAddressFamilyFromConn(config.Conn); err == nil {
+		log.Debugf("Inferred address family %v from connection", inferred)
+
+		return inferred
+	}
+
+	log.Debugf("Could not infer address family, defaulting to IPv4")
+
+	// Default to IPv4 per RFC 6156
+	return proto.RequestedFamilyIPv4
+}
+
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on,
 // default "0.0.0.0:0".
-func NewClient(config *ClientConfig) (*Client, error) {
+func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 	loggerFactory := config.LoggerFactory
 	if loggerFactory == nil {
 		loggerFactory = logging.NewDefaultLoggerFactory()
@@ -113,11 +178,14 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		config.Net = n
 	}
 
+	// Determine the requested address family (RFC 6156)
+	requestedAddressFamily := getRequestedAddressFamily(log, config)
+
 	var stunServ, turnServ net.Addr
 	var err error
 
 	if len(config.STUNServerAddr) > 0 {
-		stunServ, err = config.Net.ResolveUDPAddr("udp4", config.STUNServerAddr)
+		stunServ, err = config.Net.ResolveUDPAddr("udp", config.STUNServerAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +194,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 
 	if len(config.TURNServerAddr) > 0 {
-		turnServ, err = config.Net.ResolveUDPAddr("udp4", config.TURNServerAddr)
+		turnServ, err = config.Net.ResolveUDPAddr("udp", config.TURNServerAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -148,6 +216,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		log:                       log,
 		evenPort:                  config.evenPort,
 		reservationToken:          config.reservationToken,
+		requestedAddressFamily:    requestedAddressFamily,
 		permissionRefreshInterval: config.PermissionRefreshInterval,
 		bindingRefreshInterval:    config.bindingRefreshInterval,
 		bindingCheckInterval:      config.bindingCheckInterval,
@@ -272,11 +341,14 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		proto.RequestedTransport{Protocol: protocol},
 		stun.Fingerprint,
 	}
-	if c.evenPort {
-		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
-	}
+	// RFC 6156: REQUESTED-ADDRESS-FAMILY and RESERVATION-TOKEN are mutually exclusive.
 	if len(c.reservationToken) != 0 {
 		allocationSetters = append(allocationSetters, proto.ReservationToken(c.reservationToken))
+	} else {
+		allocationSetters = append(allocationSetters, c.requestedAddressFamily)
+	}
+	if c.evenPort {
+		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
 
 	msg, err := stun.Build(allocationSetters...)
@@ -313,11 +385,14 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		&c.integrity,
 		stun.Fingerprint,
 	}
-	if c.evenPort {
-		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
-	}
+	// RFC 6156: REQUESTED-ADDRESS-FAMILY and RESERVATION-TOKEN are mutually exclusive.
 	if len(c.reservationToken) != 0 {
 		allocationSetters = append(allocationSetters, proto.ReservationToken(c.reservationToken))
+	} else {
+		allocationSetters = append(allocationSetters, c.requestedAddressFamily)
+	}
+	if c.evenPort {
+		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
 
 	msg, err = stun.Build(allocationSetters...)

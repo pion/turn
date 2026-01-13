@@ -21,7 +21,7 @@ const runesAlpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
 // .
-func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:cyclop
+func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:cyclop,gocyclo,maintidx
 	req.Log.Debugf("Received AllocateRequest from %s", req.SrcAddr)
 
 	// 1. The server MUST require that the request be authenticated.  This
@@ -158,6 +158,31 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	realmAttr := &stun.Realm{}
 	_ = realmAttr.GetFrom(stunMsg)
 
+	// RFC 6156: Parse REQUESTED-ADDRESS-FAMILY attribute if present.
+	// If absent, default to IPv4 per RFC 6156 Section 4.1.1.
+	var requestedFamily proto.RequestedAddressFamily
+	if err = requestedFamily.GetFrom(stunMsg); err != nil {
+		// Attribute not present or malformed - default to IPv4
+		requestedFamily = proto.RequestedFamilyIPv4
+	}
+
+	// RFC 6156: Check if the requested address family is supported.
+	// If not, reject with 440 (Address Family not Supported) error.
+	if requestedFamily != proto.RequestedFamilyIPv4 && requestedFamily != proto.RequestedFamilyIPv6 {
+		msg := buildMsg(
+			stunMsg.TransactionID,
+			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodeAddrFamilyNotSupported},
+		)
+
+		return buildAndSendErr(req.Conn, req.SrcAddr, errUnsupportedAddressFamily, msg...)
+	}
+
+	// RFC 6156: REQUESTED-ADDRESS-FAMILY and RESERVATION-TOKEN are mutually exclusive.
+	if stunMsg.Contains(stun.AttrReservationToken) && stunMsg.Contains(stun.AttrRequestedAddressFamily) {
+		return buildAndSendErr(req.Conn, req.SrcAddr, errRequestWithReservationTokenAndRequestedFamily, badRequestMsg...)
+	}
+
 	// 7. At any point, the server MAY choose to reject the request with a
 	//    486 (Allocation Quota Reached) error if it feels the client is
 	//    trying to exceed some locally defined allocation quota.  The
@@ -185,6 +210,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		lifetimeDuration,
 		username,
 		realmAttr.String(),
+		requestedFamily,
 	)
 	if err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, insufficientCapacityMsg...)
@@ -256,9 +282,24 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 		Protocol: allocation.UDP,
 	}
 
-	a := req.AllocationManager.GetAllocationForUsername(fiveTuple, username)
+	a := req.AllocationManager.GetAllocationForUsername(fiveTuple, username) //nolint:varnamelen
 	if a == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
+	}
+
+	// RFC 6156: If REQUESTED-ADDRESS-FAMILY is present in Refresh request,
+	// it must match the allocation's address family.
+	var requestedFamily proto.RequestedAddressFamily
+	if err = requestedFamily.GetFrom(stunMsg); err == nil {
+		if requestedFamily != a.AddressFamily() {
+			msg := buildMsg(
+				stunMsg.TransactionID,
+				stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
+				&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch},
+			)
+
+			return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, msg...)
+		}
 	}
 
 	if lifetimeDuration != 0 {
@@ -306,6 +347,13 @@ func handleCreatePermissionRequest(req Request, stunMsg *stun.Message) error {
 		var peerAddress proto.PeerAddress
 		if err := peerAddress.GetFrom(m); err != nil {
 			return err
+		}
+
+		// RFC 6156: Peer address must match allocation's address family.
+		if !ipMatchesFamily(peerAddress.IP, alloc.AddressFamily()) {
+			req.Log.Infof("peer address family mismatch for client %s to peer %s", req.SrcAddr, peerAddress.IP)
+
+			return errPeerAddressFamilyMismatch
 		}
 
 		if err := req.AllocationManager.GrantPermission(req.SrcAddr, peerAddress.IP); err != nil {
@@ -412,6 +460,17 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error {
 	peerAddr := proto.PeerAddress{}
 	if err = peerAddr.GetFrom(stunMsg); err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+	}
+
+	// RFC 6156: Peer address must match allocation's address family.
+	if !ipMatchesFamily(peerAddr.IP, alloc.AddressFamily()) {
+		req.Log.Infof("peer address family mismatch for client %s to peer %s", req.SrcAddr, peerAddr.IP)
+
+		peerAddrFamilyMismatchMsg := buildMsg(stunMsg.TransactionID,
+			stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch})
+
+		return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, peerAddrFamilyMismatchMsg...)
 	}
 
 	if err = req.AllocationManager.GrantPermission(req.SrcAddr, peerAddr.IP); err != nil {
@@ -611,4 +670,16 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 	req.AllocationManager.RemoveTCPConnection(connectionID)
 
 	return nil
+}
+
+// ipMatchesFamily checks if an IP address matches the given address family.
+func ipMatchesFamily(ip net.IP, family proto.RequestedAddressFamily) bool {
+	if family == proto.RequestedFamilyIPv4 {
+		return ip.To4() != nil
+	}
+	if family == proto.RequestedFamilyIPv6 {
+		return ip.To4() == nil && ip.To16() != nil
+	}
+
+	return false
 }

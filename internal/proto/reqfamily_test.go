@@ -15,6 +15,26 @@ func TestRequestedAddressFamily(t *testing.T) {
 		assert.Equal(t, "IPv4", RequestedFamilyIPv4.String())
 		assert.Equal(t, "IPv6", RequestedFamilyIPv6.String())
 		assert.Equal(t, "unknown", RequestedAddressFamily(0x04).String())
+		assert.Equal(t, "unknown", RequestedAddressFamily(0x00).String())
+	})
+	t.Run("Values", func(t *testing.T) {
+		assert.Equal(t, byte(0x01), byte(RequestedFamilyIPv4))
+		assert.Equal(t, byte(0x02), byte(RequestedFamilyIPv6))
+	})
+	t.Run("IPv6", func(t *testing.T) {
+		stunMsg := new(stun.Message)
+		requestFamilyAddr := RequestedFamilyIPv6
+		assert.NoError(t, requestFamilyAddr.AddTo(stunMsg))
+
+		stunMsg.WriteHeader()
+		decoded := new(stun.Message)
+		_, err := decoded.Write(stunMsg.Raw)
+		assert.NoError(t, err)
+
+		var req RequestedAddressFamily
+		assert.NoError(t, req.GetFrom(decoded))
+		assert.Equal(t, RequestedFamilyIPv6, req)
+		assert.Equal(t, "IPv6", req.String())
 	})
 	t.Run("NoAlloc", func(t *testing.T) {
 		stunMsg := &stun.Message{}

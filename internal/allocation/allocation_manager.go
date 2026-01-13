@@ -131,6 +131,7 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 	requestedPort int,
 	lifetime time.Duration,
 	username, realm string,
+	addressFamily proto.RequestedAddressFamily,
 ) (*Allocation, error) {
 	switch {
 	case fiveTuple == nil:
@@ -151,21 +152,29 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 	alloc := NewAllocation(turnSocket, fiveTuple, m.EventHandler, m.log)
 	alloc.username = username
 	alloc.realm = realm
+	alloc.addressFamily = addressFamily
 
-	if protocol == proto.ProtoUDP {
-		conn, relayAddr, err := m.allocatePacketConn("udp4", requestedPort)
+	switch protocol {
+	case proto.ProtoUDP:
+		network := "udp4"
+		if addressFamily == proto.RequestedFamilyIPv6 {
+			network = "udp6"
+		}
+		conn, relayAddr, err := m.allocatePacketConn(network, requestedPort)
 		if err != nil {
 			return nil, err
 		}
-
 		alloc.relayPacketConn = conn
 		alloc.RelayAddr = relayAddr
-	} else if protocol == proto.ProtoTCP {
-		ln, relayAddr, err := m.allocateListener("tcp4", requestedPort)
+	case proto.ProtoTCP:
+		network := "tcp4"
+		if addressFamily == proto.RequestedFamilyIPv6 {
+			network = "tcp6"
+		}
+		ln, relayAddr, err := m.allocateListener(network, requestedPort)
 		if err != nil {
 			return nil, err
 		}
-
 		alloc.relayListener = ln
 		alloc.RelayAddr = relayAddr
 	}
