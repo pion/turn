@@ -14,6 +14,7 @@
 - [turn-client](#turn-client)
 	- [tcp](#tcp-client) - Connect to TURN server via TCP
 	- [tcp-alloc](#tcp-alloc) - Create TCP allocations between peers
+	- [tls](#tls-client) - Connect to TURN server via TLS
 	- [udp](#udp) - Connect to TURN server via UDP
 - [mutual-tls-auth](#mutual-tls-auth) - Mutual TLS authentication example
 
@@ -175,6 +176,36 @@ All of these examples except `tcp-alloc` take the following arguments.
 #### tcp (client)
 
 Dials the requested TURN server via TCP
+
+#### tls (client)
+
+Dials the requested TURN server via TLS
+
+``` sh
+$ cd tls
+$ go build
+$ ./tls -host <turn-server-name> -user=user=pass
+```
+
+If the server uses certificates signed by a private CA, use `-ca` to specify the CA certificate:
+
+``` sh
+$ ./tls -host <turn-server-name> -user=user=pass -ca /path/to/ca.crt
+```
+
+Or skip verification altogether with `-insecure`:
+
+``` sh
+$ ./tls -host <turn-server-name> -user=user=pass -insecure
+```
+
+By adding `-ping`, it will perform a ping test.
+
+``` sh
+$ ./tls -host <turn-server-name> -user=user=pass -insecure -ping
+```
+
+**Note:** This example uses password-based authentication over TLS. For certificate-based authentication (mutual TLS), see the [mutual-tls-auth](#mutual-tls-auth) example.
 
 #### udp
 
