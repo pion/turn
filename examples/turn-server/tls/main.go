@@ -43,7 +43,7 @@ func main() {
 	// Create a TLS listener to pass into pion/turn
 	// pion/turn itself doesn't allocate any TLS listeners, but lets the user pass them in
 	// this allows us to add logging, storage or modify inbound/outbound traffic
-	tlsListener, err := tls.Listen("tcp4", "0.0.0.0:"+strconv.Itoa(*port), &tls.Config{
+	tlsListener, err := tls.Listen("tcp4", net.JoinHostPort("0.0.0.0", strconv.Itoa(*port)), &tls.Config{
 		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{cer},
 	})

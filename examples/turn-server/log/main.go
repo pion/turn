@@ -67,7 +67,7 @@ func main() {
 	// Create a UDP listener to pass into pion/turn
 	// pion/turn itself doesn't allocate any UDP sockets, but lets the user pass them in
 	// this allows us to add logging, storage or modify inbound/outbound traffic
-	udpListener, err := net.ListenPacket("udp4", "0.0.0.0:"+strconv.Itoa(*port)) // nolint: noctx
+	udpListener, err := net.ListenPacket("udp4", net.JoinHostPort("0.0.0.0", strconv.Itoa(*port))) // nolint: noctx
 	if err != nil {
 		log.Panicf("Failed to create TURN server listener: %s", err)
 	}

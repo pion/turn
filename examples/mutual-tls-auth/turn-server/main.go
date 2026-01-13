@@ -8,11 +8,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/pion/turn/v4"
@@ -120,7 +120,7 @@ func main() {
 	}
 
 	// Listen on all IPv4 interfaces.
-	tlsListener, err := tls.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", *port), tlsConfig)
+	tlsListener, err := tls.Listen("tcp4", net.JoinHostPort("0.0.0.0", strconv.Itoa(*port)), tlsConfig)
 	if err != nil {
 		log.Fatalf("Failed to create TLS listener: %v", err)
 	}

@@ -6,9 +6,9 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,7 +45,7 @@ func main() { //nolint:cyclop
 		}
 	}()
 
-	turnServerAddr := fmt.Sprintf("%s:%d", *host, *port)
+	turnServerAddr := net.JoinHostPort(*host, strconv.Itoa(*port))
 
 	cfg := &turn.ClientConfig{
 		STUNServerAddr: turnServerAddr,
