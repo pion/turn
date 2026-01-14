@@ -91,10 +91,10 @@ func (m *Manager) GetAllocation(fiveTuple *FiveTuple) *Allocation {
 	return m.allocations[fiveTuple.Fingerprint()]
 }
 
-// GetAllocationForUsername fetches the allocation matching the passed FiveTuple and Username.
-func (m *Manager) GetAllocationForUsername(fiveTuple *FiveTuple, username string) *Allocation {
+// GetAllocationForUserID fetches the allocation matching the passed FiveTuple and Username.
+func (m *Manager) GetAllocationForUserID(fiveTuple *FiveTuple, userID string) *Allocation {
 	allocation := m.GetAllocation(fiveTuple)
-	if allocation != nil && allocation.username == username {
+	if allocation != nil && allocation.userID == userID {
 		return allocation
 	}
 
@@ -130,7 +130,7 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 	protocol proto.Protocol,
 	requestedPort int,
 	lifetime time.Duration,
-	username, realm string,
+	userID, realm string,
 	addressFamily proto.RequestedAddressFamily,
 ) (*Allocation, error) {
 	switch {
@@ -150,7 +150,7 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 		return nil, fmt.Errorf("%w: %v", errDupeFiveTuple, fiveTuple)
 	}
 	alloc := NewAllocation(turnSocket, fiveTuple, m.EventHandler, m.log)
-	alloc.username = username
+	alloc.userID = userID
 	alloc.realm = realm
 	alloc.addressFamily = addressFamily
 
@@ -191,7 +191,7 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 
 	if m.EventHandler.OnAllocationCreated != nil {
 		m.EventHandler.OnAllocationCreated(fiveTuple.SrcAddr, fiveTuple.DstAddr,
-			fiveTuple.Protocol.String(), username, realm, alloc.RelayAddr, requestedPort)
+			fiveTuple.Protocol.String(), userID, realm, alloc.RelayAddr, requestedPort)
 	}
 
 	// Only start the UDP relay loop for UDP allocations.
@@ -227,7 +227,7 @@ func (m *Manager) DeleteAllocation(fiveTuple *FiveTuple) {
 
 	if m.EventHandler.OnAllocationDeleted != nil {
 		m.EventHandler.OnAllocationDeleted(fiveTuple.SrcAddr, fiveTuple.DstAddr,
-			fiveTuple.Protocol.String(), allocation.username, allocation.realm)
+			fiveTuple.Protocol.String(), allocation.userID, allocation.realm)
 	}
 }
 
@@ -409,13 +409,13 @@ func (m *Manager) isDupeTCPConnection(allocation *Allocation, remoteAddr *net.TC
 }
 
 // GetTCPConnection returns the TCP Connection for the given ConnectionID.
-func (m *Manager) GetTCPConnection(username string, connectionID proto.ConnectionID) net.Conn {
+func (m *Manager) GetTCPConnection(userID string, connectionID proto.ConnectionID) net.Conn {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	for _, a := range m.allocations {
 		if tcpConnection, ok := a.tcpConnections[connectionID]; ok {
-			if a.username != username || tcpConnection.isBound.Swap(true) {
+			if a.userID != userID || tcpConnection.isBound.Swap(true) {
 				return nil
 			}
 

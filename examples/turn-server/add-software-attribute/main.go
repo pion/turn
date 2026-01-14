@@ -80,12 +80,12 @@ func main() {
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
 		// Return the key for that user, or false when no user is found
-		AuthHandler: func(ra *turn.RequestAttributes) ([]byte, bool) {
+		AuthHandler: func(ra *turn.RequestAttributes) (string, []byte, bool) {
 			if key, ok := usersMap[ra.Username]; ok {
-				return key, true
+				return ra.Username, key, true
 			}
 
-			return nil, false
+			return "", nil, false
 		},
 		// PacketConnConfigs is a list of UDP Listeners and the configuration around them
 		PacketConnConfigs: []turn.PacketConnConfig{

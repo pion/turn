@@ -37,6 +37,7 @@ const (
 	stunAddr = "1.2.3.4:3478"
 	turnAddr = "1.2.3.4:3478"
 	testAddr = "127.0.0.1:3478"
+	testUser = "testUser"
 )
 
 type EventHandlerType int
@@ -55,13 +56,13 @@ const (
 
 // EventHandlerArgs is a set of arguments passed from the low-level event callbacks to the server.
 type eventHandlerArgs struct {
-	Type                                   EventHandlerType
-	srcAddr, dstAddr, relayAddr            net.Addr
-	protocol                               string
-	username, realm, method, message, peer string
-	verdict                                bool
-	requestedPort                          int
-	channelNumber                          uint16
+	Type                                 EventHandlerType
+	srcAddr, dstAddr, relayAddr          net.Addr
+	protocol                             string
+	userID, realm, method, message, peer string
+	verdict                              bool
+	requestedPort                        int
+	channelNumber                        uint16
 }
 
 // mtuConn enforces a maxMTU limit and returns an error on overflow.
@@ -189,7 +190,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 	loggerFactory := logging.NewDefaultLoggerFactory()
 
 	credMap := map[string][]byte{
-		"user": GenerateAuthKey("user", "pion.ly", "pass"),
+		testUser: GenerateAuthKey(testUser, "pion.ly", "pass"),
 	}
 
 	t.Run("simple", func(t *testing.T) {
@@ -197,12 +198,12 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 				if pw, ok := credMap[ra.Username]; ok {
-					return pw, true
+					return ra.Username, pw, true
 				}
 
-				return nil, false
+				return "", nil, false
 			},
 			PacketConnConfigs: []PacketConnConfig{
 				{
@@ -287,12 +288,12 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 				if pw, ok := credMap[ra.Username]; ok {
-					return pw, true
+					return ra.Username, pw, true
 				}
 
-				return nil, false
+				return "", nil, false
 			},
 			ListenerConfigs: []ListenerConfig{
 				{
@@ -322,7 +323,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 			STUNServerAddr: serverAddr.String(),
 			TURNServerAddr: serverAddr.String(),
 			Conn:           NewSTUNConn(conn),
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -371,12 +372,12 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 				if pw, ok := credMap[ra.Username]; ok {
-					return pw, true
+					return ra.Username, pw, true
 				}
 
-				return nil, false
+				return "", nil, false
 			},
 			PacketConnConfigs: []PacketConnConfig{
 				{
@@ -400,7 +401,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 			STUNServerAddr: testAddr,
 			TURNServerAddr: testAddr,
 			Conn:           clientConn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -467,7 +468,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 			STUNServerAddr: testAddr,
 			TURNServerAddr: testAddr,
 			Conn:           conn2,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -522,12 +523,12 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		errMessage.Store("")
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 				if pw, ok := credMap[ra.Username]; ok {
-					return pw, true
+					return ra.Username, pw, true
 				}
 
-				return nil, false
+				return "", nil, false
 			},
 			EventHandler: allocation.EventHandler{ // used to report write errors from peer
 				OnAllocationError: func(_, _ net.Addr, _, message string) {
@@ -558,7 +559,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 			STUNServerAddr: testAddr,
 			TURNServerAddr: testAddr,
 			Conn:           conn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -594,12 +595,12 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, err)
 
 		server, err := NewServer(ServerConfig{
-			AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 				if pw, ok := credMap[ra.Username]; ok {
-					return pw, true
+					return ra.Username, pw, true
 				}
 
-				return nil, false
+				return "", nil, false
 			},
 			EventHandler: allocation.EventHandler{ // used to report write errors from peer
 				OnAllocationError: func(_, _ net.Addr, _, message string) {
@@ -630,7 +631,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 			STUNServerAddr: testAddr,
 			TURNServerAddr: testAddr,
 			Conn:           conn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -658,6 +659,59 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		assert.NoError(t, conn.Close())
 		assert.NoError(t, server.Close())
 	})
+
+	t.Run("Allow empty user-id", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
+		assert.NoError(t, err)
+		defer udpListener.Close() //nolint:errcheck
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+				if pw, ok := credMap[ra.Username]; ok {
+					// Return empty user-id
+					return "", pw, true
+				}
+
+				return "", nil, false
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &mtuConnGenerator{
+						RelayAddressGenerator: &RelayAddressGeneratorStatic{
+							RelayAddress: net.IPv4(127, 0, 0, 1),
+							Address:      "127.0.0.1",
+						},
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+		defer server.Close() //nolint:errcheck
+
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		client, err := NewClient(&ClientConfig{
+			STUNServerAddr: testAddr,
+			TURNServerAddr: testAddr,
+			Conn:           conn,
+			Username:       testUser,
+			Password:       "pass",
+			Realm:          "pion.ly",
+			LoggerFactory:  loggerFactory,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, client.Listen())
+		defer client.Close()
+
+		relayConn, err := client.Allocate()
+		assert.NoError(t, err)
+		defer relayConn.Close() //nolint:errcheck
+	})
 }
 
 func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
@@ -673,8 +727,8 @@ func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
-			return nil, false
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return "", nil, false
 		},
 		PacketConnConfigs: []PacketConnConfig{
 			{
@@ -809,7 +863,7 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 	}
 
 	// Start server...
-	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
+	credMap := map[string][]byte{testUser: GenerateAuthKey(testUser, "pion.ly", "pass")}
 
 	udpListener, err := net0.ListenPacket("udp4", "1.2.3.4:3478") // nolint: noctx
 	if err != nil {
@@ -821,12 +875,12 @@ func buildVNet(handler *EventHandler) (*VNet, error) { //nolint:cyclop
 	}
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 			if pw, ok := credMap[ra.Username]; ok {
-				return pw, true
+				return ra.Username, pw, true
 			}
 
-			return nil, false
+			return "", nil, false
 		},
 		Realm:        "pion.ly",
 		EventHandler: *handler,
@@ -878,30 +932,30 @@ func testEventHandler(ch chan eventHandlerArgs, authCounter *atomic.Int32) *Even
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onAuth, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: username, realm: realm,
 					method: method, verdict: verdict,
 				}
 			}
 			authCounter.Add(1)
 		},
 		OnAllocationCreated: func(srcAddr, dstAddr net.Addr,
-			protocol, username, realm string,
+			protocol, userID, realm string,
 			relayAddr net.Addr,
 			requestedPort int,
 		) {
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onAllocationCreated, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: userID, realm: realm,
 					relayAddr: relayAddr, requestedPort: requestedPort,
 				}
 			}
 		},
-		OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, username, realm string) {
+		OnAllocationDeleted: func(srcAddr, dstAddr net.Addr, protocol, userID, realm string) {
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onAllocationDeleted, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: userID, realm: realm,
 				}
 			}
 		},
@@ -914,54 +968,54 @@ func testEventHandler(ch chan eventHandlerArgs, authCounter *atomic.Int32) *Even
 			}
 		},
 		OnPermissionCreated: func(srcAddr, dstAddr net.Addr,
-			protocol, username, realm string,
+			protocol, userID, realm string,
 			relayAddr net.Addr,
 			peer net.IP,
 		) {
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onPermissionCreated, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: userID, realm: realm,
 					relayAddr: relayAddr, peer: peer.String(),
 				}
 			}
 		},
 		OnPermissionDeleted: func(srcAddr, dstAddr net.Addr,
-			protocol, username, realm string,
+			protocol, userID, realm string,
 			relayAddr net.Addr,
 			peer net.IP,
 		) {
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onPermissionDeleted, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: userID, realm: realm,
 					relayAddr: relayAddr, peer: peer.String(),
 				}
 			}
 		},
 		OnChannelCreated: func(srcAddr, dstAddr net.Addr,
-			protocol, username, realm string,
+			protocol, userID, realm string,
 			relayAddr, peer net.Addr,
 			channelNumber uint16,
 		) {
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onChannelCreated, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: userID, realm: realm,
 					relayAddr: relayAddr, peer: peer.String(),
 					channelNumber: channelNumber,
 				}
 			}
 		},
 		OnChannelDeleted: func(srcAddr, dstAddr net.Addr,
-			protocol, username, realm string,
+			protocol, userID, realm string,
 			relayAddr, peer net.Addr,
 			channelNumber uint16,
 		) {
 			if ch != nil {
 				ch <- eventHandlerArgs{
 					Type: onChannelDeleted, srcAddr: srcAddr, dstAddr: dstAddr,
-					protocol: protocol, username: username, realm: realm,
+					protocol: protocol, userID: userID, realm: realm,
 					relayAddr: relayAddr, peer: peer.String(),
 					channelNumber: channelNumber,
 				}
@@ -990,7 +1044,7 @@ func checkAllocationEvent(t *testing.T, event eventHandlerArgs) {
 	assert.Equal(t, udpAddr.IP.String(), "1.2.3.4")
 
 	assert.Equal(t, "UDP", event.protocol)
-	assert.Equal(t, "user", event.username)
+	assert.Equal(t, testUser, event.userID)
 	assert.Equal(t, "pion.ly", event.realm)
 }
 
@@ -1067,7 +1121,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 		client, err := NewClient(&ClientConfig{
 			TURNServerAddr: turnAddr,
 			Conn:           lconn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -1181,7 +1235,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 		client, err := NewClient(&ClientConfig{
 			TURNServerAddr: turnAddr,
 			Conn:           lconn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -1220,7 +1274,7 @@ func TestServerVNet(t *testing.T) { //nolint:maintidx
 		client, err := NewClient(&ClientConfig{
 			TURNServerAddr: turnAddr,
 			Conn:           lconn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "wrong-pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,
@@ -1276,7 +1330,7 @@ func TestSTUNOnly(t *testing.T) {
 		Conn:           conn,
 		STUNServerAddr: testAddr,
 		TURNServerAddr: testAddr,
-		Username:       "user",
+		Username:       testUser,
 		Password:       "pass",
 		Realm:          "pion.ly",
 		LoggerFactory:  logging.NewDefaultLoggerFactory(),
@@ -1306,16 +1360,28 @@ func TestQuotaReached(t *testing.T) {
 
 	defer serverConn.Close() //nolint:errcheck
 
-	credMap := map[string][]byte{"user": GenerateAuthKey("user", "pion.ly", "pass")}
+	credMap := map[string][]byte{
+		"test:1": GenerateAuthKey("test:1", "pion.ly", "pass"),
+		"test:2": GenerateAuthKey("test:2", "pion.ly", "pass"),
+	}
+	allocMap := map[string]int{}
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 			if pw, ok := credMap[ra.Username]; ok {
-				return pw, true
+				return "test", pw, true
 			}
-			return nil, false //nolint:nlreturn
+
+			return "", nil, false
 		},
-		QuotaHandler: func(_, _ string, _ net.Addr) (ok bool) { return false },
-		Realm:        "pion.ly",
+		QuotaHandler: func(userID, _ string, _ net.Addr) (ok bool) {
+			if allocMap[userID] > 0 {
+				return false
+			}
+			allocMap[userID]++
+
+			return true
+		},
+		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{{
 			PacketConn: serverConn,
 			RelayAddressGenerator: &RelayAddressGeneratorStatic{
@@ -1326,26 +1392,49 @@ func TestQuotaReached(t *testing.T) {
 		LoggerFactory: logging.NewDefaultLoggerFactory(),
 	})
 	assert.NoError(t, err)
-
 	defer server.Close() //nolint:errcheck
 
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	conn1, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
+	defer conn1.Close() //nolint:errcheck
 
-	client, err := NewClient(&ClientConfig{
-		Conn:           conn,
+	// First client succeeds
+	client1, err := NewClient(&ClientConfig{
+		Conn:           conn1,
 		STUNServerAddr: testAddr,
 		TURNServerAddr: testAddr,
-		Username:       "user",
+		Username:       "test:1",
 		Password:       "pass",
 		Realm:          "pion.ly",
 		LoggerFactory:  logging.NewDefaultLoggerFactory(),
 	})
 	assert.NoError(t, err)
-	assert.NoError(t, client.Listen())
-	defer client.Close()
+	assert.NoError(t, client1.Listen())
+	defer client1.Close()
 
-	_, err = client.Allocate()
+	relayConn, err := client1.Allocate()
+	assert.NoError(t, err)
+	defer relayConn.Close() //nolint:errcheck
+
+	conn2, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer conn2.Close() //nolint:errcheck
+
+	client2, err := NewClient(&ClientConfig{
+		Conn:           conn2,
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "test:2",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client2.Listen())
+	defer client2.Close()
+
+	_, err = client2.Allocate()
+	assert.Error(t, err)
 	assert.Equal(t, err.Error(), "Allocate error response (error 486: )")
 }
 
@@ -1357,8 +1446,8 @@ func TestReservation(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
-			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, GenerateAuthKey(testUser, "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{{
@@ -1382,7 +1471,7 @@ func TestReservation(t *testing.T) {
 		Conn:           firstConn,
 		STUNServerAddr: testAddr,
 		TURNServerAddr: testAddr,
-		Username:       "user",
+		Username:       testUser,
 		Password:       "pass",
 		Realm:          "pion.ly",
 		LoggerFactory:  logging.NewDefaultLoggerFactory(),
@@ -1405,7 +1494,7 @@ func TestReservation(t *testing.T) {
 		Conn:             secondConn,
 		STUNServerAddr:   testAddr,
 		TURNServerAddr:   testAddr,
-		Username:         "user",
+		Username:         testUser,
 		Password:         "pass",
 		Realm:            "pion.ly",
 		LoggerFactory:    logging.NewDefaultLoggerFactory(),
@@ -1434,8 +1523,8 @@ func TestReservation_InvalidToken(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
-			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, GenerateAuthKey(testUser, "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{{
@@ -1456,7 +1545,7 @@ func TestReservation_InvalidToken(t *testing.T) {
 		Conn:             conn,
 		STUNServerAddr:   testAddr,
 		TURNServerAddr:   testAddr,
-		Username:         "user",
+		Username:         testUser,
 		Password:         "pass",
 		Realm:            "pion.ly",
 		LoggerFactory:    logging.NewDefaultLoggerFactory(),
@@ -1480,8 +1569,8 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
-			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, GenerateAuthKey(testUser, "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{{
@@ -1502,7 +1591,7 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 		Conn:             conn,
 		STUNServerAddr:   testAddr,
 		TURNServerAddr:   testAddr,
-		Username:         "user",
+		Username:         testUser,
 		Password:         "pass",
 		Realm:            "pion.ly",
 		LoggerFactory:    logging.NewDefaultLoggerFactory(),
@@ -1551,8 +1640,8 @@ func TestDontFragment(t *testing.T) {
 	assert.NoError(t, err)
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
-			return GenerateAuthKey("user", "pion.ly", "pass"), true
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, GenerateAuthKey(testUser, "pion.ly", "pass"), true
 		},
 		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{{
@@ -1573,7 +1662,7 @@ func TestDontFragment(t *testing.T) {
 		Conn:           conn,
 		STUNServerAddr: testAddr,
 		TURNServerAddr: testAddr,
-		Username:       "user",
+		Username:       testUser,
 		Password:       "pass",
 		Realm:          "pion.ly",
 		LoggerFactory:  logging.NewDefaultLoggerFactory(),
@@ -1637,10 +1726,10 @@ func TestTLSHandshakeConnectionState(t *testing.T) {
 
 	// Create TURN server with TLS listener and auth handler that validates client certs
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 			// Check if TLS connection state is present and has peer certificates
 			if ra.TLS == nil || len(ra.TLS.PeerCertificates) == 0 {
-				return nil, false
+				return "", nil, false
 			}
 
 			tlsStateReceived = true
@@ -1658,10 +1747,10 @@ func TestTLSHandshakeConnectionState(t *testing.T) {
 				}
 
 				// Generate auth key based on the certificate CN
-				return GenerateAuthKey(cert.Subject.CommonName, "pion.ly", ""), true
+				return cert.Subject.CommonName, GenerateAuthKey(cert.Subject.CommonName, "pion.ly", ""), true
 			}
 
-			return nil, false
+			return "", nil, false
 		},
 		ListenerConfigs: []ListenerConfig{
 			{
@@ -1898,7 +1987,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 
 	loggerFactory := logging.NewDefaultLoggerFactory()
 	credMap := map[string][]byte{
-		"user": GenerateAuthKey("user", "pion.ly", "pass"),
+		testUser: GenerateAuthKey(testUser, "pion.ly", "pass"),
 	}
 
 	testSeq := []byte("benchmark-data")
@@ -1916,12 +2005,12 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 	defer serverConn.Close() //nolint:errcheck
 
 	server, err := NewServer(ServerConfig{
-		AuthHandler: func(ra *RequestAttributes) (key []byte, ok bool) {
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
 			if pw, ok := credMap[ra.Username]; ok {
-				return pw, true
+				return ra.Username, pw, true
 			}
 
-			return nil, false
+			return "", nil, false
 		},
 		PacketConnConfigs: []PacketConnConfig{{
 			PacketConn: serverConn,
@@ -1975,7 +2064,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 			STUNServerAddr: testAddr,
 			TURNServerAddr: testAddr,
 			Conn:           clientConn,
-			Username:       "user",
+			Username:       testUser,
 			Password:       "pass",
 			Realm:          "pion.ly",
 			LoggerFactory:  loggerFactory,

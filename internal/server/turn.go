@@ -30,7 +30,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	//    mechanism of [https://tools.ietf.org/html/rfc5389#section-10.2.2]
 	//    unless the client and server agree to use another mechanism through
 	//    some procedure outside the scope of this document.
-	messageIntegrity, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodAllocate)
+	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodAllocate)
 	if !hasAuth {
 		return err
 	}
@@ -210,7 +210,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	//    server is free to define this allocation quota any way it wishes,
 	//    but SHOULD define it based on the username used to authenticate
 	//    the request, and not on the client's transport address.
-	if req.QuotaHandler != nil && !req.QuotaHandler(username, realmAttr.String(), req.SrcAddr) {
+	if req.QuotaHandler != nil && !req.QuotaHandler(userID, realmAttr.String(), req.SrcAddr) {
 		quotaReachedMsg := buildMsg(stunMsg.TransactionID,
 			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
 			&stun.ErrorCodeAttribute{Code: stun.CodeAllocQuotaReached})
@@ -229,7 +229,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		requestedTransport.Protocol,
 		requestedPort,
 		lifetimeDuration,
-		username,
+		userID,
 		realmAttr.String(),
 		requestedFamily,
 	)
@@ -291,7 +291,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 	req.Log.Debugf("Received RefreshRequest from %s", req.SrcAddr)
 
-	messageIntegrity, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodRefresh)
+	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodRefresh)
 	if !hasAuth {
 		return err
 	}
@@ -303,7 +303,7 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 		Protocol: allocation.UDP,
 	}
 
-	a := req.AllocationManager.GetAllocationForUsername(fiveTuple, username) //nolint:varnamelen
+	a := req.AllocationManager.GetAllocationForUserID(fiveTuple, userID) //nolint:varnamelen
 	if a == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
 	}
@@ -371,16 +371,16 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 func handleCreatePermissionRequest(req Request, stunMsg *stun.Message) error {
 	req.Log.Debugf("Received CreatePermission from %s", req.SrcAddr)
 
-	messageIntegrity, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodCreatePermission)
+	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodCreatePermission)
 	if !hasAuth {
 		return err
 	}
 
-	alloc := req.AllocationManager.GetAllocationForUsername(&allocation.FiveTuple{
+	alloc := req.AllocationManager.GetAllocationForUserID(&allocation.FiveTuple{
 		SrcAddr:  req.SrcAddr,
 		DstAddr:  req.Conn.LocalAddr(),
 		Protocol: allocation.UDP,
-	}, username)
+	}, userID)
 	if alloc == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
 	}
@@ -482,16 +482,16 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error {
 		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
 	)
 
-	messageIntegrity, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodChannelBind)
+	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodChannelBind)
 	if !hasAuth {
 		return err
 	}
 
-	alloc := req.AllocationManager.GetAllocationForUsername(&allocation.FiveTuple{
+	alloc := req.AllocationManager.GetAllocationForUserID(&allocation.FiveTuple{
 		SrcAddr:  req.SrcAddr,
 		DstAddr:  req.Conn.LocalAddr(),
 		Protocol: allocation.UDP,
-	}, username)
+	}, userID)
 	if alloc == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
 	}
@@ -575,16 +575,16 @@ func handleChannelData(req Request, channelData *proto.ChannelData) error {
 func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 	req.Log.Debugf("Received Connect from %s", req.SrcAddr)
 
-	messageIntegrity, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodConnect)
+	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodConnect)
 	if !hasAuth {
 		return err
 	}
 
-	alloc := req.AllocationManager.GetAllocationForUsername(&allocation.FiveTuple{
+	alloc := req.AllocationManager.GetAllocationForUserID(&allocation.FiveTuple{
 		SrcAddr:  req.SrcAddr,
 		DstAddr:  req.Conn.LocalAddr(),
 		Protocol: allocation.UDP,
-	}, username)
+	}, userID)
 	if alloc == nil {
 		return fmt.Errorf("%w %v:%v", errNoAllocationFound, req.SrcAddr, req.Conn.LocalAddr())
 	}
@@ -655,7 +655,7 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
 	)
 
-	_, hasAuth, username, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
+	_, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
 	if !hasAuth {
 		return err
 	}
@@ -669,7 +669,7 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 	// and credentials as for the control connection.
 	//
 	// GetTCPConnection asserts that userName used for auth is same as allocation
-	tcpConn := req.AllocationManager.GetTCPConnection(username, connectionID)
+	tcpConn := req.AllocationManager.GetTCPConnection(userID, connectionID)
 	if tcpConn == nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}

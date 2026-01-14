@@ -105,7 +105,7 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 
-	ourKey, ok := req.AuthHandler(&auth.RequestAttributes{
+	userID, ourKey, ok := req.AuthHandler(&auth.RequestAttributes{
 		Username: usernameAttr.String(),
 		Realm:    realmAttr.String(),
 		SrcAddr:  req.SrcAddr,
@@ -128,7 +128,7 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 
 	genAuthEvent(req, stunMsg, callingMethod, true)
 
-	return stun.MessageIntegrity(ourKey), true, usernameAttr.String(), nil
+	return stun.MessageIntegrity(ourKey), true, userID, nil
 }
 
 func genAuthEvent(req Request, stunMsg *stun.Message, callingMethod stun.Method, verdict bool) {
@@ -141,6 +141,7 @@ func genAuthEvent(req Request, stunMsg *stun.Message, callingMethod stun.Method,
 		return
 	}
 
+	// Auth event is generated per the username, not the user-id.
 	usernameAttr := &stun.Username{}
 	if err := usernameAttr.GetFrom(stunMsg); err != nil {
 		return

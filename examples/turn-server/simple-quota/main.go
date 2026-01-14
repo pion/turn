@@ -62,24 +62,24 @@ func main() { // nolint:cyclop
 		// Set AuthHandler callback
 		// This is called every time a user tries to authenticate with the TURN server
 		// Return the key for that user, or false when no user is found
-		AuthHandler: func(ra *turn.RequestAttributes) ([]byte, bool) {
+		AuthHandler: func(ra *turn.RequestAttributes) (string, []byte, bool) {
 			if key, ok := usersMap[ra.Username]; ok {
-				return key, true
+				return ra.Username, key, true
 			}
 
-			return nil, false
+			return "", nil, false
 		},
 
 		// QuotaHandler allows rejecting allocations when a user exceeds a quota.
 		// This example limits concurrent allocations per user.
-		QuotaHandler: func(username, _ string, srcAddr net.Addr) (ok bool) {
+		QuotaHandler: func(userID, _ string, srcAddr net.Addr) (ok bool) {
 			userSessionLock.Lock()
 			defer userSessionLock.Unlock()
-			if userSessions[username] < maxAllocationsPerUser {
+			if userSessions[userID] < maxAllocationsPerUser {
 				return true
 			}
 
-			log.Printf("Allocation quota reached for user %q from %s", username, srcAddr.String())
+			log.Printf("Allocation quota reached for user-id %q from %s", userID, srcAddr.String())
 
 			return false
 		},
@@ -87,18 +87,18 @@ func main() { // nolint:cyclop
 		// Track allocations as they are Created+Deleted. This ensures that users
 		// don't have more then maxAllocationsPerUser at a time
 		EventHandler: turn.EventHandler{
-			OnAllocationCreated: func(_, _ net.Addr, _, username, _ string, _ net.Addr, _ int) {
+			OnAllocationCreated: func(_, _ net.Addr, _, userID, _ string, _ net.Addr, _ int) {
 				userSessionLock.Lock()
 				defer userSessionLock.Unlock()
 
-				userSessions[username]++
+				userSessions[userID]++
 			},
-			OnAllocationDeleted: func(_, _ net.Addr, _, username, _ string) {
+			OnAllocationDeleted: func(_, _ net.Addr, _, userID, _ string) {
 				userSessionLock.Lock()
 				defer userSessionLock.Unlock()
 
-				if userSessions[username] > 0 {
-					userSessions[username]--
+				if userSessions[userID] > 0 {
+					userSessions[userID]--
 				}
 			},
 		},
