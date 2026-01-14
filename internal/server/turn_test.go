@@ -883,6 +883,112 @@ func TestHandleChannelBindRequest(t *testing.T) {
 	})
 }
 
+// TestDuplicateAllocationRequest tests the scenario from issue #229
+// where a client makes multiple allocation requests from the same 5-tuple
+// but with different transaction IDs.
+//
+// Per RFC 5766 Section 6.2, the server checks if the 5-tuple is currently in use by an
+// existing allocation. If yes, the server rejects the request with a 437 (Allocation Mismatch)
+// error if the transaction ID differs from the cached transaction ID.
+func TestDuplicateAllocationRequest(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+			if listenErr != nil {
+				return nil, nil, listenErr
+			}
+
+			return con, con.LocalAddr(), nil
+		},
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			return nil, nil //nolint:nilnil
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+	defer allocationManager.Close() //nolint:errcheck
+
+	nonceHash, err := NewShortNonceHash(0)
+	assert.NoError(t, err)
+	staticKey, err := nonceHash.Generate()
+	assert.NoError(t, err)
+
+	req := Request{
+		AllocationManager:  allocationManager,
+		NonceHash:          nonceHash,
+		Conn:               conn,
+		SrcAddr:            &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+		Log:                logger,
+		AllocationLifetime: proto.DefaultLifetime,
+		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
+			return []byte(staticKey), true
+		},
+	}
+
+	// First allocation request with transaction ID 1
+	msg1 := &stun.Message{}
+	msg1.TransactionID = stun.NewTransactionID()
+	assert.NoError(t, msg1.Build(stun.NewType(stun.MethodAllocate, stun.ClassRequest)))
+	assert.NoError(t, (proto.RequestedTransport{Protocol: proto.ProtoUDP}).AddTo(msg1))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(msg1))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(msg1))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(msg1))
+	assert.NoError(t, (stun.Username("test")).AddTo(msg1))
+
+	// First request should succeed
+	err = handleAllocateRequest(req, msg1)
+	assert.NoError(t, err)
+
+	// Verify allocation exists
+	fiveTuple := &allocation.FiveTuple{
+		SrcAddr:  req.SrcAddr,
+		DstAddr:  req.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+	}
+	alloc := req.AllocationManager.GetAllocation(fiveTuple)
+	assert.NotNil(t, alloc)
+
+	// Second allocation request from the same 5-tuple but with a different transaction ID
+	msg2 := &stun.Message{}
+	msg2.TransactionID = stun.NewTransactionID() // Different transaction ID
+	assert.NoError(t, msg2.Build(stun.NewType(stun.MethodAllocate, stun.ClassRequest)))
+	assert.NoError(t, (proto.RequestedTransport{Protocol: proto.ProtoUDP}).AddTo(msg2))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(msg2))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(msg2))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(msg2))
+	assert.NoError(t, (stun.Username("test")).AddTo(msg2))
+
+	// Second request should fail with errRelayAlreadyAllocatedForFiveTuple
+	// This is the error reported in issue #229
+	err = handleAllocateRequest(req, msg2)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errRelayAlreadyAllocatedForFiveTuple)
+
+	// Test retry with same transaction ID (should succeed and return cached response)
+	// Per RFC 5766 Section 6.2, when the transaction ID matches the cached transaction ID,
+	// the server returns the cached response (proper retry mechanism).
+	t.Run("RetryWithSameTransactionID", func(t *testing.T) {
+		// Retry the first request with the same transaction ID
+		// This should succeed and return the cached response
+		err := handleAllocateRequest(req, msg1)
+		assert.NoError(t, err, "Retry with same transaction ID should succeed")
+
+		// Verify the allocation still exists and hasn't changed
+		allocRetry := req.AllocationManager.GetAllocation(fiveTuple)
+		assert.NotNil(t, allocRetry)
+		assert.Equal(t, alloc.RelayAddr, allocRetry.RelayAddr, "Relay address should be the same")
+	})
+}
+
 func TestHandleChannelData(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
