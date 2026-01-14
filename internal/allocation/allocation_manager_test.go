@@ -264,26 +264,30 @@ func TestCreateTCPConnection(t *testing.T) {
 	lns := make([]net.Listener, 3)
 	mu := sync.Mutex{} // make the race detector happy
 	acceptedConns := make([]net.Conn, 3)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	wg := sync.WaitGroup{}
+	errMu := sync.Mutex{}
+	acceptErrs := []error{}
 
 	var err error
 	for i := 0; i < 3; i++ {
 		lns[i], err = net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
+		wg.Add(1)
 		go func(j int) {
+			defer wg.Done()
 			conn, connErr := lns[j].Accept()
-			assert.NoError(t, connErr)
+			if connErr != nil {
+				errMu.Lock()
+				acceptErrs = append(acceptErrs, connErr)
+				errMu.Unlock()
+
+				return
+			}
 
 			mu.Lock()
 			acceptedConns[j] = conn
 			mu.Unlock()
-
-			if j == 2 {
-				cancel()
-			}
 		}(i)
 	}
 
@@ -321,14 +325,22 @@ func TestCreateTCPConnection(t *testing.T) {
 		assert.NoError(t, conn.Close())
 	}
 
-	<-ctx.Done()
+	wg.Wait()
+	errMu.Lock()
+	for _, err := range acceptErrs {
+		assert.NoError(t, err)
+	}
+	errMu.Unlock()
 
 	assert.NoError(t, turnSocket.Close())
 
-	mu.Lock()
-	defer mu.Unlock()
 	for i := 0; i < 3; i++ {
-		assert.NoError(t, acceptedConns[i].Close())
+		mu.Lock()
+		conn := acceptedConns[i]
+		mu.Unlock()
+		if assert.NotNil(t, conn) {
+			assert.NoError(t, conn.Close())
+		}
 		assert.NoError(t, lns[i].Close())
 	}
 }
