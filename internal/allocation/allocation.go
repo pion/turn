@@ -5,6 +5,7 @@
 package allocation
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -273,14 +274,14 @@ func (a *Allocation) removeTCPConnection(connectionID proto.ConnectionID) {
 	if conn, ok := a.tcpConnections[connectionID]; ok {
 		conn.bindTimer.Stop()
 
-		if err := conn.SetDeadline(time.Now()); err != nil {
+		if err := conn.SetDeadline(time.Now()); err != nil && !errors.Is(err, net.ErrClosed) {
 			a.log.Errorf("Failed to set deadline on TCP Connection %s %v",
 				a.fiveTuple,
 				err)
 		}
 
-		if err := conn.Close(); err != nil {
-			a.log.Errorf("Failed to TCP Socket for %s %v",
+		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			a.log.Errorf("Failed to close TCP Socket for %s %v",
 				a.fiveTuple,
 				err)
 		}
