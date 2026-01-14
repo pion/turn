@@ -331,7 +331,16 @@ func (m *Manager) CreateTCPConnection( // nolint: cyclop
 	}
 	m.lock.Unlock()
 
-	conn, err := m.allocateConn("tcp4", relayAddr, remoteAddr) // nolint: noctx
+	// RFC 6156:
+	// "After the request has been successfully authenticated, the TURN
+	// server allocates a transport address of the type indicated in the
+	// REQUESTED-ADDRESS-FAMILY attribute."
+	network := "tcp4"
+	if allocation.AddressFamily() == proto.RequestedFamilyIPv6 {
+		network = "tcp6"
+	}
+
+	conn, err := m.allocateConn(network, relayAddr, remoteAddr) // nolint: noctx
 	if err != nil {
 		m.log.Warnf("Failed to create TCP Connection: %v", err)
 

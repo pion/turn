@@ -22,7 +22,7 @@ const runesAlpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // See: https://tools.ietf.org/html/rfc5766#section-6.2
 // .
-func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:cyclop,gocyclo,maintidx
+func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:cyclop,gocyclo,maintidx,gocognit
 	req.Log.Debugf("Received AllocateRequest from %s", req.SrcAddr)
 
 	// 1. The server MUST require that the request be authenticated.  This
@@ -161,10 +161,30 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 
 	// RFC 6156: Parse REQUESTED-ADDRESS-FAMILY attribute if present.
 	// If absent, default to IPv4 per RFC 6156 Section 4.1.1.
+	// "If the REQUESTED-ADDRESS-FAMILY attribute is absent, the server MUST
+	// allocate an IPv4-relayed transport address for the TURN client."
+	// "Length:  this 16-bit field contains the length of the attribute in
+	// bytes.  The length of this attribute is 4 bytes."
+	// "If the server does not support the address family requested by the
+	// client, it MUST generate an Allocate error response, and it MUST
+	// include an ERROR-CODE attribute with the 440 (Address Family not
+	// Supported) response code, which is defined in Section 4.2.1."
 	var requestedFamily proto.RequestedAddressFamily
 	if err = requestedFamily.GetFrom(stunMsg); err != nil {
-		// Attribute not present or malformed - default to IPv4
-		requestedFamily = proto.RequestedFamilyIPv4
+		switch {
+		case errors.Is(err, stun.ErrAttributeNotFound):
+			requestedFamily = proto.RequestedFamilyIPv4
+		case stun.IsAttrSizeInvalid(err) || stun.IsAttrSizeOverflow(err):
+			return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		default:
+			msg := buildMsg(
+				stunMsg.TransactionID,
+				stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+				&stun.ErrorCodeAttribute{Code: stun.CodeAddrFamilyNotSupported},
+			)
+
+			return buildAndSendErr(req.Conn, req.SrcAddr, errUnsupportedAddressFamily, msg...)
+		}
 	}
 
 	// RFC 6156: Check if the requested address family is supported.
@@ -290,9 +310,24 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 
 	// RFC 6156: If REQUESTED-ADDRESS-FAMILY is present in Refresh request,
 	// it must match the allocation's address family.
+	// "The client MUST NOT include any REQUESTED-ADDRESS-FAMILY attribute in
+	// its Refresh Request."
+	// "If a server receives a Refresh Request with a REQUESTED-ADDRESS-
+	// FAMILY attribute, and the attribute's value doesn't match the address
+	// family of the allocation, the server MUST reply with a 443 (Peer
+	// Address Family Mismatch) Refresh error response."
 	var requestedFamily proto.RequestedAddressFamily
-	if err = requestedFamily.GetFrom(stunMsg); err == nil {
-		if requestedFamily != a.AddressFamily() {
+	badRequestMsg := buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
+		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
+	)
+	if err = requestedFamily.GetFrom(stunMsg); err != nil {
+		switch {
+		case errors.Is(err, stun.ErrAttributeNotFound):
+		case stun.IsAttrSizeInvalid(err) || stun.IsAttrSizeOverflow(err):
+			return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		default:
 			msg := buildMsg(
 				stunMsg.TransactionID,
 				stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
@@ -301,6 +336,14 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 
 			return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, msg...)
 		}
+	} else if requestedFamily != a.AddressFamily() {
+		msg := buildMsg(
+			stunMsg.TransactionID,
+			stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch},
+		)
+
+		return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, msg...)
 	}
 
 	if lifetimeDuration != 0 {

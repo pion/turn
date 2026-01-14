@@ -197,3 +197,26 @@ func TestTCPConn(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func TestTCPAllocationServerTCPAddrPreservesZone(t *testing.T) {
+	zone := "eth0"
+	ip := net.ParseIP("fe80::1")
+
+	alloc := TCPAllocation{allocation: allocation{
+		serverAddr: &net.TCPAddr{IP: ip, Port: 3478, Zone: zone},
+	}}
+	addr, err := alloc.serverTCPAddr()
+	assert.NoError(t, err)
+	assert.Equal(t, zone, addr.Zone)
+	assert.Equal(t, ip, addr.IP)
+	assert.Equal(t, 3478, addr.Port)
+
+	alloc = TCPAllocation{allocation: allocation{
+		serverAddr: &net.UDPAddr{IP: ip, Port: 3478, Zone: zone},
+	}}
+	addr, err = alloc.serverTCPAddr()
+	assert.NoError(t, err)
+	assert.Equal(t, zone, addr.Zone)
+	assert.Equal(t, ip, addr.IP)
+	assert.Equal(t, 3478, addr.Port)
+}

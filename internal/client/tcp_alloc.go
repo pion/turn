@@ -149,21 +149,35 @@ func (a *TCPAllocation) DialWithConn(conn net.Conn, network, rAddrStr string) (*
 	return a.DialTCPWithConn(conn, network, rAddr)
 }
 
+// RFC 6156:
+// "TURN can run over UDP and TCP, and it allows for a client to request
+// address/port pairs for receiving both UDP and TCP."
+// "This document adds IPv6 support to TURN, which includes IPv4-to-IPv6,
+// IPv6-to-IPv6, and IPv6-to-IPv4 relaying.".
+func (a *TCPAllocation) serverTCPAddr() (*net.TCPAddr, error) {
+	if addr, ok := a.serverAddr.(*net.TCPAddr); ok {
+		return &net.TCPAddr{
+			IP:   addr.IP,
+			Port: addr.Port,
+			Zone: addr.Zone,
+		}, nil
+	}
+	if addr, ok := a.serverAddr.(*net.UDPAddr); ok {
+		return &net.TCPAddr{
+			IP:   addr.IP,
+			Port: addr.Port,
+			Zone: addr.Zone,
+		}, nil
+	}
+
+	return nil, errInvalidTURNAddress
+}
+
 // DialTCP acts like Dial for TCP networks.
 func (a *TCPAllocation) DialTCP(network string, lAddr, rAddr *net.TCPAddr) (*TCPConn, error) {
-	var rAddrServer *net.TCPAddr
-	if addr, ok := a.serverAddr.(*net.TCPAddr); ok {
-		rAddrServer = &net.TCPAddr{
-			IP:   addr.IP,
-			Port: addr.Port,
-		}
-	} else if addr, ok := a.serverAddr.(*net.UDPAddr); ok {
-		rAddrServer = &net.TCPAddr{
-			IP:   addr.IP,
-			Port: addr.Port,
-		}
-	} else {
-		return nil, errInvalidTURNAddress
+	rAddrServer, err := a.serverTCPAddr()
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := a.net.DialTCP(network, lAddr, rAddrServer)
@@ -296,7 +310,7 @@ func (a *TCPAllocation) Accept() (net.Conn, error) {
 
 // AcceptTCP accepts the next incoming call and returns the new connection.
 func (a *TCPAllocation) AcceptTCP() (transport.TCPConn, error) {
-	addr, err := net.ResolveTCPAddr("tcp4", a.serverAddr.String())
+	addr, err := a.serverTCPAddr()
 	if err != nil {
 		return nil, err
 	}

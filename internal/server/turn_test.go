@@ -509,6 +509,67 @@ func TestRequestedAddressFamilyMutualExclusivity(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestHandleRefreshRequestRequestedAddressFamilyMismatch(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+			if listenErr != nil {
+				return nil, nil, listenErr
+			}
+
+			return con, con.LocalAddr(), nil
+		},
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			return nil, nil //nolint:nilnil
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+	defer allocationManager.Close() //nolint:errcheck
+
+	nonceHash, err := NewShortNonceHash(0)
+	assert.NoError(t, err)
+	staticKey, err := nonceHash.Generate()
+	assert.NoError(t, err)
+
+	req := Request{
+		AllocationManager: allocationManager,
+		NonceHash:         nonceHash,
+		Conn:              conn,
+		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+		Log:               logger,
+		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
+			return []byte(staticKey), true
+		},
+	}
+
+	fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
+	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
+		0, time.Hour, "test", "", proto.RequestedFamilyIPv4)
+	assert.NoError(t, err)
+
+	m := &stun.Message{}
+	m.TransactionID = stun.NewTransactionID()
+	assert.NoError(t, m.Build(stun.NewType(stun.MethodRefresh, stun.ClassRequest)))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
+	assert.NoError(t, (stun.Username("test")).AddTo(m))
+	m.Add(stun.AttrRequestedAddressFamily, []byte{0x03, 0x00, 0x00, 0x00})
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
+
+	err = handleRefreshRequest(req, m)
+	assert.ErrorIs(t, err, errPeerAddressFamilyMismatch)
+}
+
 func TestIPMatchesFamily(t *testing.T) {
 	t.Run("IPv4", func(t *testing.T) {
 		ipv4 := net.ParseIP("192.168.1.1")

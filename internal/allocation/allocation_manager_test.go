@@ -345,6 +345,79 @@ func TestCreateTCPConnection(t *testing.T) {
 	}
 }
 
+// RFC 6156:
+// "After the request has been successfully authenticated, the TURN
+// server allocates a transport address of the type indicated in the
+// REQUESTED-ADDRESS-FAMILY attribute.".
+func TestCreateTCPConnectionUsesAddressFamily(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	var networks []string
+
+	manager, err := NewManager(ManagerConfig{
+		LeveledLogger: loggerFactory.NewLogger("test"),
+		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+			addr := "0.0.0.0:0"
+			if network == "udp6" {
+				addr = "[::]:0"
+			}
+
+			conn, listenErr := net.ListenPacket(network, addr) // nolint: noctx
+			if listenErr != nil {
+				return nil, nil, listenErr
+			}
+
+			return conn, conn.LocalAddr(), nil
+		},
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			networks = append(networks, network)
+
+			return &mockConn{localAddr: laddr, remoteAddr: raddr}, nil
+		},
+	})
+	assert.NoError(t, err)
+
+	turnSocket4, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, turnSocket4.Close())
+	}()
+
+	turnSocket6, err := net.ListenPacket("udp6", "[::]:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer func() {
+		assert.NoError(t, turnSocket6.Close())
+	}()
+
+	fiveTuple4 := &FiveTuple{
+		SrcAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+		DstAddr: &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5001},
+	}
+	alloc4, err := manager.CreateAllocation(fiveTuple4, turnSocket4, proto.ProtoTCP,
+		0, proto.DefaultLifetime, "", "", proto.RequestedFamilyIPv4)
+	assert.NoError(t, err)
+	alloc4.RelayAddr = &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5002}
+
+	_, err = manager.CreateTCPConnection(alloc4, proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5003})
+	assert.NoError(t, err)
+
+	fiveTuple6 := &FiveTuple{
+		SrcAddr: &net.UDPAddr{IP: net.ParseIP("::1"), Port: 5004},
+		DstAddr: &net.UDPAddr{IP: net.ParseIP("::1"), Port: 5005},
+	}
+	alloc6, err := manager.CreateAllocation(fiveTuple6, turnSocket6, proto.ProtoTCP,
+		0, proto.DefaultLifetime, "", "", proto.RequestedFamilyIPv6)
+	assert.NoError(t, err)
+	alloc6.RelayAddr = &net.TCPAddr{IP: net.ParseIP("::1"), Port: 5006}
+
+	_, err = manager.CreateTCPConnection(alloc6, proto.PeerAddress{IP: net.ParseIP("::1"), Port: 5007})
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"tcp4", "tcp6"}, networks)
+}
+
 func TestCreateTCPConnectionDuplicateTCPConn(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
 	assert.NoError(t, err)
