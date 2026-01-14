@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const testUser = "test"
+
 func TestAllocationLifeTime(t *testing.T) {
 	report := test.CheckRoutines(t)
 	defer report()
@@ -90,15 +92,15 @@ func TestAllocationLifeTime(t *testing.T) {
 			Conn:              conn,
 			SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 			Log:               logger,
-			AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-				return []byte(staticKey), true
+			AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+				return testUser, []byte(staticKey), true
 			},
 		}
 
 		fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
 		_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
-			0, time.Hour, "test", "", proto.RequestedFamilyIPv4)
+			0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
 		assert.NoError(t, err)
 
 		assert.NotNil(t, req.AllocationManager.GetAllocation(fiveTuple))
@@ -108,7 +110,7 @@ func TestAllocationLifeTime(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 
 		assert.NoError(t, handleRefreshRequest(req, m))
 		assert.Nil(t, req.AllocationManager.GetAllocation(fiveTuple))
@@ -153,8 +155,8 @@ func TestRequestedTransport(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -208,8 +210,8 @@ func TestConnectRequest(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -227,7 +229,7 @@ func TestConnectRequest(t *testing.T) {
 	fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
 
 	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
-		0, time.Hour, "test", "", proto.RequestedFamilyIPv4)
+		0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
 	assert.NoError(t, err)
 
 	stunMsg := &stun.Message{}
@@ -235,7 +237,7 @@ func TestConnectRequest(t *testing.T) {
 	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(stunMsg))
 	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(stunMsg))
 	assert.NoError(t, (stun.Realm(staticKey)).AddTo(stunMsg))
-	assert.NoError(t, (stun.Username("test")).AddTo(stunMsg))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(stunMsg))
 	assert.ErrorIs(t, handleConnectRequest(req, stunMsg), stun.ErrAttributeNotFound)
 
 	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: 5000}).AddTo(stunMsg))
@@ -249,7 +251,7 @@ func TestConnectRequest(t *testing.T) {
 	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(stunMsg))
 	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(stunMsg))
 	assert.NoError(t, (stun.Realm(staticKey)).AddTo(stunMsg))
-	assert.NoError(t, (stun.Username("test")).AddTo(stunMsg))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(stunMsg))
 	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("127.0.0.1"), Port: tcpAddr.Port}).AddTo(stunMsg))
 	assert.NoError(t, handleConnectRequest(req, stunMsg))
 	assert.ErrorIs(t, handleConnectRequest(req, stunMsg), allocation.ErrDupeTCPConnection)
@@ -295,8 +297,8 @@ func TestConnectionBindRequest(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return "", []byte(staticKey), true
 		},
 	}
 
@@ -366,8 +368,8 @@ func TestRequestedAddressFamilyIPv6(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("::1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -379,7 +381,7 @@ func TestRequestedAddressFamilyIPv6(t *testing.T) {
 
 	// Create IPv6 allocation
 	alloc, err := req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
-		0, time.Hour, "test", "", proto.RequestedFamilyIPv6)
+		0, time.Hour, testUser, "", proto.RequestedFamilyIPv6)
 	assert.NoError(t, err)
 	assert.NotNil(t, alloc)
 	assert.Equal(t, proto.RequestedFamilyIPv6, alloc.AddressFamily())
@@ -427,8 +429,8 @@ func TestRequestedAddressFamilyUnsupported(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -486,8 +488,8 @@ func TestRequestedAddressFamilyMutualExclusivity(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -547,8 +549,8 @@ func TestHandleRefreshRequestRequestedAddressFamilyMismatch(t *testing.T) {
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -562,7 +564,7 @@ func TestHandleRefreshRequestRequestedAddressFamilyMismatch(t *testing.T) {
 	assert.NoError(t, m.Build(stun.NewType(stun.MethodRefresh, stun.ClassRequest)))
 	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 	assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-	assert.NoError(t, (stun.Username("test")).AddTo(m))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 	m.Add(stun.AttrRequestedAddressFamily, []byte{0x03, 0x00, 0x00, 0x00})
 	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 
@@ -634,8 +636,8 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		Conn:              conn,
 		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:               logger,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 		PermissionTimeout: 5 * time.Minute,
 	}
@@ -647,7 +649,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 
 		err = handleCreatePermissionRequest(req, m)
 		assert.Error(t, err)
@@ -661,7 +663,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		Protocol: allocation.UDP,
 	}
 	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
-		0, time.Hour, "test", "", proto.RequestedFamilyIPv4)
+		0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
 	assert.NoError(t, err)
 
 	t.Run("SuccessIPv4", func(t *testing.T) { //nolint:dupl
@@ -671,7 +673,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.1.1"), Port: 8080}).AddTo(m))
 
 		err = handleCreatePermissionRequest(req, m)
@@ -685,7 +687,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 		// Try to add IPv6 peer address to IPv4 allocation
 		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("2001:db8::1"), Port: 8080}).AddTo(m))
 
@@ -701,7 +703,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 		// No peer address added
 
 		err = handleCreatePermissionRequest(req, m)
@@ -803,7 +805,7 @@ func TestHandleSendIndication(t *testing.T) {
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodSend, stun.ClassIndication)))
-		assert.NoError(t, (proto.Data([]byte("test"))).AddTo(m))
+		assert.NoError(t, (proto.Data([]byte(testUser))).AddTo(m))
 		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.1.1"), Port: 8080}).AddTo(m))
 
 		err = handleSendIndication(req, m)
@@ -854,8 +856,8 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		Log:                logger,
 		ChannelBindTimeout: 10 * time.Minute,
 		PermissionTimeout:  5 * time.Minute,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
 		},
 	}
 
@@ -866,7 +868,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 
 		err = handleChannelBindRequest(req, m)
 		assert.Error(t, err)
@@ -880,7 +882,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		Protocol: allocation.UDP,
 	}
 	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
-		0, time.Hour, "test", "", proto.RequestedFamilyIPv4)
+		0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
 	assert.NoError(t, err)
 
 	t.Run("MissingChannelNumber", func(t *testing.T) {
@@ -890,7 +892,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 
 		err = handleChannelBindRequest(req, m)
 		assert.Error(t, err)
@@ -903,7 +905,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 		assert.NoError(t, (proto.ChannelNumber(0x4000)).AddTo(m))
 
 		err = handleChannelBindRequest(req, m)
@@ -918,7 +920,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 		assert.NoError(t, (proto.ChannelNumber(0x4000)).AddTo(m))
 		// Try to bind IPv6 peer to IPv4 allocation
 		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("2001:db8::1"), Port: 8080}).AddTo(m))
@@ -935,7 +937,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
-		assert.NoError(t, (stun.Username("test")).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
 		assert.NoError(t, (proto.ChannelNumber(0x4000)).AddTo(m))
 		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.1.1"), Port: 8080}).AddTo(m))
 
@@ -944,14 +946,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 	})
 }
 
-// TestDuplicateAllocationRequest tests the scenario from issue #229
-// where a client makes multiple allocation requests from the same 5-tuple
-// but with different transaction IDs.
-//
-// Per RFC 5766 Section 6.2, the server checks if the 5-tuple is currently in use by an
-// existing allocation. If yes, the server rejects the request with a 437 (Allocation Mismatch)
-// error if the transaction ID differs from the cached transaction ID.
-func TestDuplicateAllocationRequest(t *testing.T) {
+func TestHandleAllocationRequest(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)
 	defer conn.Close() //nolint:errcheck
@@ -990,8 +985,8 @@ func TestDuplicateAllocationRequest(t *testing.T) {
 		SrcAddr:            &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
 		Log:                logger,
 		AllocationLifetime: proto.DefaultLifetime,
-		AuthHandler: func(*auth.RequestAttributes) (key []byte, ok bool) {
-			return []byte(staticKey), true
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return "test-id", []byte(staticKey), true
 		},
 	}
 
@@ -1003,7 +998,88 @@ func TestDuplicateAllocationRequest(t *testing.T) {
 	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(msg1))
 	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(msg1))
 	assert.NoError(t, (stun.Realm(staticKey)).AddTo(msg1))
-	assert.NoError(t, (stun.Username("test")).AddTo(msg1))
+	assert.NoError(t, (stun.Username("test-name")).AddTo(msg1))
+
+	// First request should succeed
+	err = handleAllocateRequest(req, msg1)
+	assert.NoError(t, err)
+
+	// Verify allocation exists
+	fiveTuple := &allocation.FiveTuple{
+		SrcAddr:  req.SrcAddr,
+		DstAddr:  req.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+	}
+	alloc := req.AllocationManager.GetAllocation(fiveTuple)
+	assert.NotNil(t, alloc)
+
+	// Test if allocation was created for the user-id instead of the username
+	alloc = req.AllocationManager.GetAllocationForUserID(fiveTuple, "test-id")
+	assert.NotNil(t, alloc)
+	alloc = req.AllocationManager.GetAllocationForUserID(fiveTuple, "test-name")
+	assert.Nil(t, alloc)
+}
+
+// TestDuplicateAllocationRequest tests the scenario from issue #229
+// where a client makes multiple allocation requests from the same 5-tuple
+// but with different transaction IDs.
+//
+// Per RFC 5766 Section 6.2, the server checks if the 5-tuple is currently in use by an
+// existing allocation. If yes, the server rejects the request with a 437 (Allocation Mismatch)
+// error if the transaction ID differs from the cached transaction ID.
+func TestHandleDuplicateAllocationRequest(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+			if listenErr != nil {
+				return nil, nil, listenErr
+			}
+
+			return con, con.LocalAddr(), nil
+		},
+		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			return nil, nil //nolint:nilnil
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+	defer allocationManager.Close() //nolint:errcheck
+
+	nonceHash, err := NewShortNonceHash(0)
+	assert.NoError(t, err)
+	staticKey, err := nonceHash.Generate()
+	assert.NoError(t, err)
+
+	req := Request{
+		AllocationManager:  allocationManager,
+		NonceHash:          nonceHash,
+		Conn:               conn,
+		SrcAddr:            &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+		Log:                logger,
+		AllocationLifetime: proto.DefaultLifetime,
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
+		},
+	}
+
+	// First allocation request with transaction ID 1
+	msg1 := &stun.Message{}
+	msg1.TransactionID = stun.NewTransactionID()
+	assert.NoError(t, msg1.Build(stun.NewType(stun.MethodAllocate, stun.ClassRequest)))
+	assert.NoError(t, (proto.RequestedTransport{Protocol: proto.ProtoUDP}).AddTo(msg1))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(msg1))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(msg1))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(msg1))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(msg1))
 
 	// First request should succeed
 	err = handleAllocateRequest(req, msg1)
@@ -1026,7 +1102,7 @@ func TestDuplicateAllocationRequest(t *testing.T) {
 	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(msg2))
 	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(msg2))
 	assert.NoError(t, (stun.Realm(staticKey)).AddTo(msg2))
-	assert.NoError(t, (stun.Username("test")).AddTo(msg2))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(msg2))
 
 	// Second request should fail with errRelayAlreadyAllocatedForFiveTuple
 	// This is the error reported in issue #229

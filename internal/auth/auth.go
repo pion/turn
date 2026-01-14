@@ -23,4 +23,4 @@ type RequestAttributes struct {
 
 // AuthHandler is a callback used to handle incoming auth requests,
 // allowing users to customize Pion TURN with custom behavior.
-type AuthHandler func(ra *RequestAttributes) (key []byte, ok bool)
+type AuthHandler func(ra *RequestAttributes) (userID string, key []byte, ok bool)

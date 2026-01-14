@@ -57,27 +57,27 @@ func NewLongTermAuthHandler(sharedSecret string, logger logging.LeveledLogger) A
 		logger = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
 
-	return func(ra *auth.RequestAttributes) (key []byte, ok bool) {
+	return func(ra *auth.RequestAttributes) (userID string, key []byte, ok bool) {
 		logger.Tracef("Authentication username=%q realm=%q srcAddr=%v", ra.Username, ra.Realm, ra.SrcAddr)
 		t, err := strconv.Atoi(ra.Username)
 		if err != nil {
 			logger.Errorf("Invalid time-windowed username %q", ra.Username)
 
-			return nil, false
+			return "", nil, false
 		}
 		if int64(t) < time.Now().Unix() {
 			logger.Errorf("Expired time-windowed username %q", ra.Username)
 
-			return nil, false
+			return "", nil, false
 		}
 		password, err := longTermCredentials(ra.Username, sharedSecret)
 		if err != nil {
 			logger.Error(err.Error())
 
-			return nil, false
+			return "", nil, false
 		}
 
-		return GenerateAuthKey(ra.Username, ra.Realm, password), true
+		return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, password), true
 	}
 }
 
@@ -92,27 +92,36 @@ func LongTermTURNRESTAuthHandler(sharedSecret string, logger logging.LeveledLogg
 		logger = logging.NewDefaultLoggerFactory().NewLogger("turn")
 	}
 
-	return func(ra *auth.RequestAttributes) (key []byte, ok bool) {
+	return func(ra *auth.RequestAttributes) (string, []byte, bool) {
 		logger.Tracef("Authentication username=%q realm=%q srcAddr=%v", ra.Username, ra.Realm, ra.SrcAddr)
-		timestamp := strings.Split(ra.Username, ":")[0]
+
+		// Parse timestamp and userID. Set userID to the full username if the id cannot be
+		// parsed.
+		fields := strings.Split(ra.Username, ":")
+		timestamp := fields[0]
+		userID := ra.Username
+		if len(fields) > 0 {
+			userID = fields[1]
+		}
+
 		t, err := strconv.Atoi(timestamp)
 		if err != nil {
 			logger.Errorf("Invalid time-windowed username %q", ra.Username)
 
-			return nil, false
+			return "", nil, false
 		}
 		if int64(t) < time.Now().Unix() {
 			logger.Errorf("Expired time-windowed username %q", ra.Username)
 
-			return nil, false
+			return "", nil, false
 		}
 		password, err := longTermCredentials(ra.Username, sharedSecret)
 		if err != nil {
 			logger.Error(err.Error())
 
-			return nil, false
+			return "", nil, false
 		}
 
-		return GenerateAuthKey(ra.Username, ra.Realm, password), true
+		return userID, GenerateAuthKey(ra.Username, ra.Realm, password), true
 	}
 }

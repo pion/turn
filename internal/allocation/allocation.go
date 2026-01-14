@@ -42,7 +42,7 @@ type Allocation struct {
 	channelBindings     []*ChannelBind
 	lifetimeTimer       *time.Timer
 	closed              chan any
-	username, realm     string
+	userID, realm       string
 	eventHandler        EventHandler
 	log                 logging.LeveledLogger
 	addressFamily       proto.RequestedAddressFamily // RFC 6156
@@ -110,7 +110,7 @@ func (a *Allocation) AddPermission(perms *Permission) {
 	if a.eventHandler.OnPermissionCreated != nil {
 		if u, ok := perms.Addr.(*net.UDPAddr); ok {
 			a.eventHandler.OnPermissionCreated(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
-				a.fiveTuple.Protocol.String(), a.username, a.realm,
+				a.fiveTuple.Protocol.String(), a.userID, a.realm,
 				a.RelayAddr, u.IP)
 		}
 	}
@@ -127,7 +127,7 @@ func (a *Allocation) RemovePermission(addr net.Addr) {
 	if a.eventHandler.OnPermissionDeleted != nil {
 		if u, ok := addr.(*net.UDPAddr); ok {
 			a.eventHandler.OnPermissionDeleted(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
-				a.fiveTuple.Protocol.String(), a.username, a.realm,
+				a.fiveTuple.Protocol.String(), a.userID, a.realm,
 				a.RelayAddr, u.IP)
 		}
 	}
@@ -170,7 +170,7 @@ func (a *Allocation) AddChannelBind(chanBind *ChannelBind, channelLifetime, perm
 
 		if a.eventHandler.OnChannelCreated != nil {
 			a.eventHandler.OnChannelCreated(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
-				a.fiveTuple.Protocol.String(), a.username, a.realm,
+				a.fiveTuple.Protocol.String(), a.userID, a.realm,
 				a.RelayAddr, chanBind.Peer, uint16(chanBind.Number))
 		}
 	} else {
@@ -192,7 +192,7 @@ func (a *Allocation) RemoveChannelBind(number proto.ChannelNumber) bool {
 		if a.channelBindings[i].Number == number {
 			if a.eventHandler.OnChannelDeleted != nil {
 				a.eventHandler.OnChannelDeleted(a.fiveTuple.SrcAddr, a.fiveTuple.DstAddr,
-					a.fiveTuple.Protocol.String(), a.username, a.realm,
+					a.fiveTuple.Protocol.String(), a.userID, a.realm,
 					a.RelayAddr, a.channelBindings[i].Peer, uint16(a.channelBindings[i].Number))
 			}
 

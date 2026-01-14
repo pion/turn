@@ -29,11 +29,11 @@ import (
 // In your own code, you may choose to use some other uniquely-identifying property
 // in the certificate e.g. serial number or combination of SANs.
 func getClientTLSAuthHandler(verifyOpts x509.VerifyOptions) turn.AuthHandler {
-	return func(ra *turn.RequestAttributes) ([]byte, bool) {
+	return func(ra *turn.RequestAttributes) (string, []byte, bool) {
 		if ra.TLS == nil || len(ra.TLS.PeerCertificates) == 0 {
 			log.Printf("Request not allowed: no TLS state metadata")
 
-			return nil, false
+			return "", nil, false
 		}
 
 		for _, cert := range ra.TLS.PeerCertificates {
@@ -52,12 +52,12 @@ func getClientTLSAuthHandler(verifyOpts x509.VerifyOptions) turn.AuthHandler {
 			log.Printf("Certificate validated for username %q", ra.Username)
 
 			// Note the empty password for certificate-based auth
-			return turn.GenerateAuthKey(ra.Username, ra.Realm, ""), true
+			return ra.Username, turn.GenerateAuthKey(ra.Username, ra.Realm, ""), true
 		}
 
 		log.Printf("Request not allowed: no valid certificates found")
 
-		return nil, false
+		return "", nil, false
 	}
 }
 
