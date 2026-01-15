@@ -2,6 +2,7 @@
 
 - [turn-server](#turn-server)
 	- [add-software-attribute](#add-software-attribute) - Add custom SOFTWARE attribute to STUN packets
+	- [bw-quota](#bw-quota) - TURN server with per-user bandwidth rate-limiting
 	- [log](#log) - Log all inbound/outbound STUN packets
 	- [simple](#simple) - Minimal TURN server implementation
 	- [simple-quota](#simple-quota) - TURN server with per-user allocation limits
@@ -48,6 +49,29 @@ This examples adds the SOFTWARE attribute with the value
 if you want to add debug info to your outbound packets.
 
 You could also use this same pattern to filter/modify packets if needed.
+
+#### bw-quota
+
+This example demonstrates per-user bandwidth rate limiting. Each user
+(identified by username+realm) gets their own token bucket rate limiter
+that caps total bandwidth usage across all their relay connections.
+
+The implementation wraps the relay `PacketConn` with a rate-limited
+connection that silently drops packets when the quota is exceeded. Both
+upload and download traffic share the same rate limit.
+
+``` sh
+$ cd bw-quota
+$ go build
+$ ./bw-quota -public-ip 127.0.0.1 -users user1=pass1 -bw-limit 12500
+```
+
+The `-bw-limit` flag sets bytes/sec per user (default: 12500 = 100 Kbps).
+Use `-test` to start a built-in TURN client and UDP echo server for
+testing with tools like `iperf`.
+
+See the [bw-quota README](turn-server/bw-quota/README.md) for detailed
+testing instructions with parallel iperf sessions.
 
 #### log
 
