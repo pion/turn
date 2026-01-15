@@ -20,12 +20,53 @@ import (
 // MUST be closed.
 const defaultTCPConnectionBindTimeout = time.Second * 30
 
+// AllocateListenerConfig contains the parameters passed to the relay address allocator
+// when creating a new UDP or TCP allocation.
+type AllocateListenerConfig struct {
+	// Network specifies the network type for the allocation: "udp4", "udp6", "tcp4", or "tcp6".
+	Network string
+	// UserID is the authenticated user's identifier as returned by the AuthHandler.
+	//
+	// Note: The UserID is typcally the same as the TURN username, except for authentication
+	// schemes that overload the username field with additional info (e.g., the lifetime of the
+	// credential, as in the time-windowed credential mechanism in
+	// https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00.
+	UserID string
+	// Realm is the TURN realm for this allocation.
+	Realm string
+	// RequestedPort is the port requested by the client in the TURN Allocate request.
+	// A value of 0 indicates that the client did not request a specific port and any
+	// available port may be used.
+	RequestedPort int
+}
+
+// AllocateConnConfig contains the parameters passed to the relay address allocator
+// when creating a new outbound TCP connection for RFC 6062 (TURN TCP) Connect requests.
+type AllocateConnConfig struct {
+	// Network specifies the network type for the connection: "tcp4" or "tcp6".
+	Network string
+	// UserID is the authenticated user's identifier as returned by the AuthHandler.
+	//
+	// Note: The UserID is typcally the same as the TURN username, except for authentication
+	// schemes that overload the username field with additional info (e.g., the lifetime of the
+	// credential, as in the time-windowed credential mechanism in
+	// https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00.
+	UserID string
+	// Realm is the TURN realm for this allocation.
+	Realm string
+	// LocalAddr is the relay address to bind the local side of the connection
+	// to. Implementations must allocate the local address as requested.
+	LocalAddr net.Addr
+	// RemoteAddr is the peer address to connect to.
+	RemoteAddr net.Addr
+}
+
 // ManagerConfig a bag of config params for Manager.
 type ManagerConfig struct {
 	LeveledLogger      logging.LeveledLogger
-	AllocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	AllocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
-	AllocateConn       func(network string, laddr, raddr net.Addr) (net.Conn, error)
+	AllocatePacketConn func(info AllocateListenerConfig) (net.PacketConn, net.Addr, error)
+	AllocateListener   func(info AllocateListenerConfig) (net.Listener, net.Addr, error)
+	AllocateConn       func(info AllocateConnConfig) (net.Conn, error)
 	PermissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
 
@@ -46,9 +87,9 @@ type Manager struct {
 	allocations  map[FiveTupleFingerprint]*Allocation
 	reservations []*reservation
 
-	allocatePacketConn func(network string, requestedPort int) (net.PacketConn, net.Addr, error)
-	allocateListener   func(network string, requestedPort int) (net.Listener, net.Addr, error)
-	allocateConn       func(network string, laddr, raddr net.Addr) (net.Conn, error)
+	allocatePacketConn func(conf AllocateListenerConfig) (net.PacketConn, net.Addr, error)
+	allocateListener   func(conf AllocateListenerConfig) (net.Listener, net.Addr, error)
+	allocateConn       func(conf AllocateConnConfig) (net.Conn, error)
 	permissionHandler  func(sourceAddr net.Addr, peerIP net.IP) bool
 	EventHandler       EventHandler
 }
@@ -160,7 +201,12 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 		if addressFamily == proto.RequestedFamilyIPv6 {
 			network = "udp6"
 		}
-		conn, relayAddr, err := m.allocatePacketConn(network, requestedPort)
+		conn, relayAddr, err := m.allocatePacketConn(AllocateListenerConfig{
+			Network:       network,
+			UserID:        userID,
+			Realm:         realm,
+			RequestedPort: requestedPort,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +217,12 @@ func (m *Manager) CreateAllocation( // nolint: cyclop
 		if addressFamily == proto.RequestedFamilyIPv6 {
 			network = "tcp6"
 		}
-		ln, relayAddr, err := m.allocateListener(network, requestedPort)
+		ln, relayAddr, err := m.allocateListener(AllocateListenerConfig{
+			Network:       network,
+			UserID:        userID,
+			Realm:         realm,
+			RequestedPort: requestedPort,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +321,7 @@ func (m *Manager) GetReservation(reservationToken string) (int, bool) {
 // GetRandomEvenPort returns a random un-allocated udp4 port.
 func (m *Manager) GetRandomEvenPort() (int, error) {
 	for i := 0; i < 128; i++ {
-		conn, addr, err := m.allocatePacketConn("udp4", 0)
+		conn, addr, err := m.allocatePacketConn(AllocateListenerConfig{Network: "udp4"})
 		if err != nil {
 			return 0, err
 		}
@@ -340,7 +391,13 @@ func (m *Manager) CreateTCPConnection( // nolint: cyclop
 		network = "tcp6"
 	}
 
-	conn, err := m.allocateConn(network, relayAddr, remoteAddr) // nolint: noctx
+	conn, err := m.allocateConn(AllocateConnConfig{
+		Network:    network,
+		UserID:     allocation.userID,
+		Realm:      allocation.realm,
+		LocalAddr:  relayAddr,
+		RemoteAddr: remoteAddr,
+	}) // nolint: noctx
 	if err != nil {
 		m.log.Warnf("Failed to create TCP Connection: %v", err)
 

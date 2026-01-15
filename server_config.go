@@ -15,6 +15,12 @@ import (
 	"github.com/pion/turn/v4/internal/auth"
 )
 
+// AllocateListenerConfig defines the parameters passed to the relay address allocator.
+type AllocateListenerConfig = allocation.AllocateListenerConfig
+
+// AllocateConnConfig defines the parameters passed to the TCP connection generator.
+type AllocateConnConfig = allocation.AllocateConnConfig
+
 // RelayAddressGenerator is used to generate a RelayAddress when creating an allocation.
 // You can use one of the provided ones or provide your own.
 type RelayAddressGenerator interface {
@@ -22,13 +28,13 @@ type RelayAddressGenerator interface {
 	Validate() error
 
 	// Allocate a PacketConn (UDP) RelayAddress
-	AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error)
+	AllocatePacketConn(AllocateListenerConfig) (net.PacketConn, net.Addr, error)
 
 	// Allocate a Listener (TCP) RelayAddress
-	AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error)
+	AllocateListener(AllocateListenerConfig) (net.Listener, net.Addr, error)
 
-	// Allocate a Conn (TCP) RelayAddress
-	AllocateConn(network string, laddr, raddr net.Addr) (net.Conn, error)
+	// Allocate a Conn (TCP) relay connection
+	AllocateConn(AllocateConnConfig) (net.Conn, error)
 }
 
 // PermissionHandler is a callback to filter incoming CreatePermission and ChannelBindRequest

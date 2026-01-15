@@ -208,15 +208,15 @@ type nilAddressGenerator struct{}
 
 func (n *nilAddressGenerator) Validate() error { return errRelayAddressGeneratorNil }
 
-func (n *nilAddressGenerator) AllocatePacketConn(string, int) (net.PacketConn, net.Addr, error) {
+func (n *nilAddressGenerator) AllocatePacketConn(AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
 	return nil, nil, errRelayAddressGeneratorNil
 }
 
-func (n *nilAddressGenerator) AllocateListener(string, int) (net.Listener, net.Addr, error) {
+func (n *nilAddressGenerator) AllocateListener(AllocateListenerConfig) (net.Listener, net.Addr, error) {
 	return nil, nil, errRelayAddressGeneratorNil
 }
 
-func (n *nilAddressGenerator) AllocateConn(network string, laddr, raddr net.Addr) (net.Conn, error) {
+func (n *nilAddressGenerator) AllocateConn(AllocateConnConfig) (net.Conn, error) {
 	return nil, errRelayAddressGeneratorNil
 }
 

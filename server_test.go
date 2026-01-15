@@ -85,8 +85,8 @@ type mtuConnGenerator struct {
 }
 
 // mtuConnGenerator is a relay address generator that wraps the PacketConn returned by a base generator in an mtuConn.
-func (g *mtuConnGenerator) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
-	conn, addr, err := g.RelayAddressGenerator.AllocatePacketConn(network, requestedPort)
+func (g *mtuConnGenerator) AllocatePacketConn(conf AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+	conn, addr, err := g.RelayAddressGenerator.AllocatePacketConn(conf)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -115,8 +115,8 @@ type truncConnGenerator struct {
 
 // truncConnGenerator is a relay address generator that wraps the PacketConn returned by a base
 // generator in a truncConn.
-func (g *truncConnGenerator) AllocatePacketConn(network string, requestedPort int) (net.PacketConn, net.Addr, error) {
-	conn, addr, err := g.RelayAddressGenerator.AllocatePacketConn(network, requestedPort)
+func (g *truncConnGenerator) AllocatePacketConn(conf AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+	conn, addr, err := g.RelayAddressGenerator.AllocatePacketConn(conf)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,17 +162,18 @@ func TestServerConfig(t *testing.T) {
 		}).validate(), errRelayAddressGeneratorUnset)
 	})
 
-	_, _, err = (&RelayAddressGeneratorNone{}).AllocateListener("tcp4", 0)
+	_, _, err = (&RelayAddressGeneratorNone{}).AllocateListener(AllocateListenerConfig{Network: "tcp4"})
 	assert.ErrorIs(t, err, errListeningAddressInvalid)
 
-	listener, _, err := (&RelayAddressGeneratorNone{Address: "0.0.0.0"}).AllocateListener("tcp4", 0)
+	relayGen := &RelayAddressGeneratorNone{Address: "0.0.0.0"}
+	listener, _, err := relayGen.AllocateListener(AllocateListenerConfig{Network: "tcp4"})
 	assert.NoError(t, err)
 	assert.NoError(t, listener.Close())
 
-	_, _, err = (&RelayAddressGeneratorStatic{}).AllocateListener("tcp4", 0)
+	_, _, err = (&RelayAddressGeneratorStatic{}).AllocateListener(AllocateListenerConfig{Network: "tcp4"})
 	assert.ErrorIs(t, err, errRelayAddressInvalid)
 
-	listener, _, err = (&RelayAddressGeneratorStatic{RelayAddress: net.IP("127.0.0.1"), Address: "0.0.0.0"}).AllocateListener("tcp4", 0) // nolint: lll
+	listener, _, err = (&RelayAddressGeneratorStatic{RelayAddress: net.IP("127.0.0.1"), Address: "0.0.0.0"}).AllocateListener(AllocateListenerConfig{Network: "tcp4"}) // nolint: lll
 	assert.NoError(t, err)
 	assert.NoError(t, listener.Close())
 
@@ -1917,7 +1918,10 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 	})
 
 	t.Run("One Port", func(t *testing.T) {
-		conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn("udp", 3478)
+		conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn(AllocateListenerConfig{
+			Network:       "udp",
+			RequestedPort: 3478,
+		})
 		assert.NoError(t, err)
 		assert.NotNil(t, addr)
 
@@ -1927,7 +1931,10 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 
 		assert.NoError(t, conn.Close())
 
-		tcpConn, addr, err := relayAddressGeneratorPortRange.AllocateListener("tcp4", 3478)
+		tcpConn, addr, err := relayAddressGeneratorPortRange.AllocateListener(AllocateListenerConfig{
+			Network:       "tcp4",
+			RequestedPort: 3478,
+		})
 		assert.NoError(t, err)
 		assert.NotNil(t, addr)
 
@@ -1943,12 +1950,12 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 		listeners := []net.Listener{}
 
 		for i := 0; i < 25; i++ {
-			conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn("udp", 0)
+			conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn(AllocateListenerConfig{Network: "udp"})
 			assert.NoError(t, err)
 			assert.NotNil(t, addr)
 			conns = append(conns, conn)
 
-			listener, addr, err := relayAddressGeneratorPortRange.AllocateListener("tcp", 0)
+			listener, addr, err := relayAddressGeneratorPortRange.AllocateListener(AllocateListenerConfig{Network: "tcp"})
 			assert.NoError(t, err)
 			assert.NotNil(t, addr)
 			listeners = append(listeners, listener)
@@ -1975,10 +1982,10 @@ func TestNilAddressGenerator(t *testing.T) {
 
 	assert.ErrorIs(t, generator.Validate(), errRelayAddressGeneratorNil)
 
-	_, _, err := generator.AllocatePacketConn("", 0)
+	_, _, err := generator.AllocatePacketConn(AllocateListenerConfig{})
 	assert.ErrorIs(t, err, errRelayAddressGeneratorNil)
 
-	_, _, err = generator.AllocateListener("", 0)
+	_, _, err = generator.AllocateListener(AllocateListenerConfig{})
 	assert.ErrorIs(t, err, errRelayAddressGeneratorNil)
 }
 
