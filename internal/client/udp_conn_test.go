@@ -184,6 +184,56 @@ func TestUDPConn(t *testing.T) {
 		assert.NoError(t, err, "should fail")
 		assert.Equal(t, len(buf), n)
 	})
+
+	t.Run("WriteTo() returns real payload length", func(t *testing.T) {
+		var writtenData []byte
+		client := &mockClient{
+			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+				// Return success for CreatePermission.
+				return TransactionResult{
+					Msg: stun.MustBuild(stun.NewType(stun.MethodCreatePermission, stun.ClassSuccessResponse)),
+				}, nil
+			},
+			writeTo: func(data []byte, _ net.Addr) (int, error) {
+				writtenData = data
+				// Return the actual number of bytes written (the STUN message size).
+				return len(data), nil
+			},
+		}
+
+		addr := &net.UDPAddr{
+			IP:   net.ParseIP("127.0.0.1"),
+			Port: 1234,
+		}
+
+		conn := UDPConn{
+			allocation: allocation{
+				client:     client,
+				serverAddr: &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 3478},
+				permMap:    newPermissionMap(),
+				username:   stun.NewUsername("user"),
+				realm:      stun.NewRealm("realm"),
+				integrity:  stun.NewShortTermIntegrity("pass"),
+				_nonce:     stun.NewNonce("nonce"),
+				log:        logging.NewDefaultLoggerFactory().NewLogger("test"),
+			},
+			bindingMgr: newBindingManager(),
+		}
+
+		payload := []byte("Hello")
+		n, err := conn.WriteTo(payload, addr)
+		assert.NoError(t, err)
+
+		// The SendIndication STUN message (captured in writeTo above) should be larger
+		// than the payload due to headers/attributes.
+		assert.Greater(t, len(writtenData), len(payload),
+			"STUN message should be larger than payload")
+
+		// WriteTo MUST return the real payload length, not the STUN message length.
+		assert.Equal(t, len(payload), n,
+			"WriteTo should return payload length (%d), not STUN message length (%d)",
+			len(payload), len(writtenData))
+	})
 }
 
 func TestCreatePermissions(t *testing.T) {

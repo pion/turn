@@ -238,7 +238,11 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 			return 0, err
 		}
 
-		return c.client.WriteTo(msg.Raw, c.serverAddr)
+		if _, err = c.client.WriteTo(msg.Raw, c.serverAddr); err != nil {
+			return 0, err
+		}
+
+		return len(payload), nil
 	}
 
 	// Binding is ready beyond this point, so send over it.
