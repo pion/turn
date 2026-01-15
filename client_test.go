@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -587,6 +588,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 	allocation, err := client.AllocateTCP()
 	assert.NoError(t, err)
 
+	var wg sync.WaitGroup
 	runPeerDialer := func(i int) net.Conn {
 		relayAddr, ok := allocation.Addr().(*net.TCPAddr)
 		assert.True(t, ok)
@@ -611,7 +613,10 @@ func TestTCPClientMultipleConns(t *testing.T) {
 		assert.NoError(t, err)
 
 		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+
 			peerConn, peerErr := remotePeerListener.Accept()
 			assert.NoError(t, peerErr)
 
@@ -648,7 +653,10 @@ func TestTCPClientMultipleConns(t *testing.T) {
 	}
 
 	runClientAcceptor := func(ctx context.Context, i int) {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+
 			acceptorConn, err := allocation.Accept()
 			assert.NoError(t, err)
 
@@ -686,6 +694,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 	}
 
 	cancel()
+	wg.Wait()
 
 	// Shutdown
 	for i := 0; i < 3; i += 1 {

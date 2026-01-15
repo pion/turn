@@ -63,18 +63,18 @@ func TestAllocationLifeTime(t *testing.T) {
 		logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 		allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-			AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-				con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+			AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+				con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 				if err != nil {
 					return nil, nil, listenErr
 				}
 
 				return con, con.LocalAddr(), nil
 			},
-			AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+			AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 				return nil, nil, nil
 			},
-			AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+			AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 				return nil, nil //nolint:nilnil
 			},
 			LeveledLogger: logger,
@@ -126,18 +126,18 @@ func TestRequestedTransport(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if err != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -181,19 +181,19 @@ func TestConnectRequest(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if err != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, _, raddr net.Addr) (net.Conn, error) {
-			return net.Dial("tcp4", raddr.String()) // nolint: noctx
+		AllocateConn: func(conf allocation.AllocateConnConfig) (net.Conn, error) {
+			return net.Dial("tcp4", conf.RemoteAddr.String()) // nolint: noctx
 		},
 		LeveledLogger: logger,
 	})
@@ -268,19 +268,19 @@ func TestConnectionBindRequest(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if err != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, _, raddr net.Addr) (net.Conn, error) {
-			return net.Dial("tcp4", raddr.String()) // nolint: noctx
+		AllocateConn: func(conf allocation.AllocateConnConfig) (net.Conn, error) {
+			return net.Dial("tcp4", conf.RemoteAddr.String()) // nolint: noctx
 		},
 		LeveledLogger: logger,
 	})
@@ -339,18 +339,18 @@ func TestRequestedAddressFamilyIPv6(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "[::]:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "[::]:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -400,18 +400,18 @@ func TestRequestedAddressFamilyUnsupported(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -459,18 +459,18 @@ func TestRequestedAddressFamilyMutualExclusivity(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -519,18 +519,18 @@ func TestHandleRefreshRequestRequestedAddressFamilyMismatch(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -606,18 +606,18 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -720,18 +720,18 @@ func TestHandleSendIndication(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -824,18 +824,18 @@ func TestHandleChannelBindRequest(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -954,18 +954,18 @@ func TestHandleAllocationRequest(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -1035,18 +1035,18 @@ func TestHandleDuplicateAllocationRequest(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,
@@ -1134,18 +1134,18 @@ func TestHandleChannelData(t *testing.T) {
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
-			con, listenErr := net.ListenPacket(network, "0.0.0.0:0") // nolint: noctx
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return con, con.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
 			return nil, nil //nolint:nilnil
 		},
 		LeveledLogger: logger,

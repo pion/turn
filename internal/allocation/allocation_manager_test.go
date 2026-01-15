@@ -31,17 +31,17 @@ func TestNewManagerValidation(t *testing.T) {
 	assert.Nil(t, manager)
 	assert.ErrorIs(t, err, errAllocatePacketConnMustBeSet)
 
-	cfg.AllocatePacketConn = func(string, int) (net.PacketConn, net.Addr, error) { return nil, nil, nil }
+	cfg.AllocatePacketConn = func(AllocateListenerConfig) (net.PacketConn, net.Addr, error) { return nil, nil, nil }
 	manager, err = NewManager(cfg)
 	assert.Nil(t, manager)
 	assert.ErrorIs(t, err, errAllocateListenerMustBeSet)
 
-	cfg.AllocateListener = func(string, int) (net.Listener, net.Addr, error) { return nil, nil, nil }
+	cfg.AllocateListener = func(AllocateListenerConfig) (net.Listener, net.Addr, error) { return nil, nil, nil }
 	manager, err = NewManager(cfg)
 	assert.Nil(t, manager)
 	assert.ErrorIs(t, err, errAllocateConnMustBeSet)
 
-	cfg.AllocateConn = func(network string, laddr, raddr net.Addr) (net.Conn, error) { return nil, nil } //nolint:nilnil
+	cfg.AllocateConn = func(AllocateConnConfig) (net.Conn, error) { return nil, nil } //nolint:nilnil
 	manager, err = NewManager(cfg)
 	assert.Nil(t, manager)
 	assert.ErrorIs(t, err, errLeveledLoggerMustBeSet)
@@ -220,7 +220,7 @@ func newTestManager() (*Manager, error) {
 
 	config := ManagerConfig{
 		LeveledLogger: loggerFactory.NewLogger("test"),
-		AllocatePacketConn: func(string, int) (net.PacketConn, net.Addr, error) {
+		AllocatePacketConn: func(_ AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
 			conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 			if err != nil {
 				return nil, nil, err
@@ -228,14 +228,14 @@ func newTestManager() (*Manager, error) {
 
 			return conn, conn.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) { return nil, nil, nil },
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateListener: func(AllocateListenerConfig) (net.Listener, net.Addr, error) { return nil, nil, nil },
+		AllocateConn: func(info AllocateConnConfig) (net.Conn, error) {
 			dialer := net.Dialer{
-				LocalAddr: laddr,
+				LocalAddr: info.LocalAddr,
 				Control:   reuseport.Control,
 			}
 
-			return dialer.Dial(network, raddr.String())
+			return dialer.Dial(info.Network, info.RemoteAddr.String())
 		},
 	}
 
@@ -355,26 +355,26 @@ func TestCreateTCPConnectionUsesAddressFamily(t *testing.T) {
 
 	manager, err := NewManager(ManagerConfig{
 		LeveledLogger: loggerFactory.NewLogger("test"),
-		AllocatePacketConn: func(network string, _ int) (net.PacketConn, net.Addr, error) {
+		AllocatePacketConn: func(conf AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
 			addr := "0.0.0.0:0"
-			if network == "udp6" {
+			if conf.Network == "udp6" {
 				addr = "[::]:0"
 			}
 
-			conn, listenErr := net.ListenPacket(network, addr) // nolint: noctx
+			conn, listenErr := net.ListenPacket(conf.Network, addr) // nolint: noctx
 			if listenErr != nil {
 				return nil, nil, listenErr
 			}
 
 			return conn, conn.LocalAddr(), nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
-			networks = append(networks, network)
+		AllocateConn: func(conf AllocateConnConfig) (net.Conn, error) {
+			networks = append(networks, conf.Network)
 
-			return &mockConn{localAddr: laddr, remoteAddr: raddr}, nil
+			return &mockConn{localAddr: conf.LocalAddr, remoteAddr: conf.RemoteAddr}, nil
 		},
 	})
 	assert.NoError(t, err)

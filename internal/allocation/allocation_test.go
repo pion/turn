@@ -333,23 +333,23 @@ func TestTCPRelay_E2E(t *testing.T) {
 
 	manager, err := NewManager(ManagerConfig{
 		LeveledLogger: logging.NewDefaultLoggerFactory().NewLogger("test"),
-		AllocatePacketConn: func(string, int) (net.PacketConn, net.Addr, error) {
+		AllocatePacketConn: func(AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
 			return nil, nil, nil
 		},
-		AllocateListener: func(string, int) (net.Listener, net.Addr, error) {
+		AllocateListener: func(AllocateListenerConfig) (net.Listener, net.Addr, error) {
 			ln, listenerErr := (&net.ListenConfig{Control: reuseport.Control}).
 				Listen(context.TODO(), "tcp4", "127.0.0.1:0")
 			assert.NoError(t, listenerErr)
 
 			return ln, ln.Addr(), nil
 		},
-		AllocateConn: func(network string, laddr, raddr net.Addr) (net.Conn, error) {
+		AllocateConn: func(info AllocateConnConfig) (net.Conn, error) {
 			dialer := net.Dialer{
-				LocalAddr: laddr,
+				LocalAddr: info.LocalAddr,
 				Control:   reuseport.Control,
 			}
 
-			return dialer.Dial(network, raddr.String())
+			return dialer.Dial(info.Network, info.RemoteAddr.String())
 		},
 	})
 	assert.NoError(t, err)

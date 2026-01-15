@@ -41,12 +41,13 @@ func (r *RelayAddressGeneratorNone) Validate() error {
 
 // AllocatePacketConn generates a new PacketConn to receive traffic on and the IP/Port
 // to populate the allocation response with.
-func (r *RelayAddressGeneratorNone) AllocatePacketConn(network string, requestedPort int) (
+func (r *RelayAddressGeneratorNone) AllocatePacketConn(conf AllocateListenerConfig) (
 	net.PacketConn,
 	net.Addr,
 	error,
 ) {
-	conn, err := r.Net.ListenPacket(network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort))) // nolint: noctx
+	conn, err := r.Net.ListenPacket(conf.Network,
+		net.JoinHostPort(r.Address, strconv.Itoa(conf.RequestedPort))) // nolint: noctx
 	if err != nil {
 		return nil, nil, err
 	}
@@ -56,7 +57,7 @@ func (r *RelayAddressGeneratorNone) AllocatePacketConn(network string, requested
 
 // AllocateListener generates a new Listener to receive traffic on and the IP/Port
 // to populate the allocation response with.
-func (r *RelayAddressGeneratorNone) AllocateListener(network string, requestedPort int) (net.Listener, net.Addr, error) { // nolint: lll
+func (r *RelayAddressGeneratorNone) AllocateListener(conf AllocateListenerConfig) (net.Listener, net.Addr, error) {
 	// AllocateListener can be called independently of Validate (e.g. in tests),
 	// so ensure we're initialized to avoid nil dereferences.
 	if r.Net == nil || r.Address == "" {
@@ -65,7 +66,7 @@ func (r *RelayAddressGeneratorNone) AllocateListener(network string, requestedPo
 		}
 	}
 
-	tcpAddr, err := r.Net.ResolveTCPAddr(network, net.JoinHostPort(r.Address, strconv.Itoa(requestedPort)))
+	tcpAddr, err := r.Net.ResolveTCPAddr(conf.Network, net.JoinHostPort(r.Address, strconv.Itoa(conf.RequestedPort)))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -75,7 +76,7 @@ func (r *RelayAddressGeneratorNone) AllocateListener(network string, requestedPo
 		// bind to the same relay address.
 		Control: reuseport.Control,
 	})
-	ln, err := listenConfig.Listen(context.TODO(), network, tcpAddr.String())
+	ln, err := listenConfig.Listen(context.TODO(), conf.Network, tcpAddr.String())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,13 +85,13 @@ func (r *RelayAddressGeneratorNone) AllocateListener(network string, requestedPo
 }
 
 // AllocateConn creates a new outgoing TCP connection bound to the relay address to send traffic to a peer.
-func (r *RelayAddressGeneratorNone) AllocateConn(network string, laddr, raddr net.Addr) (net.Conn, error) {
+func (r *RelayAddressGeneratorNone) AllocateConn(conf AllocateConnConfig) (net.Conn, error) {
 	dialer := r.Net.CreateDialer(&net.Dialer{
-		LocalAddr: laddr,
+		LocalAddr: conf.LocalAddr,
 		// Enable SO_REUSEADDR and SO_REUSEPORT where needed to let multiple connnections
 		// bind to the same relay address.
 		Control: reuseport.Control,
 	})
 
-	return dialer.Dial(network, raddr.String())
+	return dialer.Dial(conf.Network, conf.RemoteAddr.String())
 }
