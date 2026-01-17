@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v4/internal/auth"
+	"github.com/pion/turn/v5/internal/auth"
 )
 
 // GenerateLongTermCredentials can be used to create credentials valid for [duration] time.

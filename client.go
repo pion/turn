@@ -15,8 +15,8 @@ import (
 	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4"
 	"github.com/pion/transport/v4/stdnet"
-	"github.com/pion/turn/v4/internal/client"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/client"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 const (

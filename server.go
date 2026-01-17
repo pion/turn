@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v4/internal/allocation"
-	"github.com/pion/turn/v4/internal/proto"
-	"github.com/pion/turn/v4/internal/server"
+	"github.com/pion/turn/v5/internal/allocation"
+	"github.com/pion/turn/v5/internal/proto"
+	"github.com/pion/turn/v5/internal/server"
 )
 
 const (
