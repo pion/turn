@@ -26,8 +26,8 @@ import (
 	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/transport/v4/test"
 	"github.com/pion/transport/v4/vnet"
-	"github.com/pion/turn/v4/internal/allocation"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/allocation"
+	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 

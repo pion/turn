@@ -13,7 +13,7 @@ import (
 
 	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 var (

@@ -12,7 +12,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/randutil"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 // If no ConnectionBind request associated with this peer data
