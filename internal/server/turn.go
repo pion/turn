@@ -473,7 +473,7 @@ func handleSendIndication(req Request, stunMsg *stun.Message) error {
 	return err
 }
 
-func handleChannelBindRequest(req Request, stunMsg *stun.Message) error {
+func handleChannelBindRequest(req Request, stunMsg *stun.Message) error { // nolint:cyclop
 	req.Log.Debugf("Received ChannelBindRequest from %s", req.SrcAddr)
 
 	badRequestMsg := buildMsg(
@@ -527,13 +527,40 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, unauthorizedRequestMsg...)
 	}
 
+	peerNetAddr := &net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port}
 	req.Log.Debugf("Binding channel %d to %s", channel, peerAddr)
 	err = alloc.AddChannelBind(allocation.NewChannelBind(
 		channel,
-		&net.UDPAddr{IP: peerAddr.IP, Port: peerAddr.Port},
+		peerNetAddr,
 		req.Log,
 	), req.ChannelBindTimeout, req.PermissionTimeout)
-	if err != nil {
+	if err != nil { // nolint:nestif
+		if errors.Is(err, allocation.ErrSamePeerDifferentChannel) {
+			if existing := alloc.GetChannelByAddr(peerNetAddr); existing != nil {
+				req.Log.Warnf(
+					"ChannelBind rejected: peer %s already bound to channel %d, attempted %d",
+					peerNetAddr.String(), uint16(existing.Number), uint16(channel),
+				)
+			} else {
+				req.Log.Warnf(
+					"ChannelBind rejected: peer %s attempted to rebind to channel %d",
+					peerNetAddr.String(), uint16(channel),
+				)
+			}
+		} else if errors.Is(err, allocation.ErrSameChannelDifferentPeer) {
+			if existing := alloc.GetChannelByNumber(channel); existing != nil {
+				req.Log.Warnf(
+					"ChannelBind rejected: channel %d already bound to peer %s, attempted peer %s",
+					uint16(channel), existing.Peer.String(), peerNetAddr.String(),
+				)
+			} else {
+				req.Log.Warnf(
+					"ChannelBind rejected: channel %d attempted to bind to peer %s",
+					uint16(channel), peerNetAddr.String(),
+				)
+			}
+		}
+
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
 

@@ -151,9 +151,16 @@ func (a *Allocation) AddChannelBind(chanBind *ChannelBind, channelLifetime, perm
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel number.
 	channelByNumber := a.GetChannelByNumber(chanBind.Number)
+	channelByAddr := a.GetChannelByAddr(chanBind.Peer)
 
-	if channelByNumber != a.GetChannelByAddr(chanBind.Peer) {
-		return errSameChannelDifferentPeer
+	// Peer already bound to a different channel number.
+	if channelByAddr != nil && channelByAddr.Number != chanBind.Number {
+		return ErrSamePeerDifferentChannel
+	}
+
+	// Channel number already bound to a different peer.
+	if channelByNumber != nil && !ipnet.AddrEqual(channelByNumber.Peer, chanBind.Peer) {
+		return ErrSameChannelDifferentPeer
 	}
 
 	// Add or refresh this channel.

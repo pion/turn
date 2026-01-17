@@ -132,12 +132,12 @@ func TestAddChannelBind(t *testing.T) {
 
 	c2 := NewChannelBind(proto.MinChannelNumber+1, addr, nil)
 	err = alloc.AddChannelBind(c2, proto.DefaultLifetime, DefaultPermissionTimeout)
-	assert.NotNil(t, err, "should failed with conflicted peer address")
+	assert.ErrorIs(t, err, ErrSamePeerDifferentChannel, "should fail with conflicted peer address")
 
 	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
 	c3 := NewChannelBind(proto.MinChannelNumber, addr2, nil)
 	err = alloc.AddChannelBind(c3, proto.DefaultLifetime, DefaultPermissionTimeout)
-	assert.NotNil(t, err, "should fail with conflicted number.")
+	assert.ErrorIs(t, err, ErrSameChannelDifferentPeer, "should fail with conflicted number")
 }
 
 func TestGetChannelByNumber(t *testing.T) {
@@ -173,6 +173,23 @@ func TestGetChannelByAddr(t *testing.T) {
 	addr2, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3479")
 	notExistChannel := alloc.GetChannelByAddr(addr2)
 	assert.Nil(t, notExistChannel, "should be nil for not existed channel.")
+}
+
+func TestAddChannelBindSameIPPortDifferentZone(t *testing.T) {
+	alloc := NewAllocation(nil, nil, EventHandler{}, nil)
+
+	peer1 := &net.UDPAddr{IP: net.ParseIP("fe80::1"), Port: 3478, Zone: "zone-a"}
+	peer2 := &net.UDPAddr{IP: net.ParseIP("fe80::1"), Port: 3478, Zone: "zone-b"}
+
+	c1 := NewChannelBind(proto.MinChannelNumber, peer1, nil)
+	err := alloc.AddChannelBind(c1, proto.DefaultLifetime, DefaultPermissionTimeout)
+	assert.NoError(t, err)
+
+	// Rebinding the same channel number to the same IP:port should succeed even
+	// if the IPv6 Zone differs.
+	c2 := NewChannelBind(proto.MinChannelNumber, peer2, nil)
+	err = alloc.AddChannelBind(c2, proto.DefaultLifetime, DefaultPermissionTimeout)
+	assert.NoError(t, err)
 }
 
 func TestRemoveChannelBind(t *testing.T) {

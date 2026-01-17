@@ -9,11 +9,18 @@ var (
 	ErrTCPConnectionTimeoutOrFailure = errors.New("failed to create tcp connection")
 	ErrDupeTCPConnection             = errors.New("tcp connection already exists for peer address")
 
+	// ErrSameChannelDifferentPeer is returned when a client attempts to bind a
+	// channel number that is already bound to a different peer address.
+	ErrSameChannelDifferentPeer = errors.New("you cannot use the same channel number with different peer")
+
+	// ErrSamePeerDifferentChannel is returned when a client attempts to bind a
+	// peer address that is already bound to a different channel number.
+	ErrSamePeerDifferentChannel = errors.New("you cannot use the same peer with different channel number")
+
 	errAllocatePacketConnMustBeSet  = errors.New("AllocatePacketConn must be set")
 	errAllocateListenerMustBeSet    = errors.New("AllocateListener must be set")
 	errAllocateConnMustBeSet        = errors.New("AllocateConn must be set")
 	errLeveledLoggerMustBeSet       = errors.New("LeveledLogger must be set")
-	errSameChannelDifferentPeer     = errors.New("you cannot use the same channel number with different peer")
 	errNilFiveTuple                 = errors.New("allocations must not be created with nil FivTuple")
 	errNilFiveTupleSrcAddr          = errors.New("allocations must not be created with nil FiveTuple.SrcAddr")
 	errNilFiveTupleDstAddr          = errors.New("allocations must not be created with nil FiveTuple.DstAddr")

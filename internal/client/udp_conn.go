@@ -472,8 +472,6 @@ func (c *UDPConn) bind(bound *binding) error {
 
 	trRes, err := c.client.PerformTransaction(msg, c.serverAddr, false)
 	if err != nil {
-		c.bindingMgr.deleteByAddr(bound.addr)
-
 		return err
 	}
 
