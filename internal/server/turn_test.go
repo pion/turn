@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
@@ -8,16 +8,19 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4/test"
-	"github.com/pion/turn/v4/internal/allocation"
-	"github.com/pion/turn/v4/internal/auth"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/allocation"
+	"github.com/pion/turn/v5/internal/auth"
+	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -816,12 +819,10 @@ func TestHandleSendIndication(t *testing.T) {
 	})
 }
 
-func TestHandleChannelBindRequest(t *testing.T) {
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
-	assert.NoError(t, err)
+func TestHandleChannelBindRequest(t *testing.T) { // nolint:maintidx
+	logger := &captureLogger{}
+	conn := newCapturePacketConn(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3478})
 	defer conn.Close() //nolint:errcheck
-
-	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
 
 	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
 		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
@@ -861,7 +862,41 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		},
 	}
 
+	buildAuthMsg := func(ch uint16, peerIP string, peerPort int) *stun.Message {
+		m := &stun.Message{}
+		m.TransactionID = stun.NewTransactionID()
+		assert.NoError(t, m.Build(stun.NewType(stun.MethodChannelBind, stun.ClassRequest)))
+		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
+		assert.NoError(t, (proto.ChannelNumber(ch)).AddTo(m))
+		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP(peerIP), Port: peerPort}).AddTo(m))
+
+		return m
+	}
+
+	assertLastResponse := func(t *testing.T, expectedClass stun.MessageClass, expectedCode stun.ErrorCode) {
+		t.Helper()
+		raw := conn.LastWrite()
+		if !assert.NotEmpty(t, raw, "server should write a response") {
+			return
+		}
+
+		res := &stun.Message{Raw: append([]byte(nil), raw...)}
+		assert.NoError(t, res.Decode())
+		assert.Equal(t, stun.MethodChannelBind, res.Type.Method)
+		assert.Equal(t, expectedClass, res.Type.Class)
+
+		if expectedClass == stun.ClassErrorResponse {
+			var code stun.ErrorCodeAttribute
+			assert.NoError(t, code.GetFrom(res))
+			assert.Equal(t, expectedCode, code.Code)
+		}
+	}
+
 	t.Run("NoAllocationFound", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodChannelBind, stun.ClassRequest)))
@@ -886,6 +921,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("MissingChannelNumber", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodChannelBind, stun.ClassRequest)))
@@ -899,6 +935,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 	})
 
 	t.Run("MissingPeerAddress", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodChannelBind, stun.ClassRequest)))
@@ -914,6 +951,7 @@ func TestHandleChannelBindRequest(t *testing.T) {
 
 	// Peer address family mismatch (IPv6 peer with IPv4 allocation)
 	t.Run("PeerAddressFamilyMismatch", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodChannelBind, stun.ClassRequest)))
@@ -928,9 +966,87 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		err = handleChannelBindRequest(req, m)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errPeerAddressFamilyMismatch)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodePeerAddrFamilyMismatch)
+	})
+
+	t.Run("PermissionDenied", func(t *testing.T) {
+		conn.Reset()
+
+		var denyAM *allocation.Manager
+		denyAM, err = allocation.NewManager(allocation.ManagerConfig{
+			AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+				con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
+				if listenErr != nil {
+					return nil, nil, listenErr
+				}
+
+				return con, con.LocalAddr(), nil
+			},
+			AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
+				return nil, nil, nil
+			},
+			AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
+				return nil, nil //nolint:nilnil
+			},
+			PermissionHandler: func(net.Addr, net.IP) bool { return false },
+			LeveledLogger:     logger,
+		})
+		assert.NoError(t, err)
+		defer denyAM.Close() //nolint:errcheck
+
+		denyReq := req
+		denyReq.AllocationManager = denyAM
+		fiveTuple := &allocation.FiveTuple{
+			SrcAddr:  denyReq.SrcAddr,
+			DstAddr:  denyReq.Conn.LocalAddr(),
+			Protocol: allocation.UDP,
+		}
+		_, err = denyReq.AllocationManager.CreateAllocation(fiveTuple, denyReq.Conn, proto.ProtoUDP,
+			0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
+		assert.NoError(t, err)
+
+		m := buildAuthMsg(0x4000, "192.168.1.1", 8080)
+		err = handleChannelBindRequest(denyReq, m)
+		assert.Error(t, err)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodeUnauthorized)
+	})
+
+	t.Run("RejectSamePeerDifferentChannel", func(t *testing.T) {
+		conn.Reset()
+		logger.Reset()
+
+		m1 := buildAuthMsg(0x4010, "192.168.1.1", 8080)
+		err = handleChannelBindRequest(req, m1)
+		assert.NoError(t, err)
+
+		conn.Reset()
+		m2 := buildAuthMsg(0x4011, "192.168.1.1", 8080)
+		err = handleChannelBindRequest(req, m2)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, allocation.ErrSamePeerDifferentChannel)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodeBadRequest)
+		assert.True(t, logger.ContainsWarn("peer 192.168.1.1:8080 already bound"), fmt.Sprintf("warn logs: %v", logger.warns))
+	})
+
+	t.Run("RejectSameChannelDifferentPeer", func(t *testing.T) {
+		conn.Reset()
+		logger.Reset()
+
+		m1 := buildAuthMsg(0x4020, "192.168.2.1", 8080)
+		err = handleChannelBindRequest(req, m1)
+		assert.NoError(t, err)
+
+		conn.Reset()
+		m2 := buildAuthMsg(0x4020, "192.168.2.2", 8080)
+		err = handleChannelBindRequest(req, m2)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, allocation.ErrSameChannelDifferentPeer)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodeBadRequest)
+		assert.True(t, logger.ContainsWarn("channel 16416 already bound"), fmt.Sprintf("warn logs: %v", logger.warns))
 	})
 
 	t.Run("Success", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodChannelBind, stun.ClassRequest)))
@@ -938,12 +1054,114 @@ func TestHandleChannelBindRequest(t *testing.T) {
 		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
 		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
-		assert.NoError(t, (proto.ChannelNumber(0x4000)).AddTo(m))
-		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.1.1"), Port: 8080}).AddTo(m))
+		assert.NoError(t, (proto.ChannelNumber(0x4030)).AddTo(m))
+		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.3.1"), Port: 8080}).AddTo(m))
 
 		err = handleChannelBindRequest(req, m)
 		assert.NoError(t, err)
 	})
+}
+
+type capturePacketConn struct {
+	mu        sync.Mutex
+	localAddr net.Addr
+	lastWrite []byte
+	closed    bool
+}
+
+func newCapturePacketConn(localAddr net.Addr) *capturePacketConn {
+	return &capturePacketConn{localAddr: localAddr}
+}
+
+func (c *capturePacketConn) ReadFrom([]byte) (int, net.Addr, error) {
+	return 0, nil, net.ErrClosed
+}
+
+func (c *capturePacketConn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return 0, net.ErrClosed
+	}
+	c.lastWrite = append([]byte(nil), p...)
+
+	return len(p), nil
+}
+
+func (c *capturePacketConn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
+
+	return nil
+}
+
+func (c *capturePacketConn) LocalAddr() net.Addr {
+	return c.localAddr
+}
+
+func (c *capturePacketConn) SetDeadline(time.Time) error {
+	return nil
+}
+
+func (c *capturePacketConn) SetReadDeadline(time.Time) error {
+	return nil
+}
+
+func (c *capturePacketConn) SetWriteDeadline(time.Time) error {
+	return nil
+}
+
+func (c *capturePacketConn) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastWrite = nil
+}
+
+func (c *capturePacketConn) LastWrite() []byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return append([]byte(nil), c.lastWrite...)
+}
+
+type captureLogger struct {
+	mu    sync.Mutex
+	warns []string
+}
+
+func (l *captureLogger) Reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.warns = nil
+}
+
+func (l *captureLogger) ContainsWarn(substr string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, w := range l.warns {
+		if strings.Contains(w, substr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (l *captureLogger) Trace(string)          {}
+func (l *captureLogger) Tracef(string, ...any) {}
+func (l *captureLogger) Debug(string)          {}
+func (l *captureLogger) Debugf(string, ...any) {}
+func (l *captureLogger) Info(string)           {}
+func (l *captureLogger) Infof(string, ...any)  {}
+func (l *captureLogger) Error(string)          {}
+func (l *captureLogger) Errorf(string, ...any) {}
+func (l *captureLogger) Warn(msg string)       { l.Warnf("%s", msg) }
+
+func (l *captureLogger) Warnf(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.warns = append(l.warns, fmt.Sprintf(format, args...))
 }
 
 func TestHandleAllocationRequest(t *testing.T) {

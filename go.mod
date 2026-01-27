@@ -1,4 +1,4 @@
-module github.com/pion/turn/v4
+module github.com/pion/turn/v5
 
 go 1.21
 

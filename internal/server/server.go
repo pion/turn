@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package server implements the private API to implement a TURN server
@@ -12,9 +12,9 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/turn/v4/internal/allocation"
-	"github.com/pion/turn/v4/internal/auth"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/allocation"
+	"github.com/pion/turn/v5/internal/auth"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 // Request contains all the state needed to process a single incoming datagram.

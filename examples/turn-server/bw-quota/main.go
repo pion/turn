@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package main implements a TURN server with per-user bandwidth quotas.
@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 	"golang.org/x/time/rate"
 )
 

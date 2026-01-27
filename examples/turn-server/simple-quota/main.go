@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package main implements a simple TURN server with per-user allocation quotas.
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 )
 
 const maxAllocationsPerUser = 1

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package main implements a TURN server using
@@ -15,7 +15,7 @@ import (
 	"syscall"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 )
 
 func main() {

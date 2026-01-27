@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package ipnet contains helper functions around net and IP
@@ -26,15 +26,26 @@ func AddrIPPort(a net.Addr) (net.IP, int, error) {
 	return nil, 0, errFailedToCastAddr
 }
 
-// AddrEqual asserts that two net.Addrs are equal
-// Currently only supports UDP but will be extended in the future to support others.
-func AddrEqual(a, b net.Addr) bool {
-	aUDP, ok := a.(*net.UDPAddr)
+// AddrEqual asserts that two net.Addrs are equal.
+// Compares IP and Port and intentionally ignores IPv6 Zone.
+func AddrEqual(addrA, addrB net.Addr) bool {
+	aUDP, ok := addrA.(*net.UDPAddr)
 	if !ok {
-		return false
+		var aTCP, bTCP *net.TCPAddr
+		aTCP, ok = addrA.(*net.TCPAddr)
+		if !ok {
+			return false
+		}
+
+		bTCP, ok = addrB.(*net.TCPAddr)
+		if !ok {
+			return false
+		}
+
+		return aTCP.IP.Equal(bTCP.IP) && aTCP.Port == bTCP.Port
 	}
 
-	bUDP, ok := b.(*net.UDPAddr)
+	bUDP, ok := addrB.(*net.UDPAddr)
 	if !ok {
 		return false
 	}

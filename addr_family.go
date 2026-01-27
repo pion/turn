@@ -3,7 +3,7 @@
 
 package turn
 
-import "github.com/pion/turn/v4/internal/proto"
+import "github.com/pion/turn/v5/internal/proto"
 
 // RequestedAddressFamily represents the REQUESTED-ADDRESS-FAMILY Attribute as
 // defined in RFC 6156 Section 4.1.1.

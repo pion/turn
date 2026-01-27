@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // This example demonstrates the use of a permission handler in the PION TURN server. The
@@ -17,7 +17,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pion/turn/v4"
+	"github.com/pion/turn/v5"
 )
 
 func main() {

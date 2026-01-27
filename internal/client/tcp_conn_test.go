@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package client
@@ -11,7 +11,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package allocation contains all CRUD operations for allocations
@@ -13,8 +13,8 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/turn/v4/internal/ipnet"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/ipnet"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 type allocationResponse struct {
@@ -151,9 +151,16 @@ func (a *Allocation) AddChannelBind(chanBind *ChannelBind, channelLifetime, perm
 	// Check that this channel id isn't bound to another transport address, and
 	// that this transport address isn't bound to another channel number.
 	channelByNumber := a.GetChannelByNumber(chanBind.Number)
+	channelByAddr := a.GetChannelByAddr(chanBind.Peer)
 
-	if channelByNumber != a.GetChannelByAddr(chanBind.Peer) {
-		return errSameChannelDifferentPeer
+	// Peer already bound to a different channel number.
+	if channelByAddr != nil && channelByAddr.Number != chanBind.Number {
+		return ErrSamePeerDifferentChannel
+	}
+
+	// Channel number already bound to a different peer.
+	if channelByNumber != nil && !ipnet.AddrEqual(channelByNumber.Peer, chanBind.Peer) {
+		return ErrSameChannelDifferentPeer
 	}
 
 	// Add or refresh this channel.

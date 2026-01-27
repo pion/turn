@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package client implements the API for a TURN client
@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/pion/stun/v3"
-	"github.com/pion/turn/v4/internal/proto"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 const (
@@ -238,7 +238,11 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 			return 0, err
 		}
 
-		return c.client.WriteTo(msg.Raw, c.serverAddr)
+		if _, err = c.client.WriteTo(msg.Raw, c.serverAddr); err != nil {
+			return 0, err
+		}
+
+		return len(payload), nil
 	}
 
 	// Binding is ready beyond this point, so send over it.
@@ -468,8 +472,6 @@ func (c *UDPConn) bind(bound *binding) error {
 
 	trRes, err := c.client.PerformTransaction(msg, c.serverAddr, false)
 	if err != nil {
-		c.bindingMgr.deleteByAddr(bound.addr)
-
 		return err
 	}
 
