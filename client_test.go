@@ -8,6 +8,7 @@ package turn
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"runtime"
@@ -22,6 +23,57 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type allocateRedirectStub struct {
+	t             *testing.T
+	client        *Client
+	withAlternate bool
+	redirects     int
+}
+
+func (s *allocateRedirectStub) ReadFrom(_ []byte) (int, net.Addr, error) {
+	return 0, nil, errors.New("not implemented") //nolint:err113
+}
+
+func (s *allocateRedirectStub) WriteTo(packet []byte, addr net.Addr) (int, error) {
+	s.redirects++
+
+	var req stun.Message
+	req.Raw = append(req.Raw[:0], packet...)
+	require.NoError(s.t, req.Decode())
+
+	setters := []stun.Setter{
+		&stun.Message{TransactionID: req.TransactionID},
+		stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+		stun.ErrorCodeAttribute{Code: stun.CodeTryAlternate, Reason: []byte("Try Alternate")},
+	}
+
+	if s.withAlternate {
+		setters = append(setters, &stun.AlternateServer{
+			IP:   net.ParseIP("127.0.0.1"),
+			Port: 20000 + s.redirects,
+		})
+	}
+
+	setters = append(setters, stun.Fingerprint)
+
+	resp, err := stun.Build(setters...)
+	require.NoError(s.t, err)
+
+	go func(raw []byte, a net.Addr) {
+		err := s.client.handleSTUNMessage(raw, a)
+
+		assert.NoError(s.t, err)
+	}(append([]byte(nil), resp.Raw...), addr)
+
+	return len(packet), nil
+}
+
+func (s *allocateRedirectStub) Close() error                       { return nil }
+func (s *allocateRedirectStub) LocalAddr() net.Addr                { return &net.UDPAddr{} }
+func (s *allocateRedirectStub) SetDeadline(_ time.Time) error      { return nil }
+func (s *allocateRedirectStub) SetReadDeadline(_ time.Time) error  { return nil }
+func (s *allocateRedirectStub) SetWriteDeadline(_ time.Time) error { return nil }
 
 func buildMsg(
 	transactionID [stun.TransactionIDSize]byte,
@@ -381,6 +433,309 @@ func TestClientReadTimout(t *testing.T) {
 
 	_, _, err = allocation.ReadFrom(nil)
 	assert.Contains(t, err.Error(), "use of closed network connection")
+}
+
+func TestClientAllocateFollowsAlternateServer(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	altListener, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+
+	altServer, err := NewServer(ServerConfig{
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
+		},
+		PacketConnConfigs: []PacketConnConfig{
+			{
+				PacketConn: altListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+
+	redirectListener, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+
+	redirectDone := make(chan struct{})
+	go func() { //nolint:dupl
+		defer close(redirectDone)
+		buf := make([]byte, 1500)
+		for {
+			n, from, readErr := redirectListener.ReadFrom(buf)
+			if readErr != nil {
+				return
+			}
+
+			var req stun.Message
+			req.Raw = append(req.Raw[:0], buf[:n]...)
+			if decodeErr := req.Decode(); decodeErr != nil {
+				continue
+			}
+
+			altAddr, ok := altListener.LocalAddr().(*net.UDPAddr)
+			assert.True(t, ok)
+			resp, buildErr := stun.Build(
+				&stun.Message{TransactionID: req.TransactionID},
+				stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+				stun.ErrorCodeAttribute{Code: stun.CodeTryAlternate, Reason: []byte("Try Alternate")},
+				&stun.AlternateServer{IP: altAddr.IP, Port: altAddr.Port},
+				stun.Fingerprint,
+			)
+			if buildErr != nil {
+				continue
+			}
+
+			_, _ = redirectListener.WriteTo(resp.Raw, from)
+		}
+	}()
+
+	clientConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	require.NoError(t, err)
+
+	redirectAddr := redirectListener.LocalAddr().String()
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           clientConn,
+		STUNServerAddr: redirectAddr,
+		TURNServerAddr: redirectAddr,
+		Username:       "foo",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  loggerFactory,
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+	origServer := client.TURNServerAddr().String()
+
+	allocation, err := client.Allocate()
+	require.NoError(t, err)
+	require.NotNil(t, allocation)
+	require.Equal(t, origServer, client.TURNServerAddr().String())
+
+	require.NoError(t, client.CreatePermission(&net.UDPAddr{
+		IP:   net.ParseIP("127.0.0.1"),
+		Port: 30000,
+	}))
+
+	assert.NoError(t, allocation.Close())
+	assert.NoError(t, clientConn.Close())
+	assert.NoError(t, redirectListener.Close())
+	assert.NoError(t, altServer.Close())
+	<-redirectDone
+}
+
+func TestClientAlternateServerLoop(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	redirectListener, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+
+	redirectDone := make(chan struct{})
+	go func() { //nolint:dupl
+		defer close(redirectDone)
+		buf := make([]byte, 1500)
+		for {
+			n, from, readErr := redirectListener.ReadFrom(buf)
+			if readErr != nil {
+				return
+			}
+
+			var req stun.Message
+			req.Raw = append(req.Raw[:0], buf[:n]...)
+			if decodeErr := req.Decode(); decodeErr != nil {
+				continue
+			}
+
+			selfAddr, ok := redirectListener.LocalAddr().(*net.UDPAddr)
+			assert.True(t, ok)
+			resp, buildErr := stun.Build(
+				&stun.Message{TransactionID: req.TransactionID},
+				stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+				stun.ErrorCodeAttribute{Code: stun.CodeTryAlternate, Reason: []byte("Try Alternate")},
+				&stun.AlternateServer{IP: selfAddr.IP, Port: selfAddr.Port},
+				stun.Fingerprint,
+			)
+			if buildErr != nil {
+				continue
+			}
+
+			_, _ = redirectListener.WriteTo(resp.Raw, from)
+		}
+	}()
+
+	clientConn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	require.NoError(t, err)
+
+	redirectAddr := redirectListener.LocalAddr().String()
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           clientConn,
+		STUNServerAddr: redirectAddr,
+		TURNServerAddr: redirectAddr,
+		Username:       "foo",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  loggerFactory,
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+
+	_, err = client.Allocate()
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errAlternateServerLoop))
+
+	assert.NoError(t, clientConn.Close())
+	assert.NoError(t, redirectListener.Close())
+	<-redirectDone
+}
+
+func TestClientAlternateServerRedirectLimit(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	stub := &allocateRedirectStub{t: t, withAlternate: true}
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           stub,
+		STUNServerAddr: "127.0.0.1:3478",
+		TURNServerAddr: "127.0.0.1:3478",
+		Username:       "foo",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  loggerFactory,
+	})
+	require.NoError(t, err)
+	stub.client = client
+
+	_, err = client.Allocate()
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errAlternateServerRedirects))
+	assert.Equal(t, maxAltSrvRedirects+1, stub.redirects)
+}
+
+func TestClientAlternateServerMissingAttribute(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	stub := &allocateRedirectStub{t: t, withAlternate: false}
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           stub,
+		STUNServerAddr: "127.0.0.1:3478",
+		TURNServerAddr: "127.0.0.1:3478",
+		Username:       "foo",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  loggerFactory,
+	})
+	require.NoError(t, err)
+	stub.client = client
+
+	_, err = client.Allocate()
+	require.Error(t, err)
+
+	var altErr *errAlternateServerError
+	require.True(t, errors.As(err, &altErr))
+	assert.Nil(t, altErr.alternate)
+}
+
+func TestClientTCPAllocateFollowsAlternateServer(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+
+	altListener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: gosec,noctx
+	require.NoError(t, err)
+
+	altServer, err := NewServer(ServerConfig{
+		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+			return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
+		},
+		ListenerConfigs: []ListenerConfig{
+			{
+				Listener: altListener,
+				RelayAddressGenerator: &RelayAddressGeneratorStatic{
+					RelayAddress: net.ParseIP("127.0.0.1"),
+					Address:      "0.0.0.0",
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+
+	redirectListener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: gosec,noctx
+	require.NoError(t, err)
+
+	redirectDone := make(chan struct{})
+	go func() {
+		defer close(redirectDone)
+
+		conn, acceptErr := redirectListener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close() //nolint:errcheck
+
+		buf := make([]byte, 1500)
+		for {
+			n, readErr := conn.Read(buf)
+			if readErr != nil {
+				return
+			}
+
+			var req stun.Message
+			req.Raw = append(req.Raw[:0], buf[:n]...)
+			if decodeErr := req.Decode(); decodeErr != nil {
+				continue
+			}
+
+			altAddr, ok := altListener.Addr().(*net.TCPAddr)
+			assert.True(t, ok)
+			resp, buildErr := stun.Build(
+				&stun.Message{TransactionID: req.TransactionID},
+				stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
+				stun.ErrorCodeAttribute{Code: stun.CodeTryAlternate, Reason: []byte("Try Alternate")},
+				&stun.AlternateServer{IP: altAddr.IP, Port: altAddr.Port},
+				stun.Fingerprint,
+			)
+			if buildErr != nil {
+				continue
+			}
+
+			_, _ = conn.Write(resp.Raw)
+		}
+	}()
+
+	clientConn, err := net.Dial("tcp4", redirectListener.Addr().String()) // nolint: gosec,noctx
+	require.NoError(t, err)
+
+	redirectAddr := redirectListener.Addr().String()
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           NewSTUNConn(clientConn),
+		STUNServerAddr: redirectAddr,
+		TURNServerAddr: redirectAddr,
+		Username:       "foo",
+		Password:       "pass",
+		Realm:          "pion.ly",
+		LoggerFactory:  loggerFactory,
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+
+	allocation, err := client.AllocateTCP()
+	require.Error(t, err)
+	require.Nil(t, allocation)
+	var turnErr *stun.TurnError
+	require.True(t, errors.As(err, &turnErr))
+	require.Equal(t, stun.CodeTryAlternate, turnErr.ErrorCodeAttr.Code)
+
+	assert.NoError(t, clientConn.Close())
+	assert.NoError(t, redirectListener.Close())
+	assert.NoError(t, altServer.Close())
+	<-redirectDone
 }
 
 func TestTCPClientDial(t *testing.T) {
