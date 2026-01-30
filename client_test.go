@@ -793,6 +793,53 @@ func TestGetRequestedAddressFamily(t *testing.T) {
 	})
 }
 
+func TestAppendRequestedAddressFamilyOrReservation(t *testing.T) {
+	t.Run("IPv4 omits attribute", func(t *testing.T) {
+		setters := appendRequestedAddressFamilyOrReservation(
+			[]stun.Setter{stun.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassRequest)},
+			proto.RequestedFamilyIPv4,
+			nil,
+		)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+
+	t.Run("IPv6 includes attribute", func(t *testing.T) {
+		setters := appendRequestedAddressFamilyOrReservation(
+			[]stun.Setter{stun.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassRequest)},
+			proto.RequestedFamilyIPv6,
+			nil,
+		)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		var raf proto.RequestedAddressFamily
+		require.NoError(t, raf.GetFrom(msg))
+		assert.Equal(t, proto.RequestedFamilyIPv6, raf)
+	})
+
+	t.Run("Reservation token takes precedence", func(t *testing.T) {
+		token := proto.ReservationToken{1, 2, 3, 4, 5, 6, 7, 8}
+		setters := appendRequestedAddressFamilyOrReservation(
+			[]stun.Setter{stun.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassRequest)},
+			proto.RequestedFamilyIPv6,
+			token,
+		)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		var parsedToken proto.ReservationToken
+		require.NoError(t, parsedToken.GetFrom(msg))
+		assert.Equal(t, token, parsedToken)
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+}
+
 type channelBindFilterConn struct {
 	net.PacketConn
 

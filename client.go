@@ -151,6 +151,35 @@ func getRequestedAddressFamily(
 	return proto.RequestedFamilyIPv4
 }
 
+// appendRequestedAddressFamilyOrReservation adds either RESERVATION-TOKEN or
+// REQUESTED-ADDRESS-FAMILY to the provided setters slice, respecting mutual
+// exclusivity rules from RFC 6156.
+// The REQUESTED-ADDRESS-FAMILY attribute is
+// only included when IPv6 is desired.
+func appendRequestedAddressFamilyOrReservation(
+	setters []stun.Setter,
+	requestedFamily proto.RequestedAddressFamily,
+	reservationToken []byte,
+) []stun.Setter {
+	// Clients MUST NOT include a REQUESTED-ADDRESS-FAMILY attribute in an
+	// Allocate request that contains a RESERVATION-TOKEN attribute.
+	// https://www.rfc-editor.org/rfc/rfc6156#section-4.1
+	if len(reservationToken) != 0 {
+		return append(setters, proto.ReservationToken(reservationToken))
+	}
+
+	// Only include the attribute when IPv6 is explicitly requested.
+	// This indirectly implied by the specification:
+	// If the REQUESTED-ADDRESS-FAMILY attribute is absent, the server MUST
+	// allocate an IPv4-relayed transport address for the TURN client.
+	// https://www.rfc-editor.org/rfc/rfc6156#section-4.2
+	if requestedFamily == proto.RequestedFamilyIPv6 {
+		return append(setters, requestedFamily)
+	}
+
+	return setters
+}
+
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on,
 // default "0.0.0.0:0".
 func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
@@ -341,12 +370,10 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		proto.RequestedTransport{Protocol: protocol},
 		stun.Fingerprint,
 	}
-	// RFC 6156: REQUESTED-ADDRESS-FAMILY and RESERVATION-TOKEN are mutually exclusive.
-	if len(c.reservationToken) != 0 {
-		allocationSetters = append(allocationSetters, proto.ReservationToken(c.reservationToken))
-	} else {
-		allocationSetters = append(allocationSetters, c.requestedAddressFamily)
-	}
+
+	allocationSetters = appendRequestedAddressFamilyOrReservation(
+		allocationSetters, c.requestedAddressFamily, c.reservationToken,
+	)
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
@@ -385,12 +412,10 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		&c.integrity,
 		stun.Fingerprint,
 	}
-	// RFC 6156: REQUESTED-ADDRESS-FAMILY and RESERVATION-TOKEN are mutually exclusive.
-	if len(c.reservationToken) != 0 {
-		allocationSetters = append(allocationSetters, proto.ReservationToken(c.reservationToken))
-	} else {
-		allocationSetters = append(allocationSetters, c.requestedAddressFamily)
-	}
+
+	allocationSetters = appendRequestedAddressFamilyOrReservation(
+		allocationSetters, c.requestedAddressFamily, c.reservationToken,
+	)
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
