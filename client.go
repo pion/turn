@@ -368,7 +368,6 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		stun.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassRequest),
 		proto.RequestedTransport{Protocol: protocol},
-		stun.Fingerprint,
 	}
 
 	allocationSetters = appendRequestedAddressFamilyOrReservation(
@@ -377,6 +376,9 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
+
+	// FINGERPRINT must be the last attribute per RFC 5389
+	allocationSetters = append(allocationSetters, stun.Fingerprint)
 
 	msg, err := stun.Build(allocationSetters...)
 	if err != nil {
@@ -410,7 +412,6 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		&c.realm,
 		&nonce,
 		&c.integrity,
-		stun.Fingerprint,
 	}
 
 	allocationSetters = appendRequestedAddressFamilyOrReservation(
@@ -419,6 +420,9 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
+
+	// FINGERPRINT must be the last attribute per RFC 5389
+	allocationSetters = append(allocationSetters, stun.Fingerprint)
 
 	msg, err = stun.Build(allocationSetters...)
 	if err != nil {
