@@ -484,8 +484,11 @@ func (c *UDPConn) bind(bound *binding) error {
 
 				return errTryAgain
 			}
+
+			return fmt.Errorf("%w: received error %d", errCannotBindChannel, code.Code) // nolint:err113
 		}
-		return fmt.Errorf("unexpected response type %s", res.Type) //nolint // dynamic errors
+
+		return fmt.Errorf("%w: unexpected response type %s", errCannotBindChannel, res.Type) // nolint:err113
 	}
 
 	c.log.Debugf("Channel binding successful: %s %d", bound.addr, bound.number)

@@ -95,6 +95,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 			name                 string
 			transactionFn        func(*stun.Message, net.Addr, bool) (TransactionResult, error)
 			expectErr            error
+			expectErrContains    string
 			expectBindingDeleted bool
 			expectNonceChanged   bool
 		}{
@@ -114,6 +115,31 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 				expectErr:          errTryAgain,
 				expectNonceChanged: true,
 			},
+			{
+				name: "ErrorResponse with error code returns cannot bind channel error",
+				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+					res := stun.MustBuild(
+						stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+						stun.ErrorCodeAttribute{Code: stun.CodeForbidden, Reason: []byte("Forbidden")},
+					)
+
+					return TransactionResult{Msg: res}, nil
+				},
+				expectErr:         errCannotBindChannel,
+				expectErrContains: "received error",
+			},
+			{
+				name: "ErrorResponse without error code returns unexpected response type error",
+				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+					res := stun.MustBuild(
+						stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+					)
+
+					return TransactionResult{Msg: res}, nil
+				},
+				expectErr:         errCannotBindChannel,
+				expectErrContains: "unexpected response type",
+			},
 		}
 
 		for _, tt := range tests {
@@ -129,6 +155,9 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 					assert.NoError(t, err)
 				} else {
 					assert.ErrorIs(t, err, tt.expectErr)
+				}
+				if tt.expectErrContains != "" {
+					assert.ErrorContains(t, err, tt.expectErrContains)
 				}
 
 				if tt.expectBindingDeleted {
