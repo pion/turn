@@ -320,7 +320,7 @@ func (m *Manager) GetReservation(reservationToken string) (int, bool) {
 
 // GetRandomEvenPort returns a random un-allocated udp4 port.
 func (m *Manager) GetRandomEvenPort() (int, error) {
-	for i := 0; i < 128; i++ {
+	for range 128 {
 		conn, addr, err := m.allocatePacketConn(AllocateListenerConfig{Network: "udp4"})
 		if err != nil {
 			return 0, err

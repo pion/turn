@@ -43,7 +43,7 @@ func main() { //nolint:cyclop
 	// Cache -users flag for easy lookup later
 	// If passwords are stored they should be saved to your DB hashed using turn.GenerateAuthKey
 	usersMap := map[string][]byte{}
-	for _, userPass := range strings.Split(*users, ",") {
+	for userPass := range strings.SplitSeq(*users, ",") {
 		parts := strings.SplitN(userPass, "=", 2)
 		if len(parts) != 2 {
 			log.Fatalf("Invalid user credential format '%s': expected 'username=password'", userPass)
@@ -60,6 +60,7 @@ func main() { //nolint:cyclop
 		Control: func(network, address string, conn syscall.RawConn) error { // nolint: revive
 			var operr error
 			if err = conn.Control(func(fd uintptr) {
+				//nolint:gosec // file descriptors are small ints from the OS.
 				operr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1)
 			}); err != nil {
 				return err

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package turn
 
@@ -1949,7 +1948,7 @@ func TestRelayAddressGeneratorPortRange(t *testing.T) {
 		conns := []net.PacketConn{}
 		listeners := []net.Listener{}
 
-		for i := 0; i < 25; i++ {
+		for range 25 {
 			conn, addr, err := relayAddressGeneratorPortRange.AllocatePacketConn(AllocateListenerConfig{Network: "udp"})
 			assert.NoError(t, err)
 			assert.NotNil(t, addr)
@@ -2060,7 +2059,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 
 	// Setup client(s)
 	clients := make([]net.PacketConn, clientNum)
-	for i := 0; i < clientNum; i++ {
+	for i := range clientNum {
 		clientConn, listenErr := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 		if listenErr != nil {
 			b.Fatalf("Failed to allocate socket for client %d: %s", i+1, err)
@@ -2097,7 +2096,7 @@ func RunBenchmarkServer(b *testing.B, clientNum int) { //nolint:cyclop
 
 	// Run benchmark
 	for j := 0; j < b.N; j++ {
-		for i := 0; i < clientNum; i++ {
+		for i := range clientNum {
 			if _, err := clients[i].WriteTo(testSeq, sinkAddr); err != nil {
 				b.Fatalf("Client %d cannot send to TURN server: %s", i+1, err)
 			}

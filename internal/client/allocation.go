@@ -147,7 +147,7 @@ func (a *allocation) onRefreshTimers(id int) {
 		lifetime := a.lifetime()
 		// Limit the max retries on errTryAgain to 3
 		// when stale nonce returns, sencond retry should succeed
-		for i := 0; i < maxRetryAttempts; i++ {
+		for range maxRetryAttempts {
 			err = a.refreshAllocation(lifetime, false)
 			if !errors.Is(err, errTryAgain) {
 				break
@@ -158,7 +158,7 @@ func (a *allocation) onRefreshTimers(id int) {
 		}
 	case timerIDRefreshPerms:
 		var err error
-		for i := 0; i < maxRetryAttempts; i++ {
+		for range maxRetryAttempts {
 			err = a.refreshPermissions()
 			if !errors.Is(err, errTryAgain) {
 				break

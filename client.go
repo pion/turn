@@ -40,7 +40,7 @@ type ClientConfig struct {
 	STUNServerAddr string // STUN server address (e.g. "stun.abc.com:3478")
 	TURNServerAddr string // TURN server address (e.g. "turn.abc.com:3478")
 	Username       string
-	Password       string
+	Password       string //nolint:gosec // runtime credential, not hardcoded.
 	Realm          string
 	Software       string
 	RTO            time.Duration

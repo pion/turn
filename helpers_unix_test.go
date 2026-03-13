@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 //go:build unix
-// +build unix
 
 package turn
 

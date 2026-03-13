@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package turn
 
@@ -593,7 +592,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 		relayAddr, ok := allocation.Addr().(*net.TCPAddr)
 		assert.True(t, ok)
 
-		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)} //nolint:gosec // no overflow, test sample.
 		peerConn, peerErr := net.DialTCP("tcp4", nil, relayAddr)
 		assert.NoError(t, peerErr)
 
@@ -612,7 +611,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 		remotePeerListener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
-		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)} //nolint:gosec // no overflow, test sample.
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -640,7 +639,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 		dialerConn, err := allocation.Dial("tcp4", remotePeerAddr.String())
 		assert.NoError(t, err)
 
-		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+		expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)} //nolint:gosec // no overflow, test sample.
 		_, err = dialerConn.Write(expectedMsg)
 		assert.NoError(t, err)
 
@@ -660,7 +659,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 			acceptorConn, err := allocation.Accept()
 			assert.NoError(t, err)
 
-			expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)}
+			expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF, byte(i)} //nolint:gosec // no overflow, test sample.
 			_, err = acceptorConn.Write(expectedMsg)
 			assert.NoError(t, err)
 
@@ -679,7 +678,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 	clientConns := []net.Conn{}
 	peerConns := []net.Conn{}
 	peerListeners := []net.Listener{}
-	for i := 0; i < 3; i += 1 {
+	for i := range 3 {
 		// client -> server -> peer
 		peerListener, peerAddr := runPeerAcceptor(ctx, i)
 		time.Sleep(time.Second)
@@ -697,7 +696,7 @@ func TestTCPClientMultipleConns(t *testing.T) {
 	wg.Wait()
 
 	// Shutdown
-	for i := 0; i < 3; i += 1 {
+	for i := range 3 {
 		assert.NoError(t, peerListeners[i].Close())
 		assert.NoError(t, peerConns[i].Close())
 		assert.NoError(t, clientConns[i].Close())

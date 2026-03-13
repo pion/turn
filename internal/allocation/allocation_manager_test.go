@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package allocation
 
@@ -269,7 +268,7 @@ func TestCreateTCPConnection(t *testing.T) {
 	acceptErrs := []error{}
 
 	var err error
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		lns[i], err = net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
 		assert.NoError(t, err)
 
@@ -303,7 +302,7 @@ func TestCreateTCPConnection(t *testing.T) {
 	assert.NoError(t, err)
 	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		addr, ok := lns[i].Addr().(*net.TCPAddr)
 		assert.True(t, ok)
 		peer := proto.PeerAddress{IP: addr.IP, Port: addr.Port}
@@ -334,7 +333,7 @@ func TestCreateTCPConnection(t *testing.T) {
 
 	assert.NoError(t, turnSocket.Close())
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		mu.Lock()
 		conn := acceptedConns[i]
 		mu.Unlock()

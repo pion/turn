@@ -204,7 +204,7 @@ func (a *TCPAllocation) DialTCPWithConn(conn net.Conn, _ string, rAddr *net.TCPA
 		a.permMap.insert(rAddr, perm)
 	}
 
-	for i := 0; i < maxRetryAttempts; i++ {
+	for range maxRetryAttempts {
 		if err = a.createPermission(perm, rAddr); !errors.Is(err, errTryAgain) {
 			break
 		}

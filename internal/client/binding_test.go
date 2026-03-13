@@ -14,13 +14,13 @@ func TestBindingManager(t *testing.T) {
 	t.Run("number assignment", func(t *testing.T) {
 		bm := newBindingManager()
 		var chanNum uint16
-		for i := uint16(0); i < 10; i++ {
+		for i := range uint16(10) {
 			chanNum = bm.assignChannelNumber()
 			assert.Equal(t, minChannelNumber+i, chanNum, "should match")
 		}
 
 		bm.next = uint16(0x7ff0)
-		for i := uint16(0); i < 16; i++ {
+		for i := range uint16(16) {
 			chanNum = bm.assignChannelNumber()
 			assert.Equal(t, 0x7ff0+i, chanNum, "should match")
 		}
@@ -34,7 +34,7 @@ func TestBindingManager(t *testing.T) {
 		lo := net.IPv4(127, 0, 0, 1)
 		count := 100
 		bm := newBindingManager()
-		for i := 0; i < count; i++ {
+		for i := range count {
 			addr := &net.UDPAddr{IP: lo, Port: 10000 + i}
 			b0 := bm.create(addr)
 			b1, ok := bm.findByAddr(addr)
@@ -56,7 +56,7 @@ func TestBindingManager(t *testing.T) {
 		assert.Equal(t, count, bm.size(), "should match")
 		assert.Equal(t, count, len(bm.addrMap), "should match")
 
-		for i := 0; i < count; i++ {
+		for i := range count {
 			addr := &net.UDPAddr{IP: lo, Port: 10000 + i}
 			if i%2 == 0 {
 				assert.True(t, bm.deleteByAddr(addr), "should return true")

@@ -136,7 +136,7 @@ func main() { //nolint:cyclop
 
 	// Parse users.
 	usersMap := map[string][]byte{}
-	for _, userPass := range strings.Split(*users, ",") {
+	for userPass := range strings.SplitSeq(*users, ",") {
 		parts := strings.SplitN(userPass, "=", 2)
 		if len(parts) != 2 {
 			log.Fatalf("Invalid user credential format '%s': expected 'username=password'", userPass)

@@ -46,7 +46,7 @@ func main() { //nolint:gocyclo,cyclop
 	// Cache -users flag for easy lookup later
 	// If passwords are stored they should be saved to your DB hashed using turn.GenerateAuthKey
 	usersMap := map[string][]byte{}
-	for _, userPass := range strings.Split(*users, ",") {
+	for userPass := range strings.SplitSeq(*users, ",") {
 		parts := strings.SplitN(userPass, "=", 2)
 		if len(parts) == 2 {
 			usersMap[parts[0]] = turn.GenerateAuthKey(parts[0], *realm, parts[1])

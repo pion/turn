@@ -196,7 +196,7 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 		c.permMap.insert(addr, perm)
 	}
 
-	for i := 0; i < maxRetryAttempts; i++ {
+	for range maxRetryAttempts {
 		// c.createPermission() would block, per destination IP (, or perm),
 		// until the perm state becomes "requested". Purpose of this is to
 		// guarantee the order of packets (within the same perm).
@@ -417,7 +417,7 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 func (c *UDPConn) maybeBind(bound *binding) {
 	bind := func() {
 		var err error
-		for i := 0; i < maxRetryAttempts; i++ {
+		for range maxRetryAttempts {
 			if err = c.bind(bound); !errors.Is(err, errTryAgain) {
 				break
 			}

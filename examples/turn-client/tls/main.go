@@ -186,7 +186,7 @@ func doPingTest(client *turn.Client, relayConn net.PacketConn) error { //nolint:
 	time.Sleep(500 * time.Millisecond)
 
 	// Send 10 packets from relayConn to the echo server
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		msg := time.Now().Format(time.RFC3339Nano)
 		_, err = pingerConn.WriteTo([]byte(msg), relayConn.LocalAddr())
 		if err != nil {

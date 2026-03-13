@@ -64,7 +64,7 @@ func (c *ChannelData) Encode() {
 	c.Raw = append(c.Raw, c.Data...)
 	padded := nearestPaddedValueLength(len(c.Raw))
 	if bytesToAdd := padded - len(c.Raw); bytesToAdd > 0 {
-		for i := 0; i < bytesToAdd; i++ {
+		for range bytesToAdd {
 			c.Raw = append(c.Raw, 0)
 		}
 	}
