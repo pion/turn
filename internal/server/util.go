@@ -110,6 +110,7 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 		Realm:    realmAttr.String(),
 		SrcAddr:  req.SrcAddr,
 		TLS:      req.TLS,
+		Method:   callingMethod,
 	})
 	if !ok {
 		return nil, false, "", buildAndSendErr(
