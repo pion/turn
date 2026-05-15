@@ -8,6 +8,8 @@ package auth
 import (
 	"crypto/tls"
 	"net"
+
+	"github.com/pion/stun/v3"
 )
 
 // RequestAttributes represents attributes of a TURN request which
@@ -17,6 +19,7 @@ type RequestAttributes struct {
 	Realm    string
 	SrcAddr  net.Addr
 	TLS      *tls.ConnectionState
+	Method   stun.Method
 
 	// extend as needed
 }
