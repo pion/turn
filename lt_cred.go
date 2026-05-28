@@ -100,7 +100,7 @@ func LongTermTURNRESTAuthHandler(sharedSecret string, logger logging.LeveledLogg
 		fields := strings.Split(ra.Username, ":")
 		timestamp := fields[0]
 		userID := ra.Username
-		if len(fields) > 0 {
+		if len(fields) > 1 {
 			userID = fields[1]
 		}
 
