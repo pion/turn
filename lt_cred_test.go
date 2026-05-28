@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
+	"github.com/pion/turn/v5/internal/auth"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -119,4 +120,18 @@ func TestLongTermTURNRESTAuthHandler(t *testing.T) {
 	assert.NoError(t, relayConn.Close())
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, server.Close())
+}
+
+// TestLongTermTURNRESTAuthHandler_NoColon verifies that a username without a colon
+// is rejected cleanly (authentication failure, no panic) — regression test for
+// the out-of-bounds panic fixed in LongTermTURNRESTAuthHandler.
+// The username has no colon so userID falls back to the full username; the
+// timestamp (1700000000) is in the past so authentication fails as expired.
+func TestLongTermTURNRESTAuthHandler_NoColon(t *testing.T) {
+	handler := LongTermTURNRESTAuthHandler("secret", nil)
+	_, _, ok := handler(&auth.RequestAttributes{
+		Username: "1700000000", // no colon — previously caused an index out-of-range panic
+		Realm:    "pion.ly",
+	})
+	assert.False(t, ok, "username without colon must not authenticate")
 }
