@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -1431,4 +1432,84 @@ func TestHandleChannelData(t *testing.T) {
 			assert.Error(t, err)
 		}
 	})
+}
+
+// TestConnectRequestPermissionDenied verifies that handleConnectRequest returns an error
+// (and does NOT dial the peer) when the server's PermissionHandler blocks the peer IP.
+func TestConnectRequestPermissionDenied(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+	// dialAttempted is set to true if AllocateConn is ever invoked.
+	// With the PermissionHandler blocking all peers it must NEVER be called,
+	// because the permission check must stop the request before any dial.
+	var dialAttempted bool
+	// permissionChecked is set to true when the PermissionHandler is invoked,
+	// confirming that the check actually ran before the dial was skipped.
+	var permissionChecked bool
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
+			if listenErr != nil {
+				return nil, nil, listenErr
+			}
+
+			return con, con.LocalAddr(), nil
+		},
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateConn: func(conf allocation.AllocateConnConfig) (net.Conn, error) {
+			dialAttempted = true
+			err = errors.New("AllocateConn must not be called when PermissionHandler blocks the peer") // nolint:err113
+
+			return nil, err
+		},
+		PermissionHandler: func(src net.Addr, peer net.IP) bool {
+			permissionChecked = true
+
+			return false
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+	defer allocationManager.Close() //nolint:errcheck
+
+	nonceHash, err := NewShortNonceHash(0)
+	assert.NoError(t, err)
+	staticKey, err := nonceHash.Generate()
+	assert.NoError(t, err)
+
+	req := Request{
+		AllocationManager: allocationManager,
+		NonceHash:         nonceHash,
+		Conn:              conn,
+		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+		Log:               logger,
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
+		},
+	}
+
+	fiveTuple := &allocation.FiveTuple{SrcAddr: req.SrcAddr, DstAddr: req.Conn.LocalAddr(), Protocol: allocation.UDP}
+	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
+		0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
+	assert.NoError(t, err)
+
+	stunMsg := &stun.Message{}
+	assert.NoError(t, (proto.Lifetime{}).AddTo(stunMsg))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Realm(staticKey)).AddTo(stunMsg))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(stunMsg))
+	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.1.100"), Port: 1234}).AddTo(stunMsg))
+
+	err = handleConnectRequest(req, stunMsg)
+	assert.Error(t, err, "PermissionHandler that blocks peers must cause CONNECT to fail")
+	assert.True(t, permissionChecked, "PermissionHandler must be called for the peer IP")
+	assert.False(t, dialAttempted, "AllocateConn must not be called when PermissionHandler blocks the peer")
 }

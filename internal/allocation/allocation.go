@@ -450,6 +450,14 @@ func (a *Allocation) connHandler(manager *Manager) {
 		}
 		a.log.Debugf("Relay %s accepted connection from %s", a.relayListener.Addr(), tcpAddr)
 
+		if err = manager.GrantPermission(a.fiveTuple.SrcAddr, tcpAddr.IP); err != nil {
+			_ = conn.Close()
+			a.log.Infof("Relay %s: permission denied for inbound peer %s, closing connection", a.relayListener.Addr(),
+				tcpAddr.IP)
+
+			continue
+		}
+
 		cid, err := manager.addTCPConnection(a, conn)
 		if err != nil {
 			a.log.Errorf("Failed to create inbound TCP Connection for Allocation %v %v", a.fiveTuple.SrcAddr, err)

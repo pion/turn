@@ -658,3 +658,28 @@ func TestAllocationConnHandler_TurnSocketWriteErrorRemovesConnection(t *testing.
 	assert.True(t, conn.wasClosed())
 	assert.Equal(t, 1, turnSocket.writeCount())
 }
+
+// TestAllocationConnHandler_PermissionDeniedClosesConn verifies that an inbound peer
+// connection whose IP is blocked by the PermissionHandler is closed immediately and
+// that no ConnectionAttempt indication is forwarded to the TURN client.
+func TestAllocationConnHandler_PermissionDeniedClosesConn(t *testing.T) {
+	conn := &mockConn{remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5555}}
+
+	ln := &mockRelayListener{
+		conn: conn,
+	}
+	turnSocket := &mockTurnSocket{}
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+	var permissionChecked bool
+	m.permissionHandler = func(net.Addr, net.IP) bool {
+		permissionChecked = true
+
+		return false
+	}
+
+	a.connHandler(m)
+
+	assert.True(t, permissionChecked, "PermissionHandler must be called for the inbound peer")
+	assert.True(t, conn.wasClosed(), "denied peer connection must be closed")
+	assert.Equal(t, 0, turnSocket.writeCount(), "no ConnectionAttempt indication must be sent for a denied peer")
+}
