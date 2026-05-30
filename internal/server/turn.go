@@ -628,6 +628,16 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 		)...)
 	}
 
+	if err = req.AllocationManager.GrantPermission(req.SrcAddr, peerAddr.IP); err != nil {
+		req.Log.Infof("permission denied for client %s to peer %s", req.SrcAddr, peerAddr.IP)
+
+		return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
+			stunMsg.TransactionID,
+			stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
+			&stun.ErrorCodeAttribute{Code: stun.CodeForbidden},
+		)...)
+	}
+
 	connectionID, err := req.AllocationManager.CreateTCPConnection(alloc, peerAddr)
 	if err != nil {
 		// If the server is currently processing a Connect request for this
