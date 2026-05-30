@@ -614,6 +614,8 @@ func TestAllocationConnHandler_AddTCPConnectionErrorClosesConn(t *testing.T) {
 	}
 	turnSocket := &mockTurnSocket{}
 	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+	// Add permission for the peer so the flow reaches addTCPConnection.
+	a.AddPermission(NewPermission(&net.TCPAddr{IP: net.IPv4(1, 2, 3, 4)}, nil, time.Hour))
 
 	a.tcpConnections[proto.ConnectionID(1)] = &tcpConnection{
 		existingConn,
@@ -635,6 +637,9 @@ func TestAllocationConnHandler_StunBuildErrorRemovesConnection(t *testing.T) {
 	}
 	turnSocket := &mockTurnSocket{}
 	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+	// Add permission for the 3-byte IP so the flow reaches stun.Build (which then fails
+	// because proto.PeerAddress rejects a non-4/16-byte IP).
+	a.AddPermission(NewPermission(&net.TCPAddr{IP: net.IP{1, 2, 3}}, nil, time.Hour))
 
 	a.connHandler(m)
 
@@ -652,9 +657,32 @@ func TestAllocationConnHandler_TurnSocketWriteErrorRemovesConnection(t *testing.
 	turnSocket.setWriteErr(io.EOF)
 
 	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+	// Add permission for the peer so the flow reaches the WriteTo call.
+	a.AddPermission(NewPermission(&net.TCPAddr{IP: net.IPv4(1, 2, 3, 4)}, nil, time.Hour))
 
 	a.connHandler(m)
 
 	assert.True(t, conn.wasClosed())
 	assert.Equal(t, 1, turnSocket.writeCount())
+}
+
+// TestAllocationConnHandler_NoPermissionClosesConn verifies that an inbound peer
+// connection for which no CreatePermission has been installed is closed immediately
+// and that no ConnectionAttempt indication is forwarded to the TURN client.
+// Per RFC 6062 §5, the server MUST check for an installed permission before
+// accepting a relay connection from a peer.
+func TestAllocationConnHandler_NoPermissionClosesConn(t *testing.T) {
+	conn := &mockConn{remoteAddr: &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5555}}
+
+	ln := &mockRelayListener{
+		conn: conn,
+	}
+	turnSocket := &mockTurnSocket{}
+	m, a := newTestAllocationForConnHandler(t, ln, turnSocket)
+	// No permission is installed for 1.2.3.4 — GetPermission will return nil.
+
+	a.connHandler(m)
+
+	assert.True(t, conn.wasClosed(), "peer connection without permission must be closed")
+	assert.Equal(t, 0, turnSocket.writeCount(), "no ConnectionAttempt indication must be sent for an unpermitted peer")
 }
