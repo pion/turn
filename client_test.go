@@ -513,6 +513,9 @@ func TestTCPClientAccept(t *testing.T) {
 	allocation, err := client.AllocateTCP()
 	assert.NoError(t, err)
 
+	// Install a permission for the loopback peer before it connects (RFC 6062 §5).
+	require.NoError(t, client.CreatePermission(&net.TCPAddr{IP: net.ParseIP("127.0.0.1")}))
+
 	expectedMsg := []byte{0xDE, 0xAD, 0xBE, 0xEF}
 
 	peerConn, err := net.Dial("tcp4", allocation.Addr().String()) // nolint: noctx
@@ -586,6 +589,9 @@ func TestTCPClientMultipleConns(t *testing.T) {
 
 	allocation, err := client.AllocateTCP()
 	assert.NoError(t, err)
+
+	// Install a permission for the loopback peer before it connects (RFC 6062 §5).
+	require.NoError(t, client.CreatePermission(&net.TCPAddr{IP: net.ParseIP("127.0.0.1")}))
 
 	var wg sync.WaitGroup
 	runPeerDialer := func(i int) net.Conn {
