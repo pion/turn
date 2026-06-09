@@ -165,6 +165,11 @@ type ServerConfig struct {
 	// AllocationLife sets the lifetime of allocation. Defaults to 10 minutes.
 	AllocationLifetime time.Duration
 
+	// StrictAddressFamily keeps the RFC 6156 default of IPv4 when
+	// REQUESTED-ADDRESS-FAMILY is omitted. By default, omitted address family
+	// follows the listener address family for browser compatibility.
+	StrictAddressFamily bool
+
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
 }
