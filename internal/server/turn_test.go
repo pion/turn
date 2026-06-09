@@ -395,6 +395,101 @@ func TestRequestedAddressFamilyIPv6(t *testing.T) {
 	assert.Equal(t, proto.RequestedFamilyIPv6, foundAlloc.AddressFamily())
 }
 
+func TestAllocateDefaultAddressFamilyFromListener(t *testing.T) {
+	t.Run("IPv6 listener", func(t *testing.T) {
+		family, network := allocateWithoutRequestedAddressFamily(t, false)
+
+		assert.Equal(t, proto.RequestedFamilyIPv6, family)
+		assert.Equal(t, "udp6", network)
+	})
+
+	t.Run("strict mode", func(t *testing.T) {
+		family, network := allocateWithoutRequestedAddressFamily(t, true)
+
+		assert.Equal(t, proto.RequestedFamilyIPv4, family)
+		assert.Equal(t, "udp4", network)
+	})
+}
+
+func allocateWithoutRequestedAddressFamily(
+	t *testing.T,
+	strictAddressFamily bool,
+) (proto.RequestedAddressFamily, string) {
+	t.Helper()
+
+	conn, err := net.ListenPacket("udp6", "[::]:0") // nolint: noctx
+	assert.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+	relayNetwork := ""
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			relayNetwork = conf.Network
+			addr := "0.0.0.0:0"
+			if conf.Network == "udp6" {
+				addr = "[::]:0"
+			}
+
+			con, listenErr := net.ListenPacket(conf.Network, addr) // nolint: noctx
+			if listenErr != nil {
+				return nil, nil, listenErr
+			}
+
+			return con, con.LocalAddr(), nil
+		},
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
+			return nil, nil, nil
+		},
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
+			return nil, nil //nolint:nilnil
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+	defer allocationManager.Close() //nolint:errcheck
+
+	nonceHash, err := NewShortNonceHash(0)
+	assert.NoError(t, err)
+	staticKey, err := nonceHash.Generate()
+	assert.NoError(t, err)
+
+	req := Request{
+		AllocationManager:   allocationManager,
+		NonceHash:           nonceHash,
+		Conn:                conn,
+		SrcAddr:             &net.UDPAddr{IP: net.ParseIP("::1"), Port: 5000},
+		Log:                 logger,
+		AllocationLifetime:  proto.DefaultLifetime,
+		StrictAddressFamily: strictAddressFamily,
+		Realm:               "pion.ly",
+		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+			return testUser, []byte(staticKey), true
+		},
+	}
+
+	msg := &stun.Message{}
+	msg.TransactionID = stun.NewTransactionID()
+	assert.NoError(t, msg.Build(stun.NewType(stun.MethodAllocate, stun.ClassRequest)))
+	assert.NoError(t, (proto.RequestedTransport{Protocol: proto.ProtoUDP}).AddTo(msg))
+	assert.NoError(t, (stun.Nonce(staticKey)).AddTo(msg))
+	assert.NoError(t, (stun.Realm("pion.ly")).AddTo(msg))
+	assert.NoError(t, (stun.Username(testUser)).AddTo(msg))
+	assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(msg))
+
+	assert.NoError(t, handleAllocateRequest(req, msg))
+
+	alloc := allocationManager.GetAllocation(&allocation.FiveTuple{
+		SrcAddr:  req.SrcAddr,
+		DstAddr:  req.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+	})
+	assert.NotNil(t, alloc)
+
+	return alloc.AddressFamily(), relayNetwork
+}
+
 func TestRequestedAddressFamilyUnsupported(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
 	assert.NoError(t, err)

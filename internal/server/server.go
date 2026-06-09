@@ -38,9 +38,10 @@ type Request struct {
 	Log   logging.LeveledLogger
 	Realm string
 
-	ChannelBindTimeout time.Duration
-	PermissionTimeout  time.Duration
-	AllocationLifetime time.Duration
+	ChannelBindTimeout  time.Duration
+	PermissionTimeout   time.Duration
+	AllocationLifetime  time.Duration
+	StrictAddressFamily bool
 }
 
 // HandleRequest processes the give Request.

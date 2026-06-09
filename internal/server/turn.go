@@ -160,9 +160,8 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	_ = realmAttr.GetFrom(stunMsg)
 
 	// RFC 6156: Parse REQUESTED-ADDRESS-FAMILY attribute if present.
-	// If absent, default to IPv4 per RFC 6156 Section 4.1.1.
-	// "If the REQUESTED-ADDRESS-FAMILY attribute is absent, the server MUST
-	// allocate an IPv4-relayed transport address for the TURN client."
+	// If absent, default to the listener family unless strict RFC 6156
+	// behavior is requested.
 	// "Length:  this 16-bit field contains the length of the attribute in
 	// bytes.  The length of this attribute is 4 bytes."
 	// "If the server does not support the address family requested by the
@@ -173,7 +172,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	if err = requestedFamily.GetFrom(stunMsg); err != nil {
 		switch {
 		case errors.Is(err, stun.ErrAttributeNotFound):
-			requestedFamily = proto.RequestedFamilyIPv4
+			requestedFamily = defaultAllocationAddressFamily(req)
 		case stun.IsAttrSizeInvalid(err) || stun.IsAttrSizeOverflow(err):
 			return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 		default:
@@ -763,4 +762,49 @@ func ipMatchesFamily(ip net.IP, family proto.RequestedAddressFamily) bool {
 	}
 
 	return false
+}
+
+func defaultAllocationAddressFamily(req Request) proto.RequestedAddressFamily {
+	if req.StrictAddressFamily {
+		return proto.RequestedFamilyIPv4
+	}
+
+	ip, _, err := ipnet.AddrIPPort(req.Conn.LocalAddr())
+	if err != nil {
+		return proto.RequestedFamilyIPv4
+	}
+
+	// some dual-stack wildcard sockets can report [::] as LocalAddr even for IPv4 or
+	// ipv6-mapped IPv4 addresses.
+	if ip.IsUnspecified() {
+		if family, ok := addressFamilyFromAddr(req.SrcAddr); ok {
+			return family
+		}
+	}
+
+	if family, ok := addressFamilyFromIP(ip); ok {
+		return family
+	}
+
+	return proto.RequestedFamilyIPv4
+}
+
+func addressFamilyFromAddr(addr net.Addr) (proto.RequestedAddressFamily, bool) {
+	ip, _, err := ipnet.AddrIPPort(addr)
+	if err != nil {
+		return 0, false
+	}
+
+	return addressFamilyFromIP(ip)
+}
+
+func addressFamilyFromIP(ip net.IP) (proto.RequestedAddressFamily, bool) {
+	if ip.To4() != nil {
+		return proto.RequestedFamilyIPv4, true
+	}
+	if ip.To16() != nil {
+		return proto.RequestedFamilyIPv6, true
+	}
+
+	return 0, false
 }
