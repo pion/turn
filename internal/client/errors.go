@@ -3,9 +3,7 @@
 
 package client
 
-import (
-	"errors"
-)
+import "errors"
 
 var (
 	errFake                                = errors.New("fake error")
@@ -23,6 +21,7 @@ var (
 	errInvalidTURNAddress                  = errors.New("invalid TURN server address")
 	errUnexpectedSTUNRequestMessage        = errors.New("unexpected STUN request message")
 	errCannotBindChannel                   = errors.New("cannot bind channel")
+	errChannelBindBadRequest               = errors.New("channel bind bad request")
 )
 
 type timeoutError struct {

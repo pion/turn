@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pion/stun/v3"
@@ -42,6 +43,7 @@ type UDPConn struct {
 	checkBindingsTimer     *PeriodicTimer    // Thread-safe
 	readCh                 chan *inboundData // Thread-safe
 	closeCh                chan struct{}     // Thread-safe
+	closeMutex             sync.Mutex        // Thread-safe
 	bindingRefreshInterval time.Duration     // Read-only
 	allocation
 }
@@ -188,6 +190,14 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 	if !ok {
 		return 0, errUDPAddrCast
 	}
+	if c.isClosed() {
+		return 0, &net.OpError{
+			Op:   "write",
+			Net:  c.LocalAddr().Network(),
+			Addr: c.LocalAddr(),
+			Err:  errClosed,
+		}
+	}
 
 	// Check if we have a permission for the destination IP addr
 	perm, ok := c.permMap.find(addr)
@@ -276,6 +286,15 @@ func (c *UDPConn) Close() error {
 // LocalAddr returns the local network address.
 func (c *UDPConn) LocalAddr() net.Addr {
 	return c.relayedAddr
+}
+
+func (c *UDPConn) isClosed() bool {
+	select {
+	case <-c.closeCh:
+		return true
+	default:
+		return false
+	}
 }
 
 // SetDeadline sets the read and write deadlines associated
@@ -425,6 +444,9 @@ func (c *UDPConn) maybeBind(bound *binding) {
 		if err != nil {
 			c.log.Warnf("Failed to bind channel %d: %s", bound.number, err)
 			bound.setState(bindingStateFailed)
+			if errors.Is(err, errChannelBindBadRequest) {
+				c.closeAfterChannelBindBadRequest(bound)
+			}
 
 			return
 		}
@@ -452,6 +474,18 @@ func (c *UDPConn) maybeBind(bound *binding) {
 	go bind()
 }
 
+func (c *UDPConn) closeAfterChannelBindBadRequest(bound *binding) {
+	c.log.Warnf(
+		"ChannelBind rejected with 400 for %s on channel %d; closing TURN allocation",
+		bound.addr,
+		bound.number,
+	)
+
+	if err := c.Close(); err != nil && !errors.Is(err, errAlreadyClosed) {
+		c.log.Warnf("Failed to close TURN allocation after ChannelBind 400: %s", err)
+	}
+}
+
 func (c *UDPConn) bind(bound *binding) error {
 	setters := []stun.Setter{
 		stun.TransactionID,
@@ -477,24 +511,31 @@ func (c *UDPConn) bind(bound *binding) error {
 
 	res := trRes.Msg
 	if res.Type.Class == stun.ClassErrorResponse {
-		var code stun.ErrorCodeAttribute
-		if err = code.GetFrom(res); err == nil {
-			if code.Code == stun.CodeStaleNonce {
-				c.setNonceFromMsg(res)
-
-				return errTryAgain
-			}
-
-			return fmt.Errorf("%w: received error %d", errCannotBindChannel, code.Code) // nolint:err113
-		}
-
-		return fmt.Errorf("%w: unexpected response type %s", errCannotBindChannel, res.Type) // nolint:err113
+		return c.handleChannelBindErrorResponse(res)
 	}
 
 	c.log.Debugf("Channel binding successful: %s %d", bound.addr, bound.number)
 
 	// Success.
 	return nil
+}
+
+func (c *UDPConn) handleChannelBindErrorResponse(res *stun.Message) error {
+	var code stun.ErrorCodeAttribute
+	if err := code.GetFrom(res); err != nil {
+		return fmt.Errorf("%w: unexpected response type %s", errCannotBindChannel, res.Type) // nolint:err113
+	}
+
+	switch code.Code {
+	case stun.CodeStaleNonce:
+		c.setNonceFromMsg(res)
+
+		return errTryAgain
+	case stun.CodeBadRequest:
+		return fmt.Errorf("%w: %w: received error %d", errCannotBindChannel, errChannelBindBadRequest, code.Code)
+	default:
+		return fmt.Errorf("%w: received error %d", errCannotBindChannel, code.Code) // nolint:err113
+	}
 }
 
 func (c *UDPConn) sendChannelData(data []byte, chNum uint16) (int, error) {

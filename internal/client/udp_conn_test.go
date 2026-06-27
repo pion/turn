@@ -11,10 +11,11 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
+	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUDPConn(t *testing.T) { // nolint:maintidx
+func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop
 	makeConn := func(client *mockClient, bm *bindingManager) UDPConn {
 		return UDPConn{
 			allocation: allocation{
@@ -96,6 +97,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 			transactionFn        func(*stun.Message, net.Addr, bool) (TransactionResult, error)
 			expectErr            error
 			expectErrContains    string
+			expectBadRequest     bool
 			expectBindingDeleted bool
 			expectNonceChanged   bool
 		}{
@@ -129,6 +131,20 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 				expectErrContains: "received error",
 			},
 			{
+				name: "ErrorResponse with CodeBadRequest is detectable",
+				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+					res := stun.MustBuild(
+						stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+						stun.ErrorCodeAttribute{Code: stun.CodeBadRequest, Reason: []byte("Bad Request")},
+					)
+
+					return TransactionResult{Msg: res}, nil
+				},
+				expectErr:         errCannotBindChannel,
+				expectErrContains: "received error",
+				expectBadRequest:  true,
+			},
+			{
 				name: "ErrorResponse without error code returns unexpected response type error",
 				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
 					res := stun.MustBuild(
@@ -159,6 +175,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 				if tt.expectErrContains != "" {
 					assert.ErrorContains(t, err, tt.expectErrContains)
 				}
+				assert.Equal(t, tt.expectBadRequest, errors.Is(err, errChannelBindBadRequest))
 
 				if tt.expectBindingDeleted {
 					assert.Empty(t, bm.chanMap)
@@ -182,6 +199,95 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx
 				}
 			})
 		}
+	})
+
+	t.Run("ChannelBind 400 closes allocation", func(t *testing.T) {
+		relayedAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 54321}
+		peerAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 50000}
+		serverAddr := &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 3478}
+
+		deallocatedCh := make(chan net.Addr, 1)
+		refreshLifetimeCh := make(chan time.Duration, 1)
+		refreshDontWaitCh := make(chan bool, 1)
+		refreshErrCh := make(chan error, 1)
+
+		client := &mockClient{
+			performTransaction: func(msg *stun.Message, _ net.Addr, dontWait bool) (TransactionResult, error) {
+				switch msg.Type.Method {
+				case stun.MethodChannelBind:
+					return TransactionResult{
+						Msg: stun.MustBuild(
+							stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+							stun.ErrorCodeAttribute{Code: stun.CodeBadRequest, Reason: []byte("Bad Request")},
+						),
+					}, nil
+				case stun.MethodRefresh:
+					var lifetime proto.Lifetime
+					if err := lifetime.GetFrom(msg); err != nil {
+						refreshErrCh <- err
+					} else {
+						refreshLifetimeCh <- lifetime.Duration
+						refreshDontWaitCh <- dontWait
+					}
+
+					return TransactionResult{}, nil
+				default:
+					return TransactionResult{}, errFake
+				}
+			},
+			onDeallocated: func(addr net.Addr) {
+				deallocatedCh <- addr
+			},
+		}
+
+		conn := NewUDPConn(&AllocationConfig{
+			Client:      client,
+			RelayedAddr: relayedAddr,
+			ServerAddr:  serverAddr,
+			Username:    stun.NewUsername("user"),
+			Realm:       stun.NewRealm("realm"),
+			Integrity:   stun.NewShortTermIntegrity("pass"),
+			Nonce:       stun.NewNonce("nonce"),
+			Lifetime:    time.Hour,
+			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+		})
+		defer func() { _ = conn.Close() }()
+
+		bound := conn.bindingMgr.create(peerAddr)
+		conn.maybeBind(bound)
+
+		assert.Eventually(t, func() bool {
+			return bound.state() == bindingStateFailed && conn.isClosed()
+		}, 5*time.Second, 10*time.Millisecond)
+
+		select {
+		case err := <-refreshErrCh:
+			assert.NoError(t, err)
+		default:
+		}
+		select {
+		case deallocatedAddr := <-deallocatedCh:
+			assert.Equal(t, relayedAddr, deallocatedAddr)
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for deallocation callback")
+		}
+
+		select {
+		case lifetime := <-refreshLifetimeCh:
+			assert.Equal(t, time.Duration(0), lifetime)
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for refresh deallocation")
+		}
+
+		select {
+		case dontWait := <-refreshDontWaitCh:
+			assert.True(t, dontWait)
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for refresh dontWait flag")
+		}
+
+		_, err := conn.WriteTo([]byte("still closed"), peerAddr)
+		assert.ErrorIs(t, err, errClosed)
 	})
 
 	t.Run("WriteTo()", func(t *testing.T) {
