@@ -24,6 +24,8 @@ type bindingState int32
 const (
 	bindingStateIdle bindingState = iota
 	bindingStateRequest
+	bindingStateUnknown
+	bindingStateReadyUnknown
 	bindingStateReady
 	bindingStateRefresh
 	bindingStateFailed
@@ -64,7 +66,7 @@ func (b *binding) refreshedAt() time.Time {
 func (b *binding) ok() bool {
 	state := b.state()
 
-	return state == bindingStateReady || state == bindingStateRefresh
+	return state == bindingStateReady || state == bindingStateRefresh || state == bindingStateReadyUnknown
 }
 
 // Thread-safe binding map.

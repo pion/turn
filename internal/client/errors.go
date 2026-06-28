@@ -22,6 +22,7 @@ var (
 	errUnexpectedSTUNRequestMessage        = errors.New("unexpected STUN request message")
 	errCannotBindChannel                   = errors.New("cannot bind channel")
 	errChannelBindBadRequest               = errors.New("channel bind bad request")
+	errChannelBindTransactionFailed        = errors.New("channel bind transaction failed")
 )
 
 type timeoutError struct {
