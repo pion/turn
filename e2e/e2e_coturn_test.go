@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 //go:build coturn && !js
-// +build coturn,!js
 
 package e2e
 
@@ -26,7 +25,7 @@ const (
 
 // serverCoturn starts a coturn TURN server.
 //
-//nolint:varnamelen
+//nolint:dupl,varnamelen
 func serverCoturn(m *testmgr) {
 	go func() {
 		m.serverMutex.Lock()
@@ -48,6 +47,8 @@ user=%s:%s
 realm=%s
 lt-cred-mech
 fingerprint
+allow-loopback-peers
+no-cli
 no-tls
 no-dtls
 log-file=stdout
@@ -173,7 +174,7 @@ func clientCoturn(m *testmgr) {
 	close(m.clientDone)
 }
 
-//nolint:varnamelen
+//nolint:dupl,varnamelen
 func serverCoturnIPv6(m *testmgr) {
 	go func() {
 		m.serverMutex.Lock()

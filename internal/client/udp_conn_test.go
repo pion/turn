@@ -6,6 +6,7 @@ package client
 import (
 	"errors"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop
+func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 	makeConn := func(client *mockClient, bm *bindingManager) UDPConn {
 		return UDPConn{
 			allocation: allocation{
@@ -35,6 +36,13 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop
 		)
 	}
 
+	badRequestMsg := func() *stun.Message {
+		return stun.MustBuild(
+			stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+			stun.ErrorCodeAttribute{Code: stun.CodeBadRequest, Reason: []byte("Bad Request")},
+		)
+	}
+
 	t.Run("maybeBind()", func(t *testing.T) {
 		tests := []struct {
 			name          string
@@ -46,6 +54,8 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop
 		}{
 			{"idle -> request -> ready", bindingStateIdle, bindingStateRequest, bindingStateReady, false, true},
 			{"idle -> request -> failed", bindingStateIdle, bindingStateRequest, bindingStateFailed, false, false},
+			{"unknown -> request -> ready", bindingStateUnknown, bindingStateRequest, bindingStateReady, false, true},
+			{"ready unknown -> refresh -> ready", bindingStateReadyUnknown, bindingStateRefresh, bindingStateReady, false, true},
 			{"ready (stale) -> refresh -> ready", bindingStateReady, bindingStateRefresh, bindingStateReady, true, true},
 			{"ready (stale) -> refresh -> failed", bindingStateReady, bindingStateRefresh, bindingStateFailed, true, false},
 
@@ -201,6 +211,37 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop
 		}
 	})
 
+	t.Run("maybeBind() retries unknown binding after transaction failure", func(t *testing.T) {
+		var failed atomic.Bool
+
+		bm := newBindingManager()
+		bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
+		originalCh := bound.number
+		conn := makeConn(&mockClient{
+			performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+				if failed.CompareAndSwap(false, true) {
+					return TransactionResult{}, errFake
+				}
+
+				return TransactionResult{Msg: new(stun.Message)}, nil
+			},
+		}, bm)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return bound.state() == bindingStateUnknown
+		}, 5*time.Second, 10*time.Millisecond)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return bound.state() == bindingStateReady
+		}, 5*time.Second, 10*time.Millisecond)
+
+		b2, ok := bm.findByAddr(bound.addr)
+		assert.True(t, ok)
+		assert.Equal(t, originalCh, b2.number)
+	})
+
 	t.Run("ChannelBind 400 closes allocation", func(t *testing.T) {
 		relayedAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 54321}
 		peerAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 50000}
@@ -288,6 +329,146 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop
 
 		_, err := conn.WriteTo([]byte("still closed"), peerAddr)
 		assert.ErrorIs(t, err, errClosed)
+	})
+
+	t.Run("ChannelBind 400 after unknown binding closes allocation", func(t *testing.T) {
+		relayedAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 54321}
+		peerAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+		serverAddr := &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 3478}
+
+		var channelBindAttempts atomic.Int32
+		deallocatedCh := make(chan net.Addr, 1)
+
+		conn := NewUDPConn(&AllocationConfig{
+			Client: &mockClient{
+				performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+					switch msg.Type.Method {
+					case stun.MethodChannelBind:
+						if channelBindAttempts.Add(1) == 1 {
+							return TransactionResult{}, errFake
+						}
+
+						return TransactionResult{Msg: badRequestMsg()}, nil
+					case stun.MethodRefresh:
+						return TransactionResult{}, nil
+					default:
+						return TransactionResult{}, errFake
+					}
+				},
+				onDeallocated: func(addr net.Addr) {
+					deallocatedCh <- addr
+				},
+			},
+			RelayedAddr: relayedAddr,
+			ServerAddr:  serverAddr,
+			Username:    stun.NewUsername("user"),
+			Realm:       stun.NewRealm("realm"),
+			Integrity:   stun.NewShortTermIntegrity("pass"),
+			Nonce:       stun.NewNonce("nonce"),
+			Lifetime:    time.Hour,
+			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+		})
+		defer func() { _ = conn.Close() }()
+
+		bound := conn.bindingMgr.create(peerAddr)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return bound.state() == bindingStateUnknown
+		}, 5*time.Second, 10*time.Millisecond)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return bound.state() == bindingStateFailed && conn.isClosed()
+		}, 5*time.Second, 10*time.Millisecond)
+		assert.Equal(t, int32(2), channelBindAttempts.Load())
+
+		select {
+		case deallocatedAddr := <-deallocatedCh:
+			assert.Equal(t, relayedAddr, deallocatedAddr)
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for deallocation callback")
+		}
+	})
+
+	t.Run("ChannelBind 400 after lost ready refresh keeps saved binding", func(t *testing.T) {
+		relayedAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 54321}
+		peerAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+		serverAddr := &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 3478}
+
+		var channelBindAttempts atomic.Int32
+
+		conn := NewUDPConn(&AllocationConfig{
+			Client: &mockClient{
+				performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+					switch msg.Type.Method {
+					case stun.MethodChannelBind:
+						if channelBindAttempts.Add(1) == 1 {
+							return TransactionResult{}, newTimeoutError("channel bind timeout")
+						}
+
+						return TransactionResult{Msg: badRequestMsg()}, nil
+					case stun.MethodRefresh:
+						return TransactionResult{}, nil
+					default:
+						return TransactionResult{}, errFake
+					}
+				},
+			},
+			RelayedAddr: relayedAddr,
+			ServerAddr:  serverAddr,
+			Username:    stun.NewUsername("user"),
+			Realm:       stun.NewRealm("realm"),
+			Integrity:   stun.NewShortTermIntegrity("pass"),
+			Nonce:       stun.NewNonce("nonce"),
+			Lifetime:    time.Hour,
+			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+		})
+		defer func() { _ = conn.Close() }()
+
+		bound := conn.bindingMgr.create(peerAddr)
+		staleRefreshedAt := time.Now().Add(-(defaultBindingRefreshInterval + time.Minute))
+		bound.setState(bindingStateReady)
+		bound.setRefreshedAt(staleRefreshedAt)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return bound.state() == bindingStateReadyUnknown
+		}, 5*time.Second, 10*time.Millisecond)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return channelBindAttempts.Load() == 2 && bound.state() == bindingStateReady
+		}, 5*time.Second, 10*time.Millisecond)
+		assert.True(t, bound.refreshedAt().Equal(staleRefreshedAt))
+		assert.False(t, conn.isClosed())
+	})
+
+	t.Run("ChannelBind 400 refresh keeps saved binding", func(t *testing.T) {
+		bm := newBindingManager()
+		bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
+		staleRefreshedAt := time.Now().Add(-(defaultBindingRefreshInterval + time.Minute))
+		var channelBindAttempts atomic.Int32
+		bound.setState(bindingStateReady)
+		bound.setRefreshedAt(staleRefreshedAt)
+		conn := makeConn(&mockClient{
+			performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+				channelBindAttempts.Add(1)
+
+				return TransactionResult{Msg: badRequestMsg()}, nil
+			},
+		}, bm)
+
+		conn.maybeBind(bound)
+		assert.Eventually(t, func() bool {
+			return channelBindAttempts.Load() == 1 && bound.state() == bindingStateReady
+		}, 5*time.Second, 10*time.Millisecond)
+		assert.True(t, bound.refreshedAt().Equal(staleRefreshedAt))
+		startState, ok := conn.startBinding(bound)
+		assert.True(t, ok, "recovered binding should remain eligible for refresh")
+		assert.Equal(t, bindingStateReady, startState)
+		assert.Equal(t, bindingStateRefresh, bound.state())
+		assert.False(t, conn.isClosed())
 	})
 
 	t.Run("WriteTo()", func(t *testing.T) {

@@ -437,44 +437,101 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 }
 
 func (c *UDPConn) maybeBind(bound *binding) {
-	bind := func() {
-		var err error
-		for range maxRetryAttempts {
-			if err = c.bind(bound); !errors.Is(err, errTryAgain) {
-				break
-			}
-		}
-		if err != nil {
-			c.log.Warnf("Failed to bind channel %d: %s", bound.number, err)
-			bound.setState(bindingStateFailed)
-			if errors.Is(err, errChannelBindBadRequest) {
-				c.closeAfterChannelBindBadRequest(bound)
-			}
-
-			return
-		}
-		bound.setRefreshedAt(time.Now())
-		bound.setState(bindingStateReady)
-	}
-
 	// Block only callers with the same binding until
 	// the binding transaction has been complete
 	bound.muBind.Lock()
 	defer bound.muBind.Unlock()
 
-	state := bound.state()
-	switch {
-	case state == bindingStateIdle:
-		bound.setState(bindingStateRequest)
-	case state == bindingStateReady && time.Since(bound.refreshedAt()) > c.bindingRefreshInterval:
-		bound.setState(bindingStateRefresh)
-	default:
+	startState, ok := c.startBinding(bound)
+	if !ok {
 		return
 	}
 
 	// Establish binding with the server if eligible
 	// with regard to cases right above.
-	go bind()
+	go c.bindChannel(bound, startState)
+}
+
+func (c *UDPConn) startBinding(bound *binding) (bindingState, bool) {
+	startState := bound.state()
+	switch {
+	case startState == bindingStateIdle || startState == bindingStateUnknown:
+		bound.setState(bindingStateRequest)
+	case startState == bindingStateReadyUnknown:
+		bound.setState(bindingStateRefresh)
+	case startState == bindingStateReady && time.Since(bound.refreshedAt()) > c.bindingRefreshInterval:
+		bound.setState(bindingStateRefresh)
+	default:
+		return startState, false
+	}
+
+	return startState, true
+}
+
+func (c *UDPConn) bindChannel(bound *binding, startState bindingState) {
+	var err error
+	for range maxRetryAttempts {
+		if err = c.bind(bound); !errors.Is(err, errTryAgain) {
+			break
+		}
+	}
+	if err != nil {
+		c.handleBindChannelError(bound, startState, err)
+
+		return
+	}
+
+	bound.setRefreshedAt(time.Now())
+	bound.setState(bindingStateReady)
+}
+
+func (c *UDPConn) handleBindChannelError(bound *binding, startState bindingState, err error) {
+	if c.recoverChannelBindBadRequest(bound, startState, err) {
+		return
+	}
+
+	c.log.Warnf("Failed to bind channel %d: %s", bound.number, err)
+	if errors.Is(err, errChannelBindTransactionFailed) {
+		if bindingStateWasReady(startState) {
+			bound.setState(bindingStateReadyUnknown)
+		} else {
+			bound.setState(bindingStateUnknown)
+		}
+
+		return
+	}
+
+	bound.setState(bindingStateFailed)
+	if errors.Is(err, errChannelBindBadRequest) {
+		c.closeAfterChannelBindBadRequest(bound)
+	}
+}
+
+func (c *UDPConn) recoverChannelBindBadRequest(bound *binding, startState bindingState, err error) bool {
+	if !errors.Is(err, errChannelBindBadRequest) {
+		return false
+	}
+	if !bindingStateWasReady(startState) {
+		return false
+	}
+
+	// If this binding was previously confirmed, a refresh transaction failure or
+	// unexpected 400 does not prove that the saved channel mapping is wrong. The
+	// server may still have the old binding, and switching channels would be
+	// worse because it can trigger "same peer with different channel number" (like what we get from Coturn).
+	// This Keep the saved mapping usable and retry refresh later.
+	c.log.Warnf(
+		"ChannelBind returned 400 for saved binding %s on channel %d; keeping binding ready",
+		bound.addr,
+		bound.number,
+	)
+	bound.setState(bindingStateReady)
+
+	return true
+}
+
+func bindingStateWasReady(state bindingState) bool {
+	return state == bindingStateReady || state == bindingStateReadyUnknown
 }
 
 func (c *UDPConn) closeAfterChannelBindBadRequest(bound *binding) {
@@ -509,7 +566,7 @@ func (c *UDPConn) bind(bound *binding) error {
 
 	trRes, err := c.client.PerformTransaction(msg, c.serverAddr, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errChannelBindTransactionFailed, err)
 	}
 
 	res := trRes.Msg
