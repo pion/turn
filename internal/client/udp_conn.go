@@ -267,6 +267,9 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 // Close closes the connection.
 // Any blocked ReadFrom or WriteTo operations will be unblocked and return errors.
 func (c *UDPConn) Close() error {
+	c.closeMutex.Lock()
+	defer c.closeMutex.Unlock()
+
 	c.refreshAllocTimer.Stop()
 	c.refreshPermsTimer.Stop()
 	c.checkBindingsTimer.Stop()
