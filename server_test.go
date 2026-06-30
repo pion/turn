@@ -769,8 +769,23 @@ func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
 	pkt.Raw = pkt.Raw[:i]
 	assert.NoError(t, pkt.Decode())
 
-	assert.Equal(t, pkt.Attributes[0], stun.RawAttribute{Type: stun.AttrErrorCode, Length: 0x15, Value: []uint8{0x0, 0x0, 0x4, 0x14, 0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x20, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65}}) // nolint: lll
-	assert.Equal(t, pkt.Attributes[1], stun.RawAttribute{Type: stun.AttrUnknownAttributes, Length: 0x8, Value: []uint8{0x7, 0xad, 0x0, 0x0, 0x7f, 0xff, 0x0, 0x0}})                                                                          // nolint: lll
+	assert.Equal(
+		t, pkt.Attributes[0],
+		stun.RawAttribute{
+			Type:   stun.AttrErrorCode,
+			Length: 0x15,
+			Value: []uint8{
+				0x0, 0x0, 0x4, 0x14,
+				0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x20,
+				0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65,
+			},
+		},
+	)
+	assert.Equal(t, pkt.Attributes[1], stun.RawAttribute{
+		Type:   stun.AttrUnknownAttributes,
+		Length: 0x4,
+		Value:  []uint8{0x7, 0xad, 0x7f, 0xff},
+	})
 
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, server.Close())
