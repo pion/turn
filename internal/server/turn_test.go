@@ -697,8 +697,7 @@ func TestIPMatchesFamily(t *testing.T) {
 }
 
 func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
-	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
-	assert.NoError(t, err)
+	conn := newCapturePacketConn(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3478})
 	defer conn.Close() //nolint:errcheck
 
 	logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
@@ -740,7 +739,27 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		PermissionTimeout: 5 * time.Minute,
 	}
 
+	assertLastResponse := func(t *testing.T, expectedClass stun.MessageClass, expectedCode stun.ErrorCode) {
+		t.Helper()
+		raw := conn.LastWrite()
+		if !assert.NotEmpty(t, raw, "server should write a response") {
+			return
+		}
+
+		res := &stun.Message{Raw: append([]byte(nil), raw...)}
+		assert.NoError(t, res.Decode())
+		assert.Equal(t, stun.MethodCreatePermission, res.Type.Method)
+		assert.Equal(t, expectedClass, res.Type.Class)
+
+		if expectedClass == stun.ClassErrorResponse {
+			var code stun.ErrorCodeAttribute
+			assert.NoError(t, code.GetFrom(res))
+			assert.Equal(t, expectedCode, code.Code)
+		}
+	}
+
 	t.Run("NoAllocationFound", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)))
@@ -765,6 +784,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 	assert.NoError(t, err)
 
 	t.Run("SuccessIPv4", func(t *testing.T) { //nolint:dupl
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)))
@@ -776,9 +796,11 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 
 		err = handleCreatePermissionRequest(req, m)
 		assert.NoError(t, err)
+		assertLastResponse(t, stun.ClassSuccessResponse, 0)
 	})
 
 	t.Run("PeerAddressFamilyMismatch", func(t *testing.T) { //nolint:dupl
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)))
@@ -792,9 +814,61 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		err = handleCreatePermissionRequest(req, m)
 		// Should succeed but log a warning and return error response
 		assert.NoError(t, err)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodePeerAddrFamilyMismatch)
+	})
+
+	t.Run("PermissionDenied", func(t *testing.T) {
+		conn.Reset()
+
+		var denyAM *allocation.Manager
+		denyAM, err = allocation.NewManager(allocation.ManagerConfig{
+			AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+				con, listenErr := net.ListenPacket(conf.Network, "0.0.0.0:0") // nolint: noctx
+				if listenErr != nil {
+					return nil, nil, listenErr
+				}
+
+				return con, con.LocalAddr(), nil
+			},
+			AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
+				return nil, nil, nil
+			},
+			AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
+				return nil, nil //nolint:nilnil
+			},
+			PermissionHandler: func(net.Addr, net.IP) bool { return false },
+			LeveledLogger:     logger,
+		})
+		assert.NoError(t, err)
+		defer denyAM.Close() //nolint:errcheck
+
+		denyReq := req
+		denyReq.AllocationManager = denyAM
+		fiveTuple := &allocation.FiveTuple{
+			SrcAddr:  denyReq.SrcAddr,
+			DstAddr:  denyReq.Conn.LocalAddr(),
+			Protocol: allocation.UDP,
+		}
+		_, err = denyReq.AllocationManager.CreateAllocation(fiveTuple, denyReq.Conn, proto.ProtoUDP,
+			0, time.Hour, testUser, "", proto.RequestedFamilyIPv4)
+		assert.NoError(t, err)
+
+		m := &stun.Message{}
+		m.TransactionID = stun.NewTransactionID()
+		assert.NoError(t, m.Build(stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)))
+		assert.NoError(t, (stun.MessageIntegrity(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Nonce(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Realm(staticKey)).AddTo(m))
+		assert.NoError(t, (stun.Username(testUser)).AddTo(m))
+		assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("192.168.1.2"), Port: 8080}).AddTo(m))
+
+		err = handleCreatePermissionRequest(denyReq, m)
+		assert.NoError(t, err)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodeForbidden)
 	})
 
 	t.Run("NoPeerAddress", func(t *testing.T) {
+		conn.Reset()
 		m := &stun.Message{}
 		m.TransactionID = stun.NewTransactionID()
 		assert.NoError(t, m.Build(stun.NewType(stun.MethodCreatePermission, stun.ClassRequest)))
@@ -807,6 +881,7 @@ func TestHandleCreatePermissionRequest(t *testing.T) { //nolint:dupl
 		err = handleCreatePermissionRequest(req, m)
 		// Should return error response (addCount == 0)
 		assert.NoError(t, err)
+		assertLastResponse(t, stun.ClassErrorResponse, stun.CodeBadRequest)
 	})
 }
 
