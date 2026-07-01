@@ -385,22 +385,27 @@ func handleCreatePermissionRequest(req Request, stunMsg *stun.Message) error {
 	}
 
 	addCount := 0
+	errorCode := stun.CodeBadRequest
 
 	if err := stunMsg.ForEach(stun.AttrXORPeerAddress, func(m *stun.Message) error {
 		var peerAddress proto.PeerAddress
 		if err := peerAddress.GetFrom(m); err != nil {
+			errorCode = stun.CodeBadRequest
+
 			return err
 		}
 
 		// RFC 6156: Peer address must match allocation's address family.
 		if !ipMatchesFamily(peerAddress.IP, alloc.AddressFamily()) {
 			req.Log.Infof("peer address family mismatch for client %s to peer %s", req.SrcAddr, peerAddress.IP)
+			errorCode = stun.CodePeerAddrFamilyMismatch
 
 			return errPeerAddressFamilyMismatch
 		}
 
 		if err := req.AllocationManager.GrantPermission(req.SrcAddr, peerAddress.IP); err != nil {
 			req.Log.Infof("permission denied for client %s to peer %s", req.SrcAddr, peerAddress.IP)
+			errorCode = stun.CodeForbidden
 
 			return err
 		}
@@ -427,12 +432,19 @@ func handleCreatePermissionRequest(req Request, stunMsg *stun.Message) error {
 	if addCount == 0 {
 		respClass = stun.ClassErrorResponse
 	}
+	attrs := []stun.Setter{messageIntegrity}
+	if respClass == stun.ClassErrorResponse {
+		attrs = []stun.Setter{
+			&stun.ErrorCodeAttribute{Code: errorCode},
+			messageIntegrity,
+		}
+	}
 
 	return buildAndSend(
 		req.Conn,
 		req.SrcAddr,
 		buildMsg(stunMsg.TransactionID, stun.NewType(stun.MethodCreatePermission, respClass),
-			[]stun.Setter{messageIntegrity}...)...,
+			attrs...)...,
 	)
 }
 
