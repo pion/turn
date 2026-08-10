@@ -5,11 +5,13 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -22,6 +24,7 @@ const (
 	defaultPermRefreshInterval    = 120 * time.Second
 	defaultBindingRefreshInterval = 5 * time.Minute
 	defaultBindingCheckInterval   = 30 * time.Second
+	channelBindingLifetime        = 10 * time.Minute
 	maxRetryAttempts              = 3
 )
 
@@ -43,7 +46,8 @@ type UDPConn struct {
 	checkBindingsTimer     *PeriodicTimer    // Thread-safe
 	readCh                 chan *inboundData // Thread-safe
 	closeCh                chan struct{}     // Thread-safe
-	closeMutex             sync.Mutex        // Thread-safe
+	closeMutex             sync.Mutex        // Thread-safe; also gates workerWG.Add vs close
+	workerWG               sync.WaitGroup    // Joins bind/permission workers on Close
 	bindingRefreshInterval time.Duration     // Read-only
 	allocation
 }
@@ -74,6 +78,7 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 	if config.BindingRefreshInterval != 0 {
 		conn.bindingRefreshInterval = config.BindingRefreshInterval
 	}
+	conn.onPermRefreshFailure = conn.failPreparedBindings
 
 	conn.log.Debugf("Initial lifetime: %d seconds", int(conn.lifetime().Seconds()))
 
@@ -179,6 +184,252 @@ func (a *allocation) createPermission(perm *permission, addr net.Addr) error {
 	return nil
 }
 
+// PreparePeer creates a permission for peer and waits until the TURN server
+// confirms a channel binding for it. After it returns nil, writes to peer use
+// ChannelData (or fail) for the lifetime of the allocation; they never fall
+// back to Send indications. Concurrent callers for the same peer share one
+// permission and one bind attempt; canceling ctx wakes only that caller (with
+// its cause) and leaves the shared work running.
+func (c *UDPConn) PreparePeer(ctx context.Context, peer net.Addr) error {
+	if ctx == nil {
+		return errNilContext
+	}
+	udpPeer, err := canonicalUDPPeer(peer)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return context.Cause(ctx)
+	}
+	if c.isClosed() {
+		return errClosed
+	}
+
+	if err := c.awaitPermission(ctx, udpPeer); err != nil {
+		return err
+	}
+
+	return c.awaitBinding(ctx, c.bindingMgr.getOrCreate(udpPeer))
+}
+
+// canonicalUDPPeer validates peer and reduces it to a canonical form so that
+// aliases of the same peer (IPv4-mapped IPv6, zoned addresses) share one
+// permission and one channel binding.
+func canonicalUDPPeer(peer net.Addr) (*net.UDPAddr, error) {
+	udpPeer, ok := peer.(*net.UDPAddr)
+	if !ok || udpPeer == nil {
+		return nil, errUDPAddrCast
+	}
+	if udpPeer.Port <= 0 || udpPeer.Port > math.MaxUint16 || udpPeer.Zone != "" {
+		return nil, errInvalidUDPAddr
+	}
+
+	addr, ok := netip.AddrFromSlice(udpPeer.IP)
+	if !ok {
+		return nil, errInvalidUDPAddr
+	}
+	addr = addr.Unmap()
+	if addr.IsUnspecified() || addr.IsMulticast() {
+		return nil, errInvalidUDPAddr
+	}
+
+	return &net.UDPAddr{IP: net.IP(addr.AsSlice()), Port: udpPeer.Port}, nil
+}
+
+// awaitPermission blocks until a permission for peer is installed, the shared
+// create attempt fails, or ctx is canceled.
+func (c *UDPConn) awaitPermission(ctx context.Context, peer net.Addr) error {
+	for {
+		perm := c.permMap.getOrCreate(peer)
+		if perm.state() == permStatePermitted {
+			return nil
+		}
+
+		done := c.ensurePermissionAttempt(perm, peer)
+		if done == nil {
+			return errClosed
+		}
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-c.closeCh:
+			return errClosed
+		}
+
+		if perm.state() == permStatePermitted {
+			return nil
+		}
+		perm.mutex.RLock()
+		err := perm.attemptErr
+		perm.mutex.RUnlock()
+		if err != nil {
+			return err
+		}
+		// The attempt we joined predates our loop iteration; re-evaluate.
+	}
+}
+
+// ensurePermissionAttempt returns a channel that closes when the in-flight
+// CreatePermission attempt (existing or newly started) completes. It returns
+// nil once the allocation is closing.
+func (c *UDPConn) ensurePermissionAttempt(perm *permission, peer net.Addr) chan struct{} {
+	perm.mutex.Lock()
+	defer perm.mutex.Unlock()
+
+	if perm.attemptDone != nil {
+		return perm.attemptDone
+	}
+	if !c.addWorker() {
+		return nil
+	}
+
+	done := make(chan struct{})
+	perm.attemptDone = done
+	go func() {
+		defer c.workerWG.Done()
+		var err error
+		for range maxRetryAttempts {
+			if err = c.createPermission(perm, peer); !errors.Is(err, errTryAgain) {
+				break
+			}
+		}
+		perm.mutex.Lock()
+		perm.attemptDone = nil
+		perm.attemptErr = err
+		perm.mutex.Unlock()
+		close(done)
+	}()
+
+	return done
+}
+
+// awaitBinding blocks until the server confirms the channel binding, the
+// binding fails, or ctx is canceled.
+func (c *UDPConn) awaitBinding(ctx context.Context, bound *binding) error { //nolint:cyclop
+	for {
+		if final, err := bindingResult(bound); final {
+			return err
+		}
+
+		bound.muBind.Lock()
+		done := bound.attemptDone
+		if done == nil {
+			done = c.startBindAttemptLocked(bound)
+		}
+		bound.muBind.Unlock()
+
+		if done == nil {
+			// No attempt is needed (state already decisive) or none can start (closing).
+			if final, err := bindingResult(bound); final {
+				return err
+			}
+			if c.isClosed() {
+				return errClosed
+			}
+
+			return errChannelBindFailed
+		}
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-c.closeCh:
+			return errClosed
+		}
+
+		if final, err := bindingResult(bound); final {
+			return err
+		}
+		// The joined attempt ended without confirming; surface its error rather
+		// than retrying forever on the caller's behalf.
+		if err := bound.bindErr(); err != nil {
+			return err
+		}
+	}
+}
+
+// bindingResult reports whether the binding reached a decisive state for a
+// preparing caller: (true, nil) once the server has confirmed the channel
+// mapping, (true, err) once the binding failed or its confirmation expired.
+func bindingResult(bound *binding) (bool, error) {
+	if bound.ok() {
+		if time.Since(bound.refreshedAt()) >= channelBindingLifetime {
+			bound.terminalize(errChannelBindingExpired)
+
+			return true, errChannelBindingExpired
+		}
+		bound.prepared.Store(true)
+
+		return true, nil
+	}
+	if bound.state() == bindingStateFailed {
+		if err := bound.bindErr(); err != nil {
+			return true, err
+		}
+
+		return true, errChannelBindFailed
+	}
+
+	return false, nil
+}
+
+// startBindAttemptLocked starts a tracked bind attempt if the binding state
+// calls for one. It requires bound.muBind to be held and returns the channel
+// that closes when the attempt completes, or nil if no attempt was started.
+func (c *UDPConn) startBindAttemptLocked(bound *binding) chan struct{} {
+	if !c.addWorker() {
+		return nil
+	}
+	startState, ok := c.startBinding(bound)
+	if !ok {
+		c.workerWG.Done()
+
+		return nil
+	}
+
+	done := make(chan struct{})
+	bound.attemptDone = done
+	go func() {
+		defer c.workerWG.Done()
+		err := c.bindChannel(bound, startState)
+		bound.setBindErr(err)
+		bound.muBind.Lock()
+		bound.attemptDone = nil
+		bound.muBind.Unlock()
+		close(done)
+	}()
+
+	return done
+}
+
+// addWorker registers an allocation-owned goroutine with the close join.
+// It returns false once the allocation has begun closing.
+func (c *UDPConn) addWorker() bool {
+	c.closeMutex.Lock()
+	defer c.closeMutex.Unlock()
+
+	if c.isClosed() {
+		return false
+	}
+	c.workerWG.Add(1)
+
+	return true
+}
+
+// failPreparedBindings terminalizes every prepared binding: once a peer is
+// prepared, losing its permission must fail writes rather than fall back to
+// Send indications.
+func (c *UDPConn) failPreparedBindings(err error) {
+	for _, bound := range c.bindingMgr.all() {
+		if bound.prepared.Load() {
+			bound.terminalize(fmt.Errorf("%w: %w", errPermissionRefreshFailed, err))
+		}
+	}
+}
+
 // WriteTo writes a packet with payload to addr.
 // WriteTo can be made to time out and return
 // an Error with Timeout() == true after a fixed time limit;
@@ -186,9 +437,21 @@ func (a *allocation) createPermission(perm *permission, addr net.Addr) error {
 // On packet-oriented connections, write timeouts are rare.
 func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint:gocognit,cyclop
 	var err error
-	_, ok := addr.(*net.UDPAddr)
-	if !ok {
+	udpAddr, ok := addr.(*net.UDPAddr)
+	if !ok || udpAddr == nil {
 		return 0, errUDPAddrCast
+	}
+	// Reduce aliases (IPv4-mapped IPv6, zoned addresses) to the canonical peer
+	// so they share its permission and channel binding. Peers that cannot be
+	// canonicalized are left as-is.
+	if canonical, cerr := canonicalUDPPeer(udpAddr); cerr == nil {
+		addr = canonical
+	} else if udpAddr.Zone != "" {
+		unzoned := *udpAddr
+		unzoned.Zone = ""
+		if canonical, cerr = canonicalUDPPeer(&unzoned); cerr == nil {
+			addr = canonical
+		}
 	}
 	if c.isClosed() {
 		return 0, &net.OpError{
@@ -226,6 +489,21 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 	bound, ok := c.bindingMgr.findByAddr(addr)
 	if !ok {
 		bound = c.bindingMgr.create(addr)
+	}
+
+	// A prepared peer promised ChannelData-only writes: fail instead of ever
+	// falling back to Send indications.
+	if bound.prepared.Load() {
+		if bound.ok() && time.Since(bound.refreshedAt()) >= channelBindingLifetime {
+			bound.terminalize(errChannelBindingExpired)
+		}
+		if !bound.ok() {
+			if bindErr := bound.bindErr(); bindErr != nil {
+				return 0, bindErr
+			}
+
+			return 0, errChannelBindFailed
+		}
 	}
 
 	//nolint:nestif
@@ -266,7 +544,28 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 
 // Close closes the connection.
 // Any blocked ReadFrom or WriteTo operations will be unblocked and return errors.
+// Close returns only after allocation-owned goroutines (refresh timers and
+// bind/permission workers) have finished. It never closes or sets deadlines on
+// the caller-owned base socket, so a worker blocked on that socket is joined
+// only once the caller unblocks its I/O.
 func (c *UDPConn) Close() error {
+	first, err := c.startClose()
+
+	c.refreshAllocTimer.StopAndWait()
+	c.refreshPermsTimer.StopAndWait()
+	c.checkBindingsTimer.StopAndWait()
+	c.workerWG.Wait()
+
+	if !first {
+		return errAlreadyClosed
+	}
+
+	return err
+}
+
+// startClose makes the allocation refuse new work and emits the deallocate
+// refresh. It performs no joins, so allocation-owned workers may call it safely.
+func (c *UDPConn) startClose() (bool, error) {
 	c.closeMutex.Lock()
 	defer c.closeMutex.Unlock()
 
@@ -276,14 +575,14 @@ func (c *UDPConn) Close() error {
 
 	select {
 	case <-c.closeCh:
-		return errAlreadyClosed
+		return false, nil
 	default:
 		close(c.closeCh)
 	}
 
 	c.client.OnDeallocated(c.relayedAddr)
 
-	return c.refreshAllocation(0, true /* dontWait=true */)
+	return true, c.refreshAllocation(0, true /* dontWait=true */)
 }
 
 // LocalAddr returns the local network address.
@@ -438,18 +737,14 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 
 func (c *UDPConn) maybeBind(bound *binding) {
 	// Block only callers with the same binding until
-	// the binding transaction has been complete
+	// the binding transaction has been started
 	bound.muBind.Lock()
 	defer bound.muBind.Unlock()
 
-	startState, ok := c.startBinding(bound)
-	if !ok {
-		return
+	if bound.attemptDone == nil {
+		// Establish binding with the server if the state machine allows it.
+		c.startBindAttemptLocked(bound)
 	}
-
-	// Establish binding with the server if eligible
-	// with regard to cases right above.
-	go c.bindChannel(bound, startState)
 }
 
 func (c *UDPConn) startBinding(bound *binding) (bindingState, bool) {
@@ -468,7 +763,9 @@ func (c *UDPConn) startBinding(bound *binding) (bindingState, bool) {
 	return startState, true
 }
 
-func (c *UDPConn) bindChannel(bound *binding, startState bindingState) {
+// bindChannel performs one ChannelBind attempt. It returns nil when the
+// binding was confirmed or recovered, and the attempt's error otherwise.
+func (c *UDPConn) bindChannel(bound *binding, startState bindingState) error {
 	var err error
 	for range maxRetryAttempts {
 		if err = c.bind(bound); !errors.Is(err, errTryAgain) {
@@ -476,18 +773,23 @@ func (c *UDPConn) bindChannel(bound *binding, startState bindingState) {
 		}
 	}
 	if err != nil {
-		c.handleBindChannelError(bound, startState, err)
+		if c.handleBindChannelError(bound, startState, err) {
+			return nil
+		}
 
-		return
+		return err
 	}
 
 	bound.setRefreshedAt(time.Now())
 	bound.setState(bindingStateReady)
+
+	return nil
 }
 
-func (c *UDPConn) handleBindChannelError(bound *binding, startState bindingState, err error) {
+// handleBindChannelError reports whether the binding recovered (kept usable).
+func (c *UDPConn) handleBindChannelError(bound *binding, startState bindingState, err error) bool {
 	if c.recoverChannelBindBadRequest(bound, startState, err) {
-		return
+		return true
 	}
 
 	c.log.Warnf("Failed to bind channel %d: %s", bound.number, err)
@@ -498,13 +800,15 @@ func (c *UDPConn) handleBindChannelError(bound *binding, startState bindingState
 			bound.setState(bindingStateUnknown)
 		}
 
-		return
+		return false
 	}
 
 	bound.setState(bindingStateFailed)
 	if errors.Is(err, errChannelBindBadRequest) {
 		c.closeAfterChannelBindBadRequest(bound)
 	}
+
+	return false
 }
 
 func (c *UDPConn) recoverChannelBindBadRequest(bound *binding, startState bindingState, err error) bool {
@@ -541,7 +845,9 @@ func (c *UDPConn) closeAfterChannelBindBadRequest(bound *binding) {
 		bound.number,
 	)
 
-	if err := c.Close(); err != nil && !errors.Is(err, errAlreadyClosed) {
+	// startClose, not Close: this runs on a Pion-owned bind worker, which must
+	// not join itself. The caller's Close still joins every worker.
+	if _, err := c.startClose(); err != nil {
 		c.log.Warnf("Failed to close TURN allocation after ChannelBind 400: %s", err)
 	}
 }

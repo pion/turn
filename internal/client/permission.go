@@ -19,9 +19,11 @@ const (
 )
 
 type permission struct {
-	addr  net.Addr
-	st    permState    // Thread-safe (atomic op)
-	mutex sync.RWMutex // Thread-safe
+	addr        net.Addr
+	st          permState     // Thread-safe (atomic op)
+	attemptDone chan struct{} // Protected by mutex; non-nil while a create attempt is in flight
+	attemptErr  error         // Protected by mutex; result of the last create attempt
+	mutex       sync.RWMutex  // Thread-safe
 }
 
 func (p *permission) setState(state permState) {
@@ -45,6 +47,23 @@ func (m *permissionMap) insert(addr net.Addr, p *permission) bool {
 	m.permMap[ipnet.FingerprintAddr(addr)] = p
 
 	return true
+}
+
+// getOrCreate returns the existing permission for addr, or creates one, so
+// that concurrent callers for the same peer share a single permission.
+func (m *permissionMap) getOrCreate(addr net.Addr) *permission {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	key := ipnet.FingerprintAddr(addr)
+	if p, ok := m.permMap[key]; ok {
+		return p
+	}
+
+	p := &permission{addr: addr}
+	m.permMap[key] = p
+
+	return p
 }
 
 func (m *permissionMap) find(addr net.Addr) (*permission, bool) {

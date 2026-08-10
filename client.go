@@ -4,6 +4,7 @@
 package turn
 
 import (
+	"context"
 	b64 "encoding/base64"
 	"fmt"
 	"math"
@@ -569,6 +570,21 @@ func (c *Client) CreatePermission(addrs ...net.Addr) error {
 	}
 
 	return nil
+}
+
+// PrepareUDPPeer creates a permission for peer on the client's UDP allocation
+// and waits until the TURN server confirms a channel binding for it. After it
+// returns nil, writes to peer use ChannelData (or fail) for the lifetime of
+// the allocation; they never fall back to Send indications. Concurrent calls
+// for the same peer share one permission and one bind; canceling ctx wakes
+// only that caller and leaves the shared work running.
+func (c *Client) PrepareUDPPeer(ctx context.Context, peer net.Addr) error {
+	conn := c.relayedUDPConn()
+	if conn == nil {
+		return errUDPAllocationNotFound
+	}
+
+	return conn.PreparePeer(ctx, peer)
 }
 
 // PerformTransaction performs STUN transaction.
