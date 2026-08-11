@@ -25,6 +25,7 @@ type prepareHarness struct {
 	permCount atomic.Int32
 	bindCount atomic.Int32
 	bindGate  chan struct{} // If non-nil, ChannelBind transactions block on it
+	permGate  chan struct{} // If non-nil, CreatePermission transactions block on it
 	failPerms atomic.Bool   // If set, CreatePermission transactions return 403
 	writes    struct {
 		sync.Mutex
@@ -47,6 +48,9 @@ func newPrepareHarness(t *testing.T, gateBinds bool) *prepareHarness {
 			switch msg.Type.Method {
 			case stun.MethodCreatePermission:
 				harness.permCount.Add(1)
+				if harness.permGate != nil {
+					<-harness.permGate
+				}
 				if harness.failPerms.Load() {
 					return TransactionResult{Msg: stun.MustBuild(
 						stun.NewType(stun.MethodCreatePermission, stun.ClassErrorResponse),
@@ -259,6 +263,46 @@ func TestPreparePeer(t *testing.T) { //nolint:maintidx,cyclop,gocyclo
 			assert.Fail(t, "timed out waiting for surviving waiter")
 		}
 		assert.Equal(t, int32(1), harness.bindCount.Load(), "cancellation must not restart or cancel the shared bind")
+	})
+
+	t.Run("cancellation wakes waiter during in-flight permission transaction", func(t *testing.T) {
+		harness := newPrepareHarness(t, false)
+		harness.permGate = make(chan struct{})
+
+		// First caller's CreatePermission transaction is in flight (and holds
+		// the permission mutex for its duration, as createPermission does).
+		resultA := make(chan error, 1)
+		go func() { resultA <- harness.conn.PreparePeer(context.Background(), harness.peer) }()
+		assert.Eventually(t, func() bool {
+			return harness.permCount.Load() == 1
+		}, 5*time.Second, 10*time.Millisecond)
+
+		// A second caller for the same peer must wait on the attempt channel,
+		// where its cancellation can wake it — not on the permission mutex.
+		ctxB, cancelB := context.WithCancelCause(context.Background())
+		defer cancelB(nil)
+		resultB := make(chan error, 1)
+		go func() { resultB <- harness.conn.PreparePeer(ctxB, harness.peer) }()
+		time.Sleep(100 * time.Millisecond)
+
+		cause := errors.New("waiter B gave up") //nolint:err113 // test-local cause
+		cancelB(cause)
+		select {
+		case err := <-resultB:
+			assert.ErrorIs(t, err, cause,
+				"waiter must be cancelable while the permission transaction is in flight")
+		case <-time.After(2 * time.Second):
+			assert.Fail(t, "canceled waiter did not wake during in-flight permission transaction")
+		}
+
+		close(harness.permGate)
+		select {
+		case err := <-resultA:
+			assert.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for first caller")
+		}
+		assert.Equal(t, int32(1), harness.permCount.Load(), "permission transactions should coalesce")
 	})
 
 	t.Run("permission refresh failure fails writes, never Send indication", func(t *testing.T) {

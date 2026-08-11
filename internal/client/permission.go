@@ -21,9 +21,15 @@ const (
 type permission struct {
 	addr        net.Addr
 	st          permState     // Thread-safe (atomic op)
-	attemptDone chan struct{} // Protected by mutex; non-nil while a create attempt is in flight
-	attemptErr  error         // Protected by mutex; result of the last create attempt
-	mutex       sync.RWMutex  // Thread-safe
+	attemptDone chan struct{} // Protected by attemptMutex; non-nil while a create attempt is in flight
+	attemptErr  error         // Protected by attemptMutex; result of the last create attempt
+
+	// attemptMutex guards the attempt bookkeeping only. It is never held
+	// across a transaction, unlike mutex, which createPermission holds for
+	// the duration of the CreatePermission transaction; waiters joining an
+	// attempt must not block behind that transaction.
+	attemptMutex sync.Mutex   // Thread-safe
+	mutex        sync.RWMutex // Thread-safe
 }
 
 func (p *permission) setState(state permState) {

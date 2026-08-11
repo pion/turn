@@ -261,9 +261,9 @@ func (c *UDPConn) awaitPermission(ctx context.Context, peer net.Addr) error {
 		if perm.state() == permStatePermitted {
 			return nil
 		}
-		perm.mutex.RLock()
+		perm.attemptMutex.Lock()
 		err := perm.attemptErr
-		perm.mutex.RUnlock()
+		perm.attemptMutex.Unlock()
 		if err != nil {
 			return err
 		}
@@ -275,8 +275,8 @@ func (c *UDPConn) awaitPermission(ctx context.Context, peer net.Addr) error {
 // CreatePermission attempt (existing or newly started) completes. It returns
 // nil once the allocation is closing.
 func (c *UDPConn) ensurePermissionAttempt(perm *permission, peer net.Addr) chan struct{} {
-	perm.mutex.Lock()
-	defer perm.mutex.Unlock()
+	perm.attemptMutex.Lock()
+	defer perm.attemptMutex.Unlock()
 
 	if perm.attemptDone != nil {
 		return perm.attemptDone
@@ -295,10 +295,10 @@ func (c *UDPConn) ensurePermissionAttempt(perm *permission, peer net.Addr) chan 
 				break
 			}
 		}
-		perm.mutex.Lock()
+		perm.attemptMutex.Lock()
 		perm.attemptDone = nil
 		perm.attemptErr = err
-		perm.mutex.Unlock()
+		perm.attemptMutex.Unlock()
 		close(done)
 	}()
 
