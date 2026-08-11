@@ -60,18 +60,19 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		closeCh:                make(chan struct{}),
 		bindingRefreshInterval: defaultBindingRefreshInterval,
 		allocation: allocation{
-			client:      config.Client,
-			relayedAddr: config.RelayedAddr,
-			serverAddr:  config.ServerAddr,
-			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
-			permMap:     newPermissionMap(),
-			username:    config.Username,
-			realm:       config.Realm,
-			integrity:   config.Integrity,
-			_nonce:      config.Nonce,
-			_lifetime:   config.Lifetime,
-			net:         config.Net,
-			log:         config.Log,
+			client:            config.Client,
+			relayedAddr:       config.RelayedAddr,
+			serverAddr:        config.ServerAddr,
+			readTimer:         time.NewTimer(time.Duration(math.MaxInt64)),
+			permMap:           newPermissionMap(),
+			username:          config.Username,
+			realm:             config.Realm,
+			integrity:         config.Integrity,
+			_nonce:            config.Nonce,
+			_lifetime:         config.Lifetime,
+			net:               config.Net,
+			log:               config.Log,
+			abortTransactions: config.AbortTransactions,
 		},
 	}
 
@@ -291,6 +292,11 @@ func (c *UDPConn) ensurePermissionAttempt(perm *permission, peer net.Addr) chan 
 		defer c.workerWG.Done()
 		var err error
 		for range maxRetryAttempts {
+			if c.isClosed() {
+				err = errClosed
+
+				break
+			}
 			if err = c.createPermission(perm, peer); !errors.Is(err, errTryAgain) {
 				break
 			}
@@ -580,6 +586,12 @@ func (c *UDPConn) startClose() (bool, error) {
 		close(c.closeCh)
 	}
 
+	// Wake workers blocked on in-flight transaction waits so Close does not
+	// wait out the retransmission budget against an unresponsive server.
+	if c.abortTransactions != nil {
+		c.abortTransactions()
+	}
+
 	c.client.OnDeallocated(c.relayedAddr)
 
 	return true, c.refreshAllocation(0, true /* dontWait=true */)
@@ -768,11 +780,19 @@ func (c *UDPConn) startBinding(bound *binding) (bindingState, bool) {
 func (c *UDPConn) bindChannel(bound *binding, startState bindingState) error {
 	var err error
 	for range maxRetryAttempts {
+		if c.isClosed() {
+			return errClosed
+		}
 		if err = c.bind(bound); !errors.Is(err, errTryAgain) {
 			break
 		}
 	}
 	if err != nil {
+		if c.isClosed() {
+			// Closing: the binding state no longer matters, and an aborted
+			// transaction must not count as a bind failure.
+			return err
+		}
 		if c.handleBindChannelError(bound, startState, err) {
 			return nil
 		}

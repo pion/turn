@@ -320,6 +320,15 @@ func (c *Client) Close() {
 	c.trMap.CloseAndDeleteAll()
 }
 
+// abortPendingTransactionsTo closes every pending transaction addressed to
+// the given destination, waking their waiters with an error.
+func (c *Client) abortPendingTransactionsTo(to net.Addr) {
+	c.mutexTrMap.Lock()
+	defer c.mutexTrMap.Unlock()
+
+	c.trMap.CloseAndDeleteAllTo(to)
+}
+
 // TransactionID & Base64: https://play.golang.org/p/EEgmJDI971P
 
 // SendBindingRequestTo sends a new STUN request to the given transport address.
@@ -506,6 +515,9 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		PermissionRefreshInterval: c.permissionRefreshInterval,
 		BindingRefreshInterval:    c.bindingRefreshInterval,
 		BindingCheckInterval:      c.bindingCheckInterval,
+		AbortTransactions: func() {
+			c.abortPendingTransactionsTo(c.turnServerAddr)
+		},
 	})
 	c.setRelayedUDPConn(relayedConn)
 	c.setReservationToken(reservationToken)
