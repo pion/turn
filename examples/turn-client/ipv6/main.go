@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5"
+	"github.com/the-sarge/turn/v5"
 )
 
 func main() { //nolint:cyclop

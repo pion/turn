@@ -8,7 +8,7 @@ import (
 	"net"
 
 	"github.com/pion/transport/v4"
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/the-sarge/turn/v5/internal/proto"
 )
 
 var (

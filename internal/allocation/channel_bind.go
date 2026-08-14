@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/the-sarge/turn/v5/internal/proto"
 )
 
 // ChannelBind represents a TURN Channel
