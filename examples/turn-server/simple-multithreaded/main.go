@@ -17,7 +17,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pion/turn/v5"
+	"github.com/the-sarge/turn/v5"
 	"golang.org/x/sys/unix"
 )
 

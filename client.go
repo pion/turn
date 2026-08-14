@@ -4,6 +4,7 @@
 package turn
 
 import (
+	"context"
 	b64 "encoding/base64"
 	"fmt"
 	"math"
@@ -15,8 +16,8 @@ import (
 	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4"
 	"github.com/pion/transport/v4/stdnet"
-	"github.com/pion/turn/v5/internal/client"
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/the-sarge/turn/v5/internal/client"
+	"github.com/the-sarge/turn/v5/internal/proto"
 )
 
 const (
@@ -319,6 +320,15 @@ func (c *Client) Close() {
 	c.trMap.CloseAndDeleteAll()
 }
 
+// abortPendingTransactionsTo closes every pending transaction addressed to
+// the given destination, waking their waiters with an error.
+func (c *Client) abortPendingTransactionsTo(to net.Addr) {
+	c.mutexTrMap.Lock()
+	defer c.mutexTrMap.Unlock()
+
+	c.trMap.CloseAndDeleteAllTo(to)
+}
+
 // TransactionID & Base64: https://play.golang.org/p/EEgmJDI971P
 
 // SendBindingRequestTo sends a new STUN request to the given transport address.
@@ -505,6 +515,9 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		PermissionRefreshInterval: c.permissionRefreshInterval,
 		BindingRefreshInterval:    c.bindingRefreshInterval,
 		BindingCheckInterval:      c.bindingCheckInterval,
+		AbortTransactions: func() {
+			c.abortPendingTransactionsTo(c.turnServerAddr)
+		},
 	})
 	c.setRelayedUDPConn(relayedConn)
 	c.setReservationToken(reservationToken)
@@ -569,6 +582,21 @@ func (c *Client) CreatePermission(addrs ...net.Addr) error {
 	}
 
 	return nil
+}
+
+// PrepareUDPPeer creates a permission for peer on the client's UDP allocation
+// and waits until the TURN server confirms a channel binding for it. After it
+// returns nil, writes to peer use ChannelData (or fail) for the lifetime of
+// the allocation; they never fall back to Send indications. Concurrent calls
+// for the same peer share one permission and one bind; canceling ctx wakes
+// only that caller and leaves the shared work running.
+func (c *Client) PrepareUDPPeer(ctx context.Context, peer net.Addr) error {
+	conn := c.relayedUDPConn()
+	if conn == nil {
+		return errUDPAllocationNotFound
+	}
+
+	return conn.PreparePeer(ctx, peer)
 }
 
 // PerformTransaction performs STUN transaction.

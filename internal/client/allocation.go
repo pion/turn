@@ -13,7 +13,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
 	"github.com/pion/transport/v4"
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/the-sarge/turn/v5/internal/proto"
 )
 
 // AllocationConfig is a set of configuration params use by NewUDPConn and NewTCPAllocation.
@@ -31,6 +31,12 @@ type AllocationConfig struct {
 	PermissionRefreshInterval time.Duration
 	BindingRefreshInterval    time.Duration
 	BindingCheckInterval      time.Duration
+
+	// AbortTransactions, when set, interrupts the allocation's pending
+	// transaction waits. Called once by UDPConn when it starts closing, so
+	// Close does not wait out the retransmission budget of in-flight
+	// transactions against an unresponsive server.
+	AbortTransactions func()
 }
 
 type allocation struct {
@@ -49,6 +55,14 @@ type allocation struct {
 	readTimer         *time.Timer           // Thread-safe
 	mutex             sync.RWMutex          // Thread-safe
 	log               logging.LeveledLogger // Read-only
+
+	// onPermRefreshFailure, when set, observes a permission refresh that kept
+	// failing after retries. Read-only after construction.
+	onPermRefreshFailure func(error)
+
+	// abortTransactions, when set, interrupts the allocation's pending
+	// transaction waits. Read-only after construction.
+	abortTransactions func()
 }
 
 func (a *allocation) setNonceFromMsg(msg *stun.Message) {
@@ -166,6 +180,9 @@ func (a *allocation) onRefreshTimers(id int) {
 		}
 		if err != nil {
 			a.log.Warnf("Failed to refresh permissions: %s", err)
+			if a.onPermRefreshFailure != nil {
+				a.onPermRefreshFailure(err)
+			}
 		}
 	}
 }

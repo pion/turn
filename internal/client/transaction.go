@@ -182,6 +182,22 @@ func (m *TransactionMap) CloseAndDeleteAll() {
 	}
 }
 
+// CloseAndDeleteAllTo closes and deletes all transactions addressed to the
+// given destination, waking their waiters with errTransactionClosed.
+func (m *TransactionMap) CloseAndDeleteAllTo(to net.Addr) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	for trKey, tr := range m.trMap {
+		if tr.To.String() != to.String() {
+			continue
+		}
+		tr.StopRtxTimer()
+		tr.Close()
+		delete(m.trMap, trKey)
+	}
+}
+
 // Size returns the length of the transaction map.
 func (m *TransactionMap) Size() int {
 	m.mutex.RLock()

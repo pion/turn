@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5/internal/allocation"
-	"github.com/pion/turn/v5/internal/auth"
+	"github.com/the-sarge/turn/v5/internal/allocation"
+	"github.com/the-sarge/turn/v5/internal/auth"
 )
 
 // AllocateListenerConfig defines the parameters passed to the relay address allocator.

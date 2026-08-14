@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/pion/turn/v5"
+	"github.com/the-sarge/turn/v5"
 )
 
 // getClientTLSAuthHandler returns an AuthHandler that validates client TLS certificates

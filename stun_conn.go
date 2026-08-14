@@ -6,7 +6,7 @@ package turn
 import (
 	"net"
 
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/the-sarge/turn/v5/internal/proto"
 )
 
 type STUNConn = proto.STUNConn

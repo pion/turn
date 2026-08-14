@@ -16,7 +16,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v3"
-	"github.com/pion/turn/v5"
+	"github.com/the-sarge/turn/v5"
 	"github.com/stretchr/testify/assert"
 )
 

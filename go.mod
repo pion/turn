@@ -1,4 +1,4 @@
-module github.com/pion/turn/v5
+module github.com/the-sarge/turn/v5
 
 go 1.24.0
 
