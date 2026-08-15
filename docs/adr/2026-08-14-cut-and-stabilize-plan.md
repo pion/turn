@@ -47,7 +47,7 @@ Grilled and settled in the [scope doc](2026-08-14-molding-program-scope.md); bin
 
 ### Slice 1 — Replace inherited CI with the fork-owned portfolio gate
 
-**What it delivers:** All ten inherited pion workflow configs removed; a fork-owned CI gate per the portfolio standard (`standardize-github-ci` flow, implementation approved by this plan) covering build, format, lint/vet, race tests, and dependency hygiene; plus a fuzz job running the three existing `internal/proto` fuzz targets with a bounded per-target fuzztime. All jobs green on the current full (pre-cut) tree. Dependency-update automation (Renovate) remains functional — D2's security posture depends on that flow.
+**What it delivers:** All ten inherited pion workflow configs removed; a fork-owned CI gate per the portfolio standard (`standardize-github-ci` flow, implementation approved by this plan) covering build, format, lint/vet, race tests, and dependency hygiene; plus a fuzz job running the three existing `internal/proto` fuzz targets with a bounded per-target fuzztime. All jobs green on the current full (pre-cut) tree. Dependency-update automation functions fork-owned via the portfolio-standard Dependabot config (`.github/dependabot.yml`) — D2's security posture depends on that flow. (Re-audited 2026-08-14: the inherited Renovate coupling was never functional on this fork — zero Actions runs, no Renovate PRs or dashboard issue, and `renovate-go-sum-fix` requires a pion-org secret absent here — so there is nothing to preserve; Dependabot is the portfolio vehicle, per wiremux precedent.)
 
 **Existing-work disposition:** new slice. The inherited configs are auto-synced upstream copies, not fork work; none is retained.
 
@@ -59,7 +59,7 @@ Grilled and settled in the [scope doc](2026-08-14-molding-program-scope.md); bin
 
 **Transitional-seam budget:** none introduced. Removes the pion/.goassets coupling seam.
 
-**Blast radius:** `.github/` only; no Go code changes. Traced effects: branch-protection/required-check names change with the workflow set (update rulesets in the same slice if present); the fuzz schedule consumes Actions minutes (bound it); CodeQL/reuse/release job dispositions follow the portfolio policy — record each kept/dropped job in the PR description. Untraced effects: none identified.
+**Blast radius:** `.github/`, plus `Taskfile.yml` and `scripts/ci/` (portable lane commands, per the portfolio responsibility boundary that D4's flow mandates), plus a mechanical import-order normalization (gofmt/gci) of the Go files the module rename (`e8db91a`) left unsorted; that normalization diff must contain only import-line reordering — zero semantic Go changes. Traced effects: branch-protection/required-check names change with the workflow set (update rulesets in the same slice if present); the fuzz schedule consumes Actions minutes (bound it); CodeQL/reuse/release job dispositions follow the portfolio policy — record each kept/dropped job in the PR description. Untraced effects: none identified.
 
 **Artifact classification:** all artifacts are verification aids or process metadata. The CI gate is an approved maintained deliverable: payoff = merge gating for every subsequent slice; domain = this repository's Go tree; owner = fork maintainer; retirement = none while the repo lives. The proto fuzz job is part of that maintained gate (D4 approval in the scope doc).
 
@@ -69,13 +69,13 @@ Grilled and settled in the [scope doc](2026-08-14-molding-program-scope.md); bin
 
 **Evidence budget:** one green run per job on the slice PR head; one observed red on a deliberately failing check (any single job) to prove the gate actually gates, reverted before merge or shown on a scratch branch; fuzz targets run with bounded fuzztime (minutes, not hours). Terminating rule: all required checks green on the PR head plus the one observed-red demonstration. One review; at most one replacement review.
 
-**TDD and preservation evidence:** characterization first — enumerate the inherited jobs and their dispositions (kept-equivalent/dropped/replaced) in the PR before deleting configs; the observed-red demonstration is the failing-test analogue for a CI gate. Preservation: `task`/test invocations unchanged for developers (no Go changes).
+**TDD and preservation evidence:** characterization first — enumerate the inherited jobs and their dispositions (kept-equivalent/dropped/replaced) in the PR before deleting configs; the observed-red demonstration is the failing-test analogue for a CI gate. Preservation: developer test invocations unchanged; the only Go edits are the import-order normalization, verified by diff inspection (import lines only) and a green suite.
 
 **Dispatch context budget:** this slice contract, the scope doc's D4 paragraph, the `.github/workflows` tree (10 small YAML files), and the `standardize-github-ci` skill flow. No Go source context needed. Implementation plus review fits one fresh context comfortably.
 
 **Slice decision audit:** strongest further split — separate "remove inherited" from "add portfolio gate"; rejected because the intermediate state (no CI at all) gates nothing and both halves are small. Strongest merge — fold into the cut slice; rejected because the cut depends on this gate being green first (see edge evidence) and merging makes the observed-red demonstration entangle with mass deletions. Blocking-edge evidence: none inbound.
 
-**Stop conditions:** the portfolio standard proves inapplicable to a Go library repo in some structural way; required checks cannot be made green on the pre-cut tree without code changes (this slice may not change Go code); Renovate/dependency automation cannot be preserved.
+**Stop conditions:** the portfolio standard proves inapplicable to a Go library repo in some structural way; required checks cannot be made green on the pre-cut tree without semantic Go changes (only import-order normalization is admitted); dependency-update automation cannot be made functional.
 
 ### Slice 2 — Cut to the kept surface and tag v5.1.0-gs.1
 
