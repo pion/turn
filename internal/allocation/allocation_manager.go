@@ -377,10 +377,11 @@ func (m *Manager) CreateTCPConnection( // nolint: cyclop
 	remoteAddr := &net.TCPAddr{IP: peerAddress.IP, Port: peerAddress.Port}
 
 	m.lock.Lock()
-	if m.isDupeTCPConnection(allocation, remoteAddr) {
+	isDupe := m.isDupeTCPConnection(allocation, remoteAddr)
+	m.lock.Unlock()
+	if isDupe {
 		return 0, ErrDupeTCPConnection
 	}
-	m.lock.Unlock()
 
 	// RFC 6156:
 	// "After the request has been successfully authenticated, the TURN

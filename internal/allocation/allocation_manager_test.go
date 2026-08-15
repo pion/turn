@@ -19,6 +19,7 @@ import (
 	"github.com/pion/transport/v4/reuseport"
 	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewManagerValidation(t *testing.T) {
@@ -417,49 +418,79 @@ func TestCreateTCPConnectionUsesAddressFamily(t *testing.T) {
 	assert.Equal(t, []string{"tcp4", "tcp6"}, networks)
 }
 
-func TestCreateTCPConnectionDuplicateTCPConn(t *testing.T) {
+func TestCreateTCPConnectionDuplicateDoesNotBlockManager(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0") // nolint: noctx
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, ln.Close())
+	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var acceptedConn net.Conn
-	var acceptErr error
+	type acceptResult struct {
+		conn net.Conn
+		err  error
+	}
+	accepted := make(chan acceptResult, 1)
 	go func() {
-		acceptedConn, acceptErr = ln.Accept()
-		cancel()
+		conn, acceptErr := ln.Accept()
+		accepted <- acceptResult{conn: conn, err: acceptErr}
 	}()
 
 	addr, ok := ln.Addr().(*net.TCPAddr)
-	assert.True(t, ok)
+	require.True(t, ok)
 
 	peer := proto.PeerAddress{IP: addr.IP, Port: addr.Port}
 
 	manager, err := newTestManager()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	turnSocket, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, turnSocket.Close())
+	}()
 
 	fiveTuple := randomFiveTuple()
 	allocation, err := manager.CreateAllocation(fiveTuple, turnSocket, proto.ProtoTCP,
 		0, proto.DefaultLifetime, "", "", proto.RequestedFamilyIPv4)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	allocation.RelayAddr = &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: rand.Intn(60999-32768+1) + 32768} //nolint:gosec
 	connectionID, err := manager.CreateTCPConnection(allocation, peer)
-	assert.NoError(t, err)
-	assert.NotZero(t, connectionID)
+	require.NoError(t, err)
+	require.NotZero(t, connectionID)
+
+	var acceptedConn net.Conn
+	select {
+	case result := <-accepted:
+		require.NoError(t, result.err)
+		require.NotNil(t, result.conn)
+		acceptedConn = result.conn
+	case <-time.After(time.Second):
+		require.FailNow(t, "timed out waiting for TCP connection")
+	}
+	defer func() {
+		assert.NoError(t, acceptedConn.Close())
+	}()
 
 	_, err = manager.CreateTCPConnection(allocation, peer)
-	assert.ErrorIs(t, err, ErrDupeTCPConnection)
+	require.ErrorIs(t, err, ErrDupeTCPConnection)
 
-	<-ctx.Done()
-	assert.NoError(t, acceptErr)
-	assert.NoError(t, acceptedConn.Close())
-	assert.NoError(t, ln.Close())
-	assert.NoError(t, turnSocket.Close())
+	allocationCount := make(chan int, 1)
+	go func() {
+		allocationCount <- manager.AllocationCount()
+	}()
+
+	select {
+	case count := <-allocationCount:
+		assert.Equal(t, 1, count)
+	case <-time.After(time.Second):
+		require.FailNow(t, "manager remained blocked after rejecting duplicate TCP connection")
+	}
+
+	tcpConn := manager.GetTCPConnection("", connectionID)
+	require.NotNil(t, tcpConn)
+	assert.NoError(t, tcpConn.Close())
+	assert.NoError(t, manager.Close())
 }
 
 func TestCreateTCPConnectionInvalidPeerAddress(t *testing.T) {
