@@ -605,6 +605,108 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		assert.True(t, ok)
 		assert.Equal(t, originalCh, b2.number)
 	})
+
+	t.Run("channel number accessors", func(t *testing.T) {
+		addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+
+		// Both accessors resolve a binding in every state; only IsChannelActive tracks
+		// whether WriteTo is framing payloads as ChannelData over it.
+		tests := []struct {
+			name  string
+			bound bool
+			state bindingState
+			valid bool
+		}{
+			{"no binding", false, bindingStateIdle, false},
+			{"idle", true, bindingStateIdle, false},
+			{"request", true, bindingStateRequest, false},
+			{"unknown", true, bindingStateUnknown, false},
+			{"failed", true, bindingStateFailed, false},
+			{"ready", true, bindingStateReady, true},
+			{"ready unknown", true, bindingStateReadyUnknown, true},
+			{"refresh", true, bindingStateRefresh, true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				bm := newBindingManager()
+				// Without a binding, probe the number the first one would be assigned.
+				chNum := minChannelNumber
+				if tt.bound {
+					bound := bm.create(addr)
+					bound.setState(tt.state)
+					chNum = bound.number
+				}
+				conn := makeConn(&mockClient{}, bm)
+
+				number, ok := conn.FindChannelNumberByAddr(addr)
+				assert.Equal(t, tt.bound, ok)
+				peer, ok := conn.FindAddrByChannelNumber(chNum)
+				assert.Equal(t, tt.bound, ok)
+				if tt.bound {
+					assert.Equal(t, chNum, number)
+					assert.Equal(t, addr, peer)
+				}
+
+				assert.Equal(t, tt.valid, conn.IsChannelActive(chNum))
+			})
+		}
+	})
+
+	t.Run("closing deactivates the channel", func(t *testing.T) {
+		addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+
+		bm := newBindingManager()
+		bound := bm.create(addr)
+		bound.setState(bindingStateReady)
+		conn := makeConn(&mockClient{}, bm)
+		conn.closeCh = make(chan struct{})
+
+		assert.True(t, conn.IsChannelActive(bound.number))
+
+		// Close leaves the binding in place, but WriteTo stops framing ChannelData over it.
+		close(conn.closeCh)
+		assert.False(t, conn.IsChannelActive(bound.number))
+
+		number, ok := conn.FindChannelNumberByAddr(addr)
+		assert.True(t, ok)
+		assert.Equal(t, bound.number, number)
+	})
+
+	t.Run("channel number lookup rejects non-UDP addrs", func(t *testing.T) {
+		addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
+
+		// A TCP address stringifies exactly like the UDP address for the same IP and port,
+		// so it would alias the binding if the lookup went by string alone. A nil address,
+		// typed or not, names nothing.
+		tests := []struct {
+			name string
+			addr net.Addr
+		}{
+			{"nil addr", nil},
+			{"typed nil UDP addr", (*net.UDPAddr)(nil)},
+			{"TCP addr", &net.TCPAddr{IP: addr.IP, Port: addr.Port}},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				bm := newBindingManager()
+				bound := bm.create(addr)
+				bound.setState(bindingStateReady)
+				conn := makeConn(&mockClient{}, bm)
+
+				number, ok := conn.FindChannelNumberByAddr(tt.addr)
+				assert.False(t, ok)
+				assert.Zero(t, number)
+
+				// The binding itself is untouched: only the lookup key was rejected.
+				peer, ok := conn.FindAddrByChannelNumber(bound.number)
+				assert.True(t, ok)
+				assert.Equal(t, addr, peer)
+				assert.True(t, conn.IsChannelActive(bound.number))
+			})
+		}
+	})
 }
 
 func TestCreatePermissions(t *testing.T) {

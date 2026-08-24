@@ -437,6 +437,34 @@ func (c *UDPConn) FindAddrByChannelNumber(chNum uint16) (net.Addr, bool) {
 	return b.addr, true
 }
 
+// FindChannelNumberByAddr returns a channel number associated with the
+// peer address on this UDPConn.
+func (c *UDPConn) FindChannelNumberByAddr(addr net.Addr) (uint16, bool) {
+	udpAddr, ok := addr.(*net.UDPAddr)
+	if !ok || udpAddr == nil {
+		return 0, false
+	}
+
+	b, ok := c.bindingMgr.findByAddr(udpAddr)
+	if !ok {
+		return 0, false
+	}
+
+	return b.number, true
+}
+
+// IsChannelActive reports whether WriteTo sends payloads to the channel's peer as ChannelData
+// rather than wrapping them into Send indications. A closed connection has no active channel.
+func (c *UDPConn) IsChannelActive(chNum uint16) bool {
+	if c.isClosed() {
+		return false
+	}
+
+	b, ok := c.bindingMgr.findByNumber(chNum)
+
+	return ok && b.ok()
+}
+
 func (c *UDPConn) maybeBind(bound *binding) {
 	// Block only callers with the same binding until
 	// the binding transaction has been complete
