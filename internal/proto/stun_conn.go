@@ -39,28 +39,31 @@ func consumeSingleTURNFrame(b []byte) (int, error) {
 		return 0, errIncompleteTURNFrame
 	}
 
-	var datagramSize uint16
+	// Use uint32 (not uint16) for the frame size: ChannelData length fields
+	// near the uint16 maximum (>= 0xFFFC) plus the 4-byte header overflow
+	// uint16 arithmetic and wrap to 0, making ReadFrom report a zero-size
+	// frame without consuming any buffered data (an infinite loop in the
+	// read loop).
+	var datagramSize uint32
 	switch {
 	case stun.IsMessage(b):
-		datagramSize = binary.BigEndian.Uint16(b[2:4]) + stunHeaderSize
+		datagramSize = uint32(binary.BigEndian.Uint16(b[2:4])) + stunHeaderSize
 	case ChannelNumber(binary.BigEndian.Uint16(b[0:2])).Valid():
-		datagramSize = binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize])
-		if paddingOverflow := (datagramSize + channelDataPadding) % channelDataPadding; paddingOverflow != 0 {
-			datagramSize = (datagramSize + channelDataPadding) - paddingOverflow
-		}
-
-		datagramSize += channelDataHeaderSize
+		dataLen := uint32(binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize]))
+		// Round up to the nearest multiple of the 4-byte padding.
+		paddedDataLen := (dataLen + channelDataPadding - 1) &^ (channelDataPadding - 1)
+		datagramSize = paddedDataLen + channelDataHeaderSize
 	case len(b) < stunHeaderSize:
 		return 0, errIncompleteTURNFrame
 	default:
 		return 0, errInvalidTURNFrame
 	}
 
-	if len(b) < int(datagramSize) {
+	if uint64(len(b)) < uint64(datagramSize) {
 		return 0, errIncompleteTURNFrame
 	}
 
-	return int(datagramSize), nil
+	return int(datagramSize), nil //nolint:gosec // max frame size is 65540, always fits in int
 }
 
 // ReadFrom implements ReadFrom from net.PacketConn.
