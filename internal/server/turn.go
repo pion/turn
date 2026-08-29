@@ -469,18 +469,22 @@ func handleSendIndication(req Request, stunMsg *stun.Message) error {
 		return err
 	}
 
-	// RFC 6156: Peer address must match allocation's address family.
-	// Unlike CreatePermission and ChannelBind, a Send indication carries no
-	// response, so mismatched data is discarded instead of rejected with 443.
-	if !ipMatchesFamily(peerAddress.IP, alloc.AddressFamily()) {
-		req.Log.Infof("peer address family mismatch for client %s to peer %s", req.SrcAddr, peerAddress.IP)
-
-		return errPeerAddressFamilyMismatch
-	}
-
 	msgDst := &net.UDPAddr{IP: peerAddress.IP, Port: peerAddress.Port}
+	// RFC 8656 Section 11.2: the permission check comes before any
+	// address/port restrictions, and a Send indication never refreshes the
+	// permission.
 	if perm := alloc.GetPermission(msgDst); perm == nil {
 		return fmt.Errorf("%w: %v", errNoPermission, msgDst)
+	}
+
+	// RFC 8656 Section 11.2: the server MAY impose restrictions on the peer
+	// address; the peer address family must match the allocation's address
+	// family (see Section 10.2). A Send indication carries no response, so
+	// mismatched data is silently discarded.
+	if !ipMatchesFamily(peerAddress.IP, alloc.AddressFamily()) {
+		req.Log.Debugf("peer address family mismatch for client %s to peer %s", req.SrcAddr, peerAddress.IP)
+
+		return errPeerAddressFamilyMismatch
 	}
 
 	l, err := alloc.WriteTo(dataAttr, msgDst)

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
+//go:build !js
+
 package server
 
 import (
@@ -51,7 +53,7 @@ func (c *blockingRelayConn) Close() error {
 
 // TestHandleSendIndicationAddressFamilyMismatch verifies that a Send
 // indication addressed to a peer of a different address family than the
-// allocation is not relayed, matching the RFC 6156 model where the relayed
+// allocation is not relayed, matching the RFC 8656 model where the relayed
 // transport address family constrains every peer it communicates with.
 //
 // CreatePermission and ChannelBind already enforce this (443 Peer Address
@@ -161,4 +163,58 @@ func TestHandleSendIndicationSameFamilyStillRelays(t *testing.T) {
 
 	assert.NoError(t, handleSendIndication(req, m))
 	assert.NotEmpty(t, relayConn.lastWrite, "same-family data must be relayed")
+}
+
+// TestHandleSendIndicationPermissionBeforeFamily locks the RFC 8656
+// Section 11.2 ordering: the permission check runs before the address
+// family restriction, so a cross-family peer without a permission is
+// dropped as "no permission", not as a family mismatch.
+func TestHandleSendIndicationPermissionBeforeFamily(t *testing.T) {
+	logger := &captureLogger{}
+	turnConn := newCapturePacketConn(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3478})
+	relayConn := newBlockingRelayConn(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 50002})
+	defer relayConn.Close() //nolint:errcheck
+
+	allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+		AllocatePacketConn: func(allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+			return relayConn, relayConn.LocalAddr(), nil
+		},
+		AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
+			return nil, nil, nil //nolint:nilnil
+		},
+		AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
+			return nil, nil //nolint:nilnil
+		},
+		LeveledLogger: logger,
+	})
+	assert.NoError(t, err)
+	defer allocationManager.Close() //nolint:errcheck
+
+	req := Request{
+		Conn:              turnConn,
+		SrcAddr:           &net.UDPAddr{IP: net.ParseIP("192.0.2.3"), Port: 50000},
+		AllocationManager: allocationManager,
+		Log:               logger,
+	}
+
+	fiveTuple := &allocation.FiveTuple{
+		SrcAddr:  req.SrcAddr,
+		DstAddr:  req.Conn.LocalAddr(),
+		Protocol: allocation.UDP,
+	}
+	_, err = req.AllocationManager.CreateAllocation(fiveTuple, req.Conn, proto.ProtoUDP,
+		0, time.Hour, "", "", proto.RequestedFamilyIPv4)
+	assert.NoError(t, err)
+
+	// No permission installed: the permission check must fail first, even
+	// though the peer address family also mismatches the allocation.
+	m := &stun.Message{}
+	m.TransactionID = stun.NewTransactionID()
+	assert.NoError(t, m.Build(stun.NewType(stun.MethodSend, stun.ClassIndication)))
+	assert.NoError(t, (proto.Data([]byte("test data"))).AddTo(m))
+	assert.NoError(t, (proto.PeerAddress{IP: net.ParseIP("2001:db8::1"), Port: 8080}).AddTo(m))
+
+	err = handleSendIndication(req, m)
+	assert.ErrorIs(t, err, errNoPermission)
+	assert.Empty(t, relayConn.lastWrite, "data without permission must not be relayed")
 }
