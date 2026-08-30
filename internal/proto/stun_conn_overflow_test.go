@@ -70,3 +70,51 @@ func TestOverflowRepro_ReadFromDoesNotConsume(t *testing.T) {
 	}
 	assert.FailNow(t, "ReadFrom returned (0, nil) 64 times in a row: confirmed infinite loop")
 }
+
+// maxChannelDataFrame builds a complete ChannelData frame with a declared
+// length of 0xFFFC: 65,536 bytes including the 4-byte header.
+func maxChannelDataFrame() []byte {
+	buf := make([]byte, 65536)
+	binary.BigEndian.PutUint16(buf[0:2], uint16(MinChannelNumber))
+	binary.BigEndian.PutUint16(buf[2:4], 0xFFFC)
+
+	return buf
+}
+
+// TestReadFromOversizedFrameReportsCopiedBytes locks the net.PacketConn
+// contract: ReadFrom must never report more bytes than were copied into the
+// caller's buffer, even when a complete frame is larger than the buffer.
+// Before the fix, ReadFrom returned the full 65,536-byte frame size for a
+// 65,535-byte buffer, and callers slicing their buffer by n panicked.
+func TestReadFromOversizedFrameReportsCopiedBytes(t *testing.T) {
+	stunConn := NewSTUNConn(&eofConn{})
+	stunConn.buff = maxChannelDataFrame()
+
+	payload := make([]byte, 65535) // what Client.Listen allocates
+	n, _, err := stunConn.ReadFrom(payload)
+	assert.NoError(t, err)
+	assert.Equal(t, len(payload), n, "must not report more bytes than were copied")
+	assert.Empty(t, stunConn.buff, "the whole frame must be consumed to keep framing aligned")
+}
+
+// TestReadFromContinuesAfterOversizedFrame verifies that a truncated frame
+// does not corrupt the stream: the next frame is still parsed correctly.
+func TestReadFromContinuesAfterOversizedFrame(t *testing.T) {
+	// 5 data bytes pad to a 12-byte frame, above the 9-byte minimum that
+	// consumeSingleTURNFrame needs to tell ChannelData apart from STUN.
+	next := &ChannelData{Data: []byte{1, 2, 3, 4, 5}, Number: MinChannelNumber}
+	next.Encode()
+
+	stunConn := NewSTUNConn(&eofConn{})
+	stunConn.buff = append(maxChannelDataFrame(), next.Raw...)
+
+	payload := make([]byte, 65535)
+	n, _, err := stunConn.ReadFrom(payload)
+	assert.NoError(t, err)
+	assert.Equal(t, len(payload), n)
+
+	small := make([]byte, 12)
+	n, _, err = stunConn.ReadFrom(small)
+	assert.NoError(t, err)
+	assert.Equal(t, len(next.Raw), n, "the frame after a truncated one must parse cleanly")
+}
