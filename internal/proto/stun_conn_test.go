@@ -98,7 +98,7 @@ func TestStunConn(t *testing.T) {
 		stunConn := NewSTUNConn(testConn)
 		stunConn.buff = []byte{0x40, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-		n, addr, err := stunConn.ReadFrom(nil)
+		n, addr, err := stunConn.ReadFrom(make([]byte, 8))
 		assert.Equal(t, n, 8)
 		assert.Nil(t, addr)
 		assert.NoError(t, err)

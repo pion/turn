@@ -73,8 +73,17 @@ func (s *STUNConn) ReadFrom(payload []byte) (n int, addr net.Addr, err error) {
 	if errors.Is(err, errInvalidTURNFrame) {
 		return 0, nil, err
 	} else if err == nil {
+		frameSize := n
+		// A complete frame can be larger than the caller's buffer (the
+		// maximum ChannelData frame is 65,540 bytes). Consume the whole
+		// frame from the stream to keep the framing aligned, but report
+		// only the bytes actually copied: net.PacketConn forbids
+		// n > len(payload).
+		if n > len(payload) {
+			n = len(payload)
+		}
 		copy(payload, s.buff[:n])
-		s.buff = s.buff[n:]
+		s.buff = s.buff[frameSize:]
 
 		return n, s.nextConn.RemoteAddr(), nil
 	}
