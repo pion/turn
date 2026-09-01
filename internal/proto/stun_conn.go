@@ -15,6 +15,7 @@ import (
 var (
 	errInvalidTURNFrame    = errors.New("data is not a valid TURN frame, no STUN or ChannelData found")
 	errIncompleteTURNFrame = errors.New("data contains incomplete STUN or TURN frame")
+	errTURNFrameTooLarge   = errors.New("TURN frame is larger than the supplied buffer")
 )
 
 // STUNConn wraps a net.Conn and implements
@@ -39,11 +40,11 @@ func consumeSingleTURNFrame(b []byte) (int, error) {
 		return 0, errIncompleteTURNFrame
 	}
 
-	// Use uint32 (not uint16) for the frame size: ChannelData length fields
-	// near the uint16 maximum (>= 0xFFFC) plus the 4-byte header overflow
-	// uint16 arithmetic and wrap to 0, making ReadFrom report a zero-size
-	// frame without consuming any buffered data (an infinite loop in the
-	// read loop).
+	// Use uint32 (not uint16) for the frame size: a ChannelData length field
+	// near the uint16 maximum (>= 0xFFFC) plus the 4-byte header overflows
+	// uint16 arithmetic and wraps to 0, making ReadFrom report a zero-size
+	// frame with a nil error without consuming any buffered data. The caller's
+	// read loop then spins forever.
 	var datagramSize uint32
 	switch {
 	case stun.IsMessage(b):
@@ -73,17 +74,18 @@ func (s *STUNConn) ReadFrom(payload []byte) (n int, addr net.Addr, err error) {
 	if errors.Is(err, errInvalidTURNFrame) {
 		return 0, nil, err
 	} else if err == nil {
-		frameSize := n
-		// A complete frame can be larger than the caller's buffer (the
-		// maximum ChannelData frame is 65,540 bytes). Consume the whole
-		// frame from the stream to keep the framing aligned, but report
-		// only the bytes actually copied: net.PacketConn forbids
-		// n > len(payload).
+		// Reject a frame whose declared size does not fit in the caller's
+		// buffer instead of reporting more bytes than were copied: the
+		// net.PacketConn contract forbids n > len(payload), and callers
+		// slicing payload[:n] would panic. The frame is consumed so the
+		// stream framing stays aligned for the next read.
 		if n > len(payload) {
-			n = len(payload)
+			s.buff = s.buff[n:]
+
+			return 0, nil, errTURNFrameTooLarge
 		}
 		copy(payload, s.buff[:n])
-		s.buff = s.buff[frameSize:]
+		s.buff = s.buff[n:]
 
 		return n, s.nextConn.RemoteAddr(), nil
 	}
