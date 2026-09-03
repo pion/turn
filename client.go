@@ -411,7 +411,6 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		&c.username,
 		&c.realm,
 		&nonce,
-		&c.integrity,
 	}
 
 	allocationSetters = appendRequestedAddressFamilyOrReservation(
@@ -420,6 +419,11 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
+
+	// MESSAGE-INTEGRITY must follow every attribute it protects. Receivers
+	// ignore ordinary attributes that appear after it.
+	// https://www.rfc-editor.org/rfc/rfc8489.html#section-9
+	allocationSetters = append(allocationSetters, &c.integrity)
 
 	// FINGERPRINT must be the last attribute per RFC 5389
 	allocationSetters = append(allocationSetters, stun.Fingerprint)

@@ -1625,26 +1625,50 @@ func TestReservation_TokenAndEvenPort(t *testing.T) {
 
 type dontFragmentConn struct {
 	net.PacketConn
+	integrity stun.MessageIntegrity
 }
 
-func (c *dontFragmentConn) ReadFrom(buff []byte) (n int, addr net.Addr, err error) {
-	n, addr, err = c.PacketConn.ReadFrom(buff)
+func (c *dontFragmentConn) ReadFrom(buff []byte) (int, net.Addr, error) {
+	n, addr, err := c.PacketConn.ReadFrom(buff)
 	if err != nil {
-		return
+		return n, addr, err
 	}
 
 	stunMsg := &stun.Message{Raw: buff[:n]}
-	if err = stunMsg.Decode(); err != nil {
-		return
+	if err := stunMsg.Decode(); err != nil {
+		return n, addr, err
 	}
 
-	stunMsg.Attributes = append(stunMsg.Attributes, stun.RawAttribute{Type: stun.AttrDontFragment})
+	hasIntegrity := stunMsg.Contains(stun.AttrMessageIntegrity)
+	hasFingerprint := stunMsg.Contains(stun.AttrFingerprint)
+	attrs := make(stun.Attributes, 0, len(stunMsg.Attributes)+1)
+	for _, attr := range stunMsg.Attributes {
+		if attr.Type == stun.AttrMessageIntegrity || attr.Type == stun.AttrFingerprint {
+			continue
+		}
+
+		attrs = append(attrs, stun.RawAttribute{
+			Type:  attr.Type,
+			Value: append([]byte(nil), attr.Value...),
+		})
+	}
+	attrs = append(attrs, stun.RawAttribute{Type: stun.AttrDontFragment})
+	stunMsg.Attributes = attrs
 	stunMsg.Encode()
+	if hasIntegrity {
+		if err := c.integrity.AddTo(stunMsg); err != nil {
+			return n, addr, err
+		}
+	}
+	if hasFingerprint {
+		if err := stun.Fingerprint.AddTo(stunMsg); err != nil {
+			return n, addr, err
+		}
+	}
 
 	copy(buff, stunMsg.Raw)
-	n = len(stunMsg.Raw)
 
-	return
+	return len(stunMsg.Raw), addr, nil
 }
 
 func TestDontFragment(t *testing.T) {
@@ -1660,7 +1684,10 @@ func TestDontFragment(t *testing.T) {
 		},
 		Realm: "pion.ly",
 		PacketConnConfigs: []PacketConnConfig{{
-			PacketConn: &dontFragmentConn{serverConn},
+			PacketConn: &dontFragmentConn{
+				PacketConn: serverConn,
+				integrity:  stun.MessageIntegrity(GenerateAuthKey(testUser, "pion.ly", "pass")),
+			},
 			RelayAddressGenerator: &RelayAddressGeneratorStatic{
 				RelayAddress: net.ParseIP("127.0.0.1"),
 				Address:      "0.0.0.0",
