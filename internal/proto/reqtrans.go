@@ -6,7 +6,7 @@ package proto
 import (
 	"strconv"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 // Protocol is IANA assigned protocol number.
