@@ -7,7 +7,7 @@ package client
 import (
 	"net"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 // Client is an interface for the public turn.Client in order to break cyclic dependencies.

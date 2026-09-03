@@ -5,7 +5,7 @@
 package proto
 
 import (
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 // Default ports for TURN from RFC 5766 Section 4.

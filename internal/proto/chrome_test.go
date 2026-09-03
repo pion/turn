@@ -9,7 +9,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 	"github.com/stretchr/testify/assert"
 )
 

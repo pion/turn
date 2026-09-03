@@ -15,7 +15,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 	"github.com/pion/turn/v5"
 )
 
