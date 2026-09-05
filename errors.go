@@ -28,4 +28,6 @@ var (
 	errFailedToDecodeSTUN            = errors.New("failed to decode STUN message")
 	errUnexpectedSTUNRequestMessage  = errors.New("unexpected STUN request message")
 	errRelayAddressGeneratorNil      = errors.New("RelayAddressGenerator is nil")
+	errAlternateServerRedirects      = errors.New("turn: too many ALTERNATE-SERVER redirects")
+	errAlternateServerLoop           = errors.New("turn: ALTERNATE-SERVER redirect loop detected")
 )
