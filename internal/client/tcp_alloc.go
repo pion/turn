@@ -83,6 +83,11 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 	return alloc
 }
 
+// RelayAddr returns the relay address of the allocation.
+func (a *TCPAllocation) RelayAddr() net.Addr {
+	return a.relayedAddr
+}
+
 // Connect sends a Connect request to the turn server and returns a chosen connection ID.
 func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	setters := []stun.Setter{
