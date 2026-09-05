@@ -24,6 +24,7 @@ var (
 	errSTUNServerAddressNotSet       = errors.New("STUN server address is not set for the client")
 	errOneAllocateOnly               = errors.New("only one Allocate() caller is allowed")
 	errAlreadyAllocated              = errors.New("already allocated")
+	errUDPAllocationNotFound         = errors.New("UDP allocation not found")
 	errNonSTUNMessage                = errors.New("non-STUN message from STUN server")
 	errFailedToDecodeSTUN            = errors.New("failed to decode STUN message")
 	errUnexpectedSTUNRequestMessage  = errors.New("unexpected STUN request message")
