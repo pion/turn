@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func TestTCPConn(t *testing.T) {
 	t.Run("Connect()", func(t *testing.T) {
 		var cid proto.ConnectionID = 5
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool, _ context.Context) (TransactionResult, error) {
 				if msg.Type.Class == stun.ClassRequest && msg.Type.Method == stun.MethodConnect {
 					msg, err := stun.Build(
 						stun.TransactionID,
@@ -90,7 +91,7 @@ func TestTCPConn(t *testing.T) {
 		assert.Equal(t, cid, actualCid)
 
 		client = &mockClient{
-			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool, _ context.Context) (TransactionResult, error) {
 				if msg.Type.Class == stun.ClassRequest && msg.Type.Method == stun.MethodConnect {
 					msg, buildErr := stun.Build(
 						stun.TransactionID,
@@ -168,7 +169,7 @@ func TestTCPConn(t *testing.T) {
 		var cid proto.ConnectionID = 5
 		loggerFactory := logging.NewDefaultLoggerFactory()
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, _ net.Addr, _ bool, _ context.Context) (TransactionResult, error) {
 				typ := stun.NewType(stun.MethodConnect, stun.ClassSuccessResponse)
 				if msg.Type.Method == stun.MethodCreatePermission {
 					typ = stun.NewType(stun.MethodCreatePermission, stun.ClassSuccessResponse)

@@ -5,6 +5,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -382,7 +383,7 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 		return err
 	}
 
-	trRes, err := a.client.PerformTransaction(msg, a.serverAddr, false)
+	trRes, err := a.client.PerformTransactionWithContext(msg, a.serverAddr, false, context.TODO())
 	if err != nil {
 		return err
 	}
@@ -564,7 +565,7 @@ func (c *UDPConn) bind(bound *binding) error {
 		return err
 	}
 
-	trRes, err := c.client.PerformTransaction(msg, c.serverAddr, false)
+	trRes, err := c.client.PerformTransactionWithContext(msg, c.serverAddr, false, context.TODO())
 	if err != nil {
 		return fmt.Errorf("%w: %w", errChannelBindTransactionFailed, err)
 	}

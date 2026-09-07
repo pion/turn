@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -78,7 +79,7 @@ func (a *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 	}
 
 	a.log.Debugf("Send refresh request (dontWait=%v)", dontWait)
-	trRes, err := a.client.PerformTransaction(msg, a.serverAddr, dontWait)
+	trRes, err := a.client.PerformTransactionWithContext(msg, a.serverAddr, dontWait, context.TODO())
 	if err != nil {
 		return fmt.Errorf("%w: %s", errFailedToRefreshAllocation, err.Error())
 	}
