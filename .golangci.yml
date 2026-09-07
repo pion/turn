@@ -78,6 +78,8 @@ linters:
     - wrapcheck        # Checks that errors returned from external packages are wrapped
     - wsl              # Whitespace Linter - Forces you to use empty lines!
   settings:
+    lll:
+      line-length: 320
     staticcheck:
       checks:
         - all

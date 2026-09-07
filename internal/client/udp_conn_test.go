@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"net"
 	"sync/atomic"
@@ -73,7 +74,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 				bm := newBindingManager()
 				bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
 				conn := makeConn(&mockClient{
-					performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+					performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
 						<-unblock
 						if tt.shouldSucceed {
 							return TransactionResult{Msg: new(stun.Message)}, nil
@@ -104,7 +105,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 	t.Run("bind()", func(t *testing.T) {
 		tests := []struct {
 			name                 string
-			transactionFn        func(*stun.Message, net.Addr, bool) (TransactionResult, error)
+			transactionFn        func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error)
 			expectErr            error
 			expectErrContains    string
 			expectBadRequest     bool
@@ -113,7 +114,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		}{
 			{
 				name: "PerformTransaction returns error",
-				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+				transactionFn: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 					return TransactionResult{}, errFake
 				},
 				expectErr:            errFake,
@@ -121,7 +122,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 			},
 			{
 				name: "ErrorResponse with CodeStaleNonce triggers nonce update",
-				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+				transactionFn: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 					return TransactionResult{Msg: staleNonceMsg()}, nil
 				},
 				expectErr:          errTryAgain,
@@ -129,7 +130,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 			},
 			{
 				name: "ErrorResponse with error code returns cannot bind channel error",
-				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+				transactionFn: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 					res := stun.MustBuild(
 						stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
 						stun.ErrorCodeAttribute{Code: stun.CodeForbidden, Reason: []byte("Forbidden")},
@@ -142,7 +143,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 			},
 			{
 				name: "ErrorResponse with CodeBadRequest is detectable",
-				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+				transactionFn: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 					res := stun.MustBuild(
 						stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
 						stun.ErrorCodeAttribute{Code: stun.CodeBadRequest, Reason: []byte("Bad Request")},
@@ -156,7 +157,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 			},
 			{
 				name: "ErrorResponse without error code returns unexpected response type error",
-				transactionFn: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+				transactionFn: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 					res := stun.MustBuild(
 						stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
 					)
@@ -218,7 +219,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
 		originalCh := bound.number
 		conn := makeConn(&mockClient{
-			performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
 				if failed.CompareAndSwap(false, true) {
 					return TransactionResult{}, errFake
 				}
@@ -253,7 +254,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		refreshErrCh := make(chan error, 1)
 
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, _ net.Addr, dontWait bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, _ net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
 				switch msg.Type.Method {
 				case stun.MethodChannelBind:
 					return TransactionResult{
@@ -341,7 +342,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 
 		conn := NewUDPConn(&AllocationConfig{
 			Client: &mockClient{
-				performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+				performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
 					switch msg.Type.Method {
 					case stun.MethodChannelBind:
 						if channelBindAttempts.Add(1) == 1 {
@@ -400,7 +401,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 
 		conn := NewUDPConn(&AllocationConfig{
 			Client: &mockClient{
-				performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+				performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
 					switch msg.Type.Method {
 					case stun.MethodChannelBind:
 						if channelBindAttempts.Add(1) == 1 {
@@ -452,7 +453,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		bound.setState(bindingStateReady)
 		bound.setRefreshedAt(staleRefreshedAt)
 		conn := makeConn(&mockClient{
-			performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
 				channelBindAttempts.Add(1)
 
 				return TransactionResult{Msg: badRequestMsg()}, nil
@@ -473,7 +474,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 
 	t.Run("WriteTo()", func(t *testing.T) {
 		client := &mockClient{
-			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+			performTransaction: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
 			writeTo: func(data []byte, _ net.Addr) (int, error) {
@@ -512,7 +513,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 	t.Run("WriteTo() returns real payload length", func(t *testing.T) {
 		var writtenData []byte
 		client := &mockClient{
-			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+			performTransaction: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 				// Return success for CreatePermission.
 				return TransactionResult{
 					Msg: stun.MustBuild(stun.NewType(stun.MethodCreatePermission, stun.ClassSuccessResponse)),
@@ -571,7 +572,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		originalCh := bound.number
 
 		client := &mockClient{
-			performTransaction: func(*stun.Message, net.Addr, bool) (TransactionResult, error) {
+			performTransaction: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
 				return TransactionResult{}, errFake
 			},
 			writeTo: func(data []byte, _ net.Addr) (int, error) {
@@ -610,7 +611,7 @@ func TestCreatePermissions(t *testing.T) {
 	t.Run("CreatePermissions success", func(t *testing.T) {
 		called := false
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, addr net.Addr, _ bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, addr net.Addr, _ bool, _ context.Context) (TransactionResult, error) {
 				called = true
 				// Simulate a successful response
 				res := stun.New()
@@ -635,7 +636,7 @@ func TestCreatePermissions(t *testing.T) {
 
 	t.Run("CreatePermissions error", func(t *testing.T) {
 		client := &mockClient{
-			performTransaction: func(msg *stun.Message, addr net.Addr, _ bool) (TransactionResult, error) {
+			performTransaction: func(msg *stun.Message, addr net.Addr, _ bool, _ context.Context) (TransactionResult, error) {
 				res := stun.New()
 				res.Type = stun.NewType(stun.MethodCreatePermission, stun.ClassErrorResponse)
 				code := stun.ErrorCodeAttribute{

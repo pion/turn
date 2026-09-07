@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"net"
 
 	"github.com/pion/stun/v4"
@@ -11,7 +12,7 @@ import (
 
 type mockClient struct {
 	writeTo            func(data []byte, to net.Addr) (int, error)
-	performTransaction func(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error)
+	performTransaction func(msg *stun.Message, to net.Addr, dontWait bool, context context.Context) (TransactionResult, error)
 	onDeallocated      func(relayedAddr net.Addr)
 }
 
@@ -23,9 +24,9 @@ func (c *mockClient) WriteTo(data []byte, to net.Addr) (int, error) {
 	return 0, nil
 }
 
-func (c *mockClient) PerformTransaction(msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
+func (c *mockClient) PerformTransactionWithContext(msg *stun.Message, to net.Addr, dontWait bool, ctx context.Context) (TransactionResult, error) {
 	if c.performTransaction != nil {
-		return c.performTransaction(msg, to, dontWait)
+		return c.performTransaction(msg, to, dontWait, ctx)
 	}
 
 	return TransactionResult{}, errFake

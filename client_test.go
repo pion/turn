@@ -959,3 +959,28 @@ func TestClientE2E(t *testing.T) {
 	doTest(true)
 	doTest(false)
 }
+
+// Create an allocation and use the context to cancel it.
+func TestClientAllocateContext(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	assert.NoError(t, err)
+
+	client, err := NewClient(&ClientConfig{
+		Conn:           conn,
+		STUNServerAddr: testAddr,
+		TURNServerAddr: testAddr,
+		Username:       "foo",
+		Password:       "pass",
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, client.Listen())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = client.AllocateWithContext(ctx)
+	assert.Error(t, err)
+
+	// Shutdown
+	assert.NoError(t, conn.Close())
+}
