@@ -333,7 +333,7 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	trRes, err := c.PerformTransactionWithContext(msg, to, false, context.TODO())
+	trRes, err := c.PerformTransactionWithContext(context.TODO(), msg, to, false)
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +386,7 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 		return relayed, lifetime, nonce, reservationToken, err
 	}
 
-	trRes, err := c.PerformTransactionWithContext(msg, c.turnServerAddr, false, ctx)
+	trRes, err := c.PerformTransactionWithContext(ctx, msg, c.turnServerAddr, false)
 	if err != nil {
 		return relayed, lifetime, nonce, reservationToken, err
 	}
@@ -434,7 +434,7 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 		return relayed, lifetime, nonce, reservationToken, err
 	}
 
-	trRes, err = c.PerformTransactionWithContext(msg, c.turnServerAddr, false, ctx)
+	trRes, err = c.PerformTransactionWithContext(ctx, msg, c.turnServerAddr, false)
 	if err != nil {
 		return relayed, lifetime, nonce, reservationToken, err
 	}
@@ -591,11 +591,11 @@ func (c *Client) CreatePermission(addrs ...net.Addr) error {
 
 // PerformTransaction performs STUN transaction.
 func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult, error) {
-	return c.PerformTransactionWithContext(msg, to, ignoreResult, context.TODO())
+	return c.PerformTransactionWithContext(context.TODO(), msg, to, ignoreResult)
 }
 
 // PerformTransactionWithContext performs a STUN transaction with a context.
-func (c *Client) PerformTransactionWithContext(msg *stun.Message, to net.Addr, ignoreResult bool, ctx context.Context) (client.TransactionResult,
+func (c *Client) PerformTransactionWithContext(ctx context.Context, msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult,
 	error,
 ) {
 	if err := ctx.Err(); err != nil {

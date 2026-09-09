@@ -103,7 +103,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	}
 
 	a.log.Debugf("Send connect request (peer=%v)", peer)
-	trRes, err := a.client.PerformTransactionWithContext(msg, a.serverAddr, false, context.TODO())
+	trRes, err := a.client.PerformTransactionWithContext(context.TODO(), msg, a.serverAddr, false)
 	if err != nil {
 		return 0, err
 	}

@@ -383,7 +383,7 @@ func (a *allocation) CreatePermissions(addrs ...net.Addr) error {
 		return err
 	}
 
-	trRes, err := a.client.PerformTransactionWithContext(msg, a.serverAddr, false, context.TODO())
+	trRes, err := a.client.PerformTransactionWithContext(context.TODO(), msg, a.serverAddr, false)
 	if err != nil {
 		return err
 	}
@@ -565,7 +565,7 @@ func (c *UDPConn) bind(bound *binding) error {
 		return err
 	}
 
-	trRes, err := c.client.PerformTransactionWithContext(msg, c.serverAddr, false, context.TODO())
+	trRes, err := c.client.PerformTransactionWithContext(context.TODO(), msg, c.serverAddr, false)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errChannelBindTransactionFailed, err)
 	}
