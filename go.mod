@@ -6,7 +6,8 @@ require (
 	github.com/pion/logging v0.2.4
 	github.com/pion/randutil v0.1.0
 	github.com/pion/stun/v4 v4.0.0
-	github.com/pion/transport/v4 v4.1.1
+	github.com/pion/transport/v4 v4.1.0
+	github.com/pion/transport/v5 v5.0.0
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sys v0.41.0
 	golang.org/x/time v0.14.0
