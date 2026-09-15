@@ -11,7 +11,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v4"
-	"github.com/pion/transport/v4"
+	"github.com/pion/transport/v5"
 	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
 )

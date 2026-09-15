@@ -10,9 +10,9 @@ import (
 	"strconv"
 
 	"github.com/pion/randutil"
-	"github.com/pion/transport/v4"
-	"github.com/pion/transport/v4/reuseport"
-	"github.com/pion/transport/v4/stdnet"
+	"github.com/pion/transport/v5"
+	"github.com/pion/transport/v5/reuseport"
+	"github.com/pion/transport/v5/stdnet"
 )
 
 // RelayAddressGeneratorPortRange can be used to only allocate connections inside a defined port range.

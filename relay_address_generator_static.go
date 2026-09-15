@@ -9,9 +9,9 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/pion/transport/v4"
-	"github.com/pion/transport/v4/reuseport"
-	"github.com/pion/transport/v4/stdnet"
+	"github.com/pion/transport/v5"
+	"github.com/pion/transport/v5/reuseport"
+	"github.com/pion/transport/v5/stdnet"
 )
 
 // RelayAddressGeneratorStatic can be used to return static IP address each time a relay is created.
