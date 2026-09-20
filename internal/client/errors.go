@@ -23,6 +23,11 @@ var (
 	errCannotBindChannel                   = errors.New("cannot bind channel")
 	errChannelBindBadRequest               = errors.New("channel bind bad request")
 	errChannelBindTransactionFailed        = errors.New("channel bind transaction failed")
+	errChannelBindFailed                   = errors.New("channel bind failed")
+	errChannelBindingExpired               = errors.New("confirmed channel binding expired")
+	errPermissionRefreshFailed             = errors.New("permission refresh failed")
+	errInvalidUDPAddr                      = errors.New("invalid UDP address")
+	errNilContext                          = errors.New("context must not be nil")
 )
 
 type timeoutError struct {
