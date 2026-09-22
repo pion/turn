@@ -107,6 +107,9 @@ linters:
     govet:
       enable:
         - shadow
+    gosec:
+      excludes:
+        - G117 # noisy secret/password field-name checks.
     revive:
       rules:
         # Prefer 'any' type alias over 'interface{}' for Go 1.18+ compatibility
@@ -153,5 +156,5 @@ formatters:
   exclusions:
     generated: lax
 issues:
-  max-issues-per-linter: 0
   max-same-issues: 0
+  max-issues-per-linter: 0
