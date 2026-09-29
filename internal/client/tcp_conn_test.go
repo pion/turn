@@ -139,6 +139,37 @@ func TestTCPConn(t *testing.T) {
 		assert.Contains(t, err.Error(), "i/o timeout")
 	})
 
+	t.Run("SetDeadline() keeps failing until it is extended", func(t *testing.T) {
+		relayedAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:13478")
+		assert.NoError(t, err)
+
+		alloc := NewTCPAllocation(&AllocationConfig{
+			Client:      &mockClient{},
+			Lifetime:    time.Second,
+			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+			RelayedAddr: relayedAddr,
+		})
+
+		assert.NoError(t, alloc.SetDeadline(time.Now()))
+
+		for range 2 {
+			result := make(chan error, 1)
+			go func() {
+				_, acceptErr := alloc.AcceptTCPWithConn(nil)
+				result <- acceptErr
+			}()
+
+			select {
+			case err = <-result:
+				assert.ErrorContains(t, err, "i/o timeout")
+			case <-time.After(time.Second):
+				assert.Fail(t, "AcceptTCPWithConn blocked after the deadline was exceeded")
+
+				return
+			}
+		}
+	})
+
 	t.Run("AcceptTCPWithConn()", func(t *testing.T) {
 		relayedAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:13478")
 		assert.NoError(t, err)

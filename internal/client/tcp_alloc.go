@@ -8,12 +8,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
 	"net"
 	"time"
 
 	"github.com/pion/stun/v4"
 	"github.com/pion/transport/v5"
+	"github.com/pion/transport/v5/deadline"
 	"github.com/pion/turn/v5/internal/proto"
 )
 
@@ -22,24 +22,20 @@ var (
 	_ transport.Dialer      = (*TCPAllocation)(nil)
 )
 
-func noDeadline() time.Time {
-	return time.Time{}
-}
-
 // TCPAllocation is an active TCP allocation on the TURN server
 // as specified by RFC 6062.
 // The allocation can be used to Dial/Accept relayed outgoing/incoming TCP connections.
 type TCPAllocation struct {
-	connAttemptCh chan *connectionAttempt
-	acceptTimer   *time.Timer
+	connAttemptCh  chan *connectionAttempt
+	acceptDeadline *deadline.Deadline
 	allocation
 }
 
 // NewTCPAllocation creates a new instance of TCPConn.
 func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 	alloc := &TCPAllocation{
-		connAttemptCh: make(chan *connectionAttempt, 10),
-		acceptTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
+		connAttemptCh:  make(chan *connectionAttempt, 10),
+		acceptDeadline: deadline.New(),
 		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
@@ -351,7 +347,7 @@ func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (*TCPConn, error) {
 		}
 
 		return dataConn, nil
-	case <-a.acceptTimer.C:
+	case <-a.acceptDeadline.Done():
 		return nil, &net.OpError{
 			Op:   "accept",
 			Net:  a.Addr().Network(),
@@ -363,13 +359,7 @@ func (a *TCPAllocation) AcceptTCPWithConn(conn net.Conn) (*TCPConn, error) {
 
 // SetDeadline sets the deadline associated with the listener. A zero time value disables the deadline.
 func (a *TCPAllocation) SetDeadline(t time.Time) error {
-	var d time.Duration
-	if t.Equal(noDeadline()) {
-		d = time.Duration(math.MaxInt64)
-	} else {
-		d = time.Until(t)
-	}
-	a.acceptTimer.Reset(d)
+	a.acceptDeadline.Set(t)
 
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v4"
 	"github.com/pion/transport/v5"
+	"github.com/pion/transport/v5/deadline"
 	"github.com/pion/turn/v5/internal/proto"
 )
 
@@ -47,7 +48,7 @@ type allocation struct {
 	net               transport.Net         // Thread-safe
 	refreshAllocTimer *PeriodicTimer        // Thread-safe
 	refreshPermsTimer *PeriodicTimer        // Thread-safe
-	readTimer         *time.Timer           // Thread-safe
+	readDeadline      *deadline.Deadline    // Thread-safe
 	mutex             sync.RWMutex          // Thread-safe
 	log               logging.LeveledLogger // Read-only
 }

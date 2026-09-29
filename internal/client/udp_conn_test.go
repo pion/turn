@@ -766,3 +766,61 @@ func TestCreatePermissions(t *testing.T) {
 		assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
 	})
 }
+
+func TestUDPConn_ReadDeadline(t *testing.T) {
+	relayedAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:13478")
+	assert.NoError(t, err)
+
+	conn := NewUDPConn(&AllocationConfig{
+		Client:      &mockClient{},
+		RelayedAddr: relayedAddr,
+		Lifetime:    time.Hour,
+		Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+	})
+	defer func() { _ = conn.Close() }()
+
+	readWithTimeout := func() (string, error) {
+		type result struct {
+			data string
+			err  error
+		}
+		results := make(chan result, 1)
+		go func() {
+			buf := make([]byte, 16)
+			n, _, readErr := conn.ReadFrom(buf)
+			results <- result{string(buf[:n]), readErr}
+		}()
+
+		select {
+		case res := <-results:
+			return res.data, res.err
+		case <-time.After(time.Second):
+			return "", errors.New("ReadFrom blocked") //nolint:err113
+		}
+	}
+
+	t.Run("stays exceeded until it is extended", func(t *testing.T) {
+		assert.NoError(t, conn.SetReadDeadline(time.Now().Add(-time.Second)))
+
+		for range 2 {
+			_, readErr := readWithTimeout()
+			assert.ErrorContains(t, readErr, "i/o timeout")
+		}
+	})
+
+	t.Run("can be cleared after it was exceeded", func(t *testing.T) {
+		assert.NoError(t, conn.SetReadDeadline(time.Time{}))
+		conn.readCh <- &inboundData{data: []byte("hello"), from: relayedAddr}
+
+		data, readErr := readWithTimeout()
+		assert.NoError(t, readErr)
+		assert.Equal(t, "hello", data)
+	})
+
+	t.Run("applies to a blocked read", func(t *testing.T) {
+		assert.NoError(t, conn.SetReadDeadline(time.Now().Add(50*time.Millisecond)))
+
+		_, readErr := readWithTimeout()
+		assert.ErrorContains(t, readErr, "i/o timeout")
+	})
+}

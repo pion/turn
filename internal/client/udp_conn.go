@@ -9,12 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/pion/stun/v4"
+	"github.com/pion/transport/v5/deadline"
 	"github.com/pion/turn/v5/internal/proto"
 )
 
@@ -57,18 +57,18 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		closeCh:                make(chan struct{}),
 		bindingRefreshInterval: defaultBindingRefreshInterval,
 		allocation: allocation{
-			client:      config.Client,
-			relayedAddr: config.RelayedAddr,
-			serverAddr:  config.ServerAddr,
-			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
-			permMap:     newPermissionMap(),
-			username:    config.Username,
-			realm:       config.Realm,
-			integrity:   config.Integrity,
-			_nonce:      config.Nonce,
-			_lifetime:   config.Lifetime,
-			net:         config.Net,
-			log:         config.Log,
+			client:       config.Client,
+			relayedAddr:  config.RelayedAddr,
+			serverAddr:   config.ServerAddr,
+			readDeadline: deadline.New(),
+			permMap:      newPermissionMap(),
+			username:     config.Username,
+			realm:        config.Realm,
+			integrity:    config.Integrity,
+			_nonce:       config.Nonce,
+			_lifetime:    config.Lifetime,
+			net:          config.Net,
+			log:          config.Log,
 		},
 	}
 
@@ -144,7 +144,7 @@ func (c *UDPConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 			return n, ibData.from, nil
 
-		case <-c.readTimer.C:
+		case <-c.readDeadline.Done():
 			return 0, nil, &net.OpError{
 				Op:   "read",
 				Net:  c.LocalAddr().Network(),
@@ -324,13 +324,7 @@ func (c *UDPConn) SetDeadline(t time.Time) error {
 // and any currently-blocked ReadFrom call.
 // A zero value for t means ReadFrom will not time out.
 func (c *UDPConn) SetReadDeadline(t time.Time) error {
-	var d time.Duration
-	if t.Equal(noDeadline()) {
-		d = time.Duration(math.MaxInt64)
-	} else {
-		d = time.Until(t)
-	}
-	c.readTimer.Reset(d)
+	c.readDeadline.Set(t)
 
 	return nil
 }
