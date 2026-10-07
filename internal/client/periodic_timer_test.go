@@ -45,10 +45,12 @@ func TestPeriodicTimer(t *testing.T) {
 
 	t.Run("stop inside handler", func(t *testing.T) {
 		timerID := 4
+		stopped := make(chan struct{})
 		var rt *PeriodicTimer
 		rt = NewPeriodicTimer(timerID, func(id int) {
 			assert.Equal(t, timerID, id)
 			rt.Stop()
+			close(stopped)
 		}, 20*time.Millisecond)
 
 		assert.False(t, rt.IsRunning(), "should not be running yet")
@@ -56,7 +58,14 @@ func TestPeriodicTimer(t *testing.T) {
 		ok := rt.Start()
 		assert.True(t, ok, "should be true")
 		assert.True(t, rt.IsRunning(), "should be running")
-		time.Sleep(30 * time.Millisecond)
+
+		// Wait for the handler's Stop instead of calibrating a sleep against
+		// the timer interval, which is racy on slow runners.
+		select {
+		case <-stopped:
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for handler to stop the timer")
+		}
 		assert.False(t, rt.IsRunning(), "should not be running")
 	})
 }
