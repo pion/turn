@@ -57,6 +57,11 @@ type ClientConfig struct {
 	// local address, falling back to IPv4 if inference fails. See RFC 6156.
 	RequestedAddressFamily RequestedAddressFamily
 
+	// AlwaysSendRequestedAddressFamily makes the client send REQUESTED-ADDRESS-FAMILY
+	// for IPv4 too. By default the attribute is only sent for IPv6, since omitting it
+	// means IPv4 and some servers reject the attribute.
+	AlwaysSendRequestedAddressFamily bool
+
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
 	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
 	bindingRefreshInterval time.Duration
@@ -93,6 +98,9 @@ type Client struct {
 
 	// REQUESTED-ADDRESS-FAMILY attribute for allocations (RFC 6156)
 	requestedAddressFamily proto.RequestedAddressFamily
+
+	// If REQUESTED-ADDRESS-FAMILY should be sent for IPv4 too
+	alwaysSendRequestedAddressFamily bool
 
 	permissionRefreshInterval time.Duration
 	bindingRefreshInterval    time.Duration
@@ -181,6 +189,22 @@ func appendRequestedAddressFamilyOrReservation(
 	return setters
 }
 
+// appendRequestedAddressFamilyIPv4 adds REQUESTED-ADDRESS-FAMILY for IPv4, which
+// appendRequestedAddressFamilyOrReservation leaves out, if alwaysSend is set.
+// It adds nothing in an Allocate request that contains a RESERVATION-TOKEN.
+func appendRequestedAddressFamilyIPv4(
+	setters []stun.Setter,
+	requestedFamily proto.RequestedAddressFamily,
+	reservationToken []byte,
+	alwaysSend bool,
+) []stun.Setter {
+	if alwaysSend && requestedFamily == proto.RequestedFamilyIPv4 && len(reservationToken) == 0 {
+		return append(setters, requestedFamily)
+	}
+
+	return setters
+}
+
 // NewClient returns a new Client instance. listeningAddress is the address and port to listen on,
 // default "0.0.0.0:0".
 func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
@@ -250,6 +274,8 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		permissionRefreshInterval: config.PermissionRefreshInterval,
 		bindingRefreshInterval:    config.bindingRefreshInterval,
 		bindingCheckInterval:      config.bindingCheckInterval,
+
+		alwaysSendRequestedAddressFamily: config.AlwaysSendRequestedAddressFamily,
 	}
 
 	return client, nil
@@ -374,6 +400,9 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 	allocationSetters = appendRequestedAddressFamilyOrReservation(
 		allocationSetters, c.requestedAddressFamily, c.reservationToken,
 	)
+	allocationSetters = appendRequestedAddressFamilyIPv4(
+		allocationSetters, c.requestedAddressFamily, c.reservationToken, c.alwaysSendRequestedAddressFamily,
+	)
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
@@ -416,6 +445,9 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 
 	allocationSetters = appendRequestedAddressFamilyOrReservation(
 		allocationSetters, c.requestedAddressFamily, c.reservationToken,
+	)
+	allocationSetters = appendRequestedAddressFamilyIPv4(
+		allocationSetters, c.requestedAddressFamily, c.reservationToken, c.alwaysSendRequestedAddressFamily,
 	)
 	if c.evenPort {
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})

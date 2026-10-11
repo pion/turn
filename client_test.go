@@ -798,6 +798,103 @@ func TestGetRequestedAddressFamily(t *testing.T) {
 	})
 }
 
+// familyRelayAddressGenerator hands out an IPv6 relay for udp6 and an IPv4 relay for everything else.
+type familyRelayAddressGenerator struct {
+	RelayAddressGenerator // IPv4
+	ipv6                  RelayAddressGenerator
+}
+
+func (g *familyRelayAddressGenerator) Validate() error {
+	if err := g.RelayAddressGenerator.Validate(); err != nil {
+		return err
+	}
+
+	return g.ipv6.Validate()
+}
+
+func (g *familyRelayAddressGenerator) AllocatePacketConn(
+	conf AllocateListenerConfig,
+) (net.PacketConn, net.Addr, error) {
+	if conf.Network == "udp6" {
+		return g.ipv6.AllocatePacketConn(conf)
+	}
+
+	return g.RelayAddressGenerator.AllocatePacketConn(conf)
+}
+
+func TestAllocateRequestedAddressFamilyIPv6Listener(t *testing.T) {
+	udpListener, err := net.ListenPacket("udp6", "[::1]:0") //nolint:noctx
+	require.NoError(t, err)
+
+	server, err := NewServer(ServerConfig{
+		AuthHandler: func(ra *RequestAttributes) (string, []byte, bool) {
+			return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
+		},
+		PacketConnConfigs: []PacketConnConfig{
+			{
+				PacketConn: udpListener,
+				RelayAddressGenerator: &familyRelayAddressGenerator{
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "127.0.0.1",
+					},
+					ipv6: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("::1"),
+						Address:      "::1",
+					},
+				},
+			},
+		},
+		Realm: "pion.ly",
+	})
+	require.NoError(t, err)
+	defer server.Close() //nolint:errcheck
+
+	allocate := func(t *testing.T, family RequestedAddressFamily, alwaysSend bool) net.Addr {
+		t.Helper()
+
+		conn, err := net.ListenPacket("udp6", "[::1]:0") //nolint:noctx
+		require.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		client, err := NewClient(&ClientConfig{
+			Conn:                             conn,
+			TURNServerAddr:                   udpListener.LocalAddr().String(),
+			Username:                         "foo",
+			Password:                         "pass",
+			RequestedAddressFamily:           family,
+			AlwaysSendRequestedAddressFamily: alwaysSend,
+		})
+		require.NoError(t, err)
+		require.NoError(t, client.Listen())
+		defer client.Close()
+
+		relayConn, err := client.Allocate()
+		require.NoError(t, err)
+		defer relayConn.Close() //nolint:errcheck
+
+		return relayConn.LocalAddr()
+	}
+
+	t.Run("IPv4 is dropped by default and the server picks IPv6", func(t *testing.T) {
+		addr := allocate(t, RequestedAddressFamilyIPv4, false)
+
+		assert.Nil(t, addr.(*net.UDPAddr).IP.To4()) //nolint:forcetypeassert
+	})
+
+	t.Run("IPv4 is honored when always sending", func(t *testing.T) {
+		addr := allocate(t, RequestedAddressFamilyIPv4, true)
+
+		assert.NotNil(t, addr.(*net.UDPAddr).IP.To4()) //nolint:forcetypeassert
+	})
+
+	t.Run("IPv6 is honored", func(t *testing.T) {
+		addr := allocate(t, RequestedAddressFamilyIPv6, false)
+
+		assert.Nil(t, addr.(*net.UDPAddr).IP.To4()) //nolint:forcetypeassert
+	})
+}
+
 func TestAppendRequestedAddressFamilyOrReservation(t *testing.T) {
 	t.Run("IPv4 omits attribute", func(t *testing.T) {
 		setters := appendRequestedAddressFamilyOrReservation(
@@ -842,6 +939,112 @@ func TestAppendRequestedAddressFamilyOrReservation(t *testing.T) {
 		require.NoError(t, parsedToken.GetFrom(msg))
 		assert.Equal(t, token, parsedToken)
 		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+}
+
+func TestAppendRequestedAddressFamilyIPv4(t *testing.T) {
+	base := func() []stun.Setter {
+		return []stun.Setter{stun.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassRequest)}
+	}
+
+	t.Run("IPv4 is not added by default", func(t *testing.T) {
+		setters := appendRequestedAddressFamilyIPv4(base(), proto.RequestedFamilyIPv4, nil, false)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+
+	t.Run("IPv4 is added when always sending", func(t *testing.T) {
+		setters := appendRequestedAddressFamilyIPv4(base(), proto.RequestedFamilyIPv4, nil, true)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		var raf proto.RequestedAddressFamily
+		require.NoError(t, raf.GetFrom(msg))
+		assert.Equal(t, proto.RequestedFamilyIPv4, raf)
+	})
+
+	t.Run("IPv6 is left to the other helper", func(t *testing.T) {
+		setters := appendRequestedAddressFamilyIPv4(base(), proto.RequestedFamilyIPv6, nil, true)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+
+	t.Run("Reservation token takes precedence", func(t *testing.T) {
+		token := proto.ReservationToken{1, 2, 3, 4, 5, 6, 7, 8}
+		setters := appendRequestedAddressFamilyIPv4(base(), proto.RequestedFamilyIPv4, token, true)
+
+		msg, err := stun.Build(setters...)
+		require.NoError(t, err)
+
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+}
+
+func TestAllocateRequestedAddressFamilyOnWire(t *testing.T) {
+	firstAllocateRequest := func(t *testing.T, family RequestedAddressFamily, alwaysSend bool) *stun.Message {
+		t.Helper()
+
+		server, err := net.ListenPacket("udp4", "127.0.0.1:0") //nolint:noctx
+		require.NoError(t, err)
+		defer server.Close() //nolint:errcheck
+
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") //nolint:noctx
+		require.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		client, err := NewClient(&ClientConfig{
+			Conn:                   conn,
+			TURNServerAddr:         server.LocalAddr().String(),
+			Username:               "foo",
+			Password:               "pass",
+			RequestedAddressFamily: family,
+
+			AlwaysSendRequestedAddressFamily: alwaysSend,
+		})
+		require.NoError(t, err)
+		require.NoError(t, client.Listen())
+		defer client.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go client.AllocateWithContext(ctx) //nolint:errcheck
+
+		buf := make([]byte, 1500)
+		require.NoError(t, server.SetReadDeadline(time.Now().Add(5*time.Second)))
+		n, _, err := server.ReadFrom(buf)
+		require.NoError(t, err)
+
+		msg := &stun.Message{Raw: buf[:n]}
+		require.NoError(t, msg.Decode())
+
+		return msg
+	}
+
+	t.Run("Unset IPv4 is not sent", func(t *testing.T) {
+		msg := firstAllocateRequest(t, 0, false)
+
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+
+	t.Run("Configured IPv4 is not sent by default", func(t *testing.T) {
+		msg := firstAllocateRequest(t, RequestedAddressFamilyIPv4, false)
+
+		assert.False(t, msg.Contains(stun.AttrRequestedAddressFamily))
+	})
+
+	t.Run("Configured IPv4 is sent when always sending", func(t *testing.T) {
+		msg := firstAllocateRequest(t, RequestedAddressFamilyIPv4, true)
+
+		var raf proto.RequestedAddressFamily
+		require.NoError(t, raf.GetFrom(msg))
+		assert.Equal(t, proto.RequestedFamilyIPv4, raf)
 	})
 }
 
