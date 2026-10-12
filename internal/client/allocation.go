@@ -102,7 +102,10 @@ func (a *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 				return errTryAgain
 			}
 
-			return err
+			return &stun.TurnError{
+				StunMessageType: res.Type,
+				ErrorCodeAttr:   code,
+			}
 		}
 
 		return fmt.Errorf("%s", res.Type) //nolint:err113
