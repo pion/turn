@@ -15,6 +15,7 @@ import (
 var (
 	errInvalidTURNFrame    = errors.New("data is not a valid TURN frame, no STUN or ChannelData found")
 	errIncompleteTURNFrame = errors.New("data contains incomplete STUN or TURN frame")
+	errTURNFrameTooLarge   = errors.New("TURN frame is larger than the supplied buffer")
 )
 
 // STUNConn wraps a net.Conn and implements
@@ -39,28 +40,31 @@ func consumeSingleTURNFrame(b []byte) (int, error) {
 		return 0, errIncompleteTURNFrame
 	}
 
-	var datagramSize uint16
+	// Use uint32 (not uint16) for the frame size: a ChannelData length field
+	// near the uint16 maximum (>= 0xFFFC) plus the 4-byte header overflows
+	// uint16 arithmetic and wraps to 0, making ReadFrom report a zero-size
+	// frame with a nil error without consuming any buffered data. The caller's
+	// read loop then spins forever.
+	var datagramSize uint32
 	switch {
 	case stun.IsMessage(b):
-		datagramSize = binary.BigEndian.Uint16(b[2:4]) + stunHeaderSize
+		datagramSize = uint32(binary.BigEndian.Uint16(b[2:4])) + stunHeaderSize
 	case ChannelNumber(binary.BigEndian.Uint16(b[0:2])).Valid():
-		datagramSize = binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize])
-		if paddingOverflow := (datagramSize + channelDataPadding) % channelDataPadding; paddingOverflow != 0 {
-			datagramSize = (datagramSize + channelDataPadding) - paddingOverflow
-		}
-
-		datagramSize += channelDataHeaderSize
+		dataLen := uint32(binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize]))
+		// Round up to the nearest multiple of the 4-byte padding.
+		paddedDataLen := (dataLen + channelDataPadding - 1) &^ (channelDataPadding - 1)
+		datagramSize = paddedDataLen + channelDataHeaderSize
 	case len(b) < stunHeaderSize:
 		return 0, errIncompleteTURNFrame
 	default:
 		return 0, errInvalidTURNFrame
 	}
 
-	if len(b) < int(datagramSize) {
+	if uint64(len(b)) < uint64(datagramSize) {
 		return 0, errIncompleteTURNFrame
 	}
 
-	return int(datagramSize), nil
+	return int(datagramSize), nil //nolint:gosec // max frame size is 65540, always fits in int
 }
 
 // ReadFrom implements ReadFrom from net.PacketConn.
@@ -70,6 +74,16 @@ func (s *STUNConn) ReadFrom(payload []byte) (n int, addr net.Addr, err error) {
 	if errors.Is(err, errInvalidTURNFrame) {
 		return 0, nil, err
 	} else if err == nil {
+		// Reject a frame whose declared size does not fit in the caller's
+		// buffer instead of reporting more bytes than were copied: the
+		// net.PacketConn contract forbids n > len(payload), and callers
+		// slicing payload[:n] would panic. The frame is consumed so the
+		// stream framing stays aligned for the next read.
+		if n > len(payload) {
+			s.buff = s.buff[n:]
+
+			return 0, nil, errTURNFrameTooLarge
+		}
 		copy(payload, s.buff[:n])
 		s.buff = s.buff[n:]
 
