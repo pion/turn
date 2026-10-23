@@ -46,13 +46,11 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	badRequestMsg := buildMsg(
 		stunMsg.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
-	)
+		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest}, messageIntegrity)
 	insufficientCapacityMsg := buildMsg(
 		stunMsg.TransactionID,
 		stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-		&stun.ErrorCodeAttribute{Code: stun.CodeInsufficientCapacity},
-	)
+		&stun.ErrorCodeAttribute{Code: stun.CodeInsufficientCapacity}, messageIntegrity)
 
 	// 2. The server checks if the 5-tuple is currently in use by an
 	//    existing allocation.  If yes, the server rejects the request with
@@ -63,8 +61,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 			msg := buildMsg(
 				stunMsg.TransactionID,
 				stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-				&stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch},
-			)
+				&stun.ErrorCodeAttribute{Code: stun.CodeAllocMismatch}, messageIntegrity)
 
 			return buildAndSendErr(req.Conn, req.SrcAddr, errRelayAlreadyAllocatedForFiveTuple, msg...)
 		}
@@ -91,8 +88,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		msg := buildMsg(
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeUnsupportedTransProto},
-		)
+			&stun.ErrorCodeAttribute{Code: stun.CodeUnsupportedTransProto}, messageIntegrity)
 
 		return buildAndSendErr(req.Conn, req.SrcAddr, errUnsupportedTransportProtocol, msg...)
 	}
@@ -107,8 +103,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
 			&stun.ErrorCodeAttribute{Code: stun.CodeUnknownAttribute},
-			&stun.UnknownAttributes{stun.AttrDontFragment},
-		)
+			&stun.UnknownAttributes{stun.AttrDontFragment}, messageIntegrity)
 
 		return buildAndSendErr(req.Conn, req.SrcAddr, errNoDontFragmentSupport, msg...)
 	}
@@ -179,8 +174,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 			msg := buildMsg(
 				stunMsg.TransactionID,
 				stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-				&stun.ErrorCodeAttribute{Code: stun.CodeAddrFamilyNotSupported},
-			)
+				&stun.ErrorCodeAttribute{Code: stun.CodeAddrFamilyNotSupported}, messageIntegrity)
 
 			return buildAndSendErr(req.Conn, req.SrcAddr, errUnsupportedAddressFamily, msg...)
 		}
@@ -192,8 +186,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		msg := buildMsg(
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeAddrFamilyNotSupported},
-		)
+			&stun.ErrorCodeAttribute{Code: stun.CodeAddrFamilyNotSupported}, messageIntegrity)
 
 		return buildAndSendErr(req.Conn, req.SrcAddr, errUnsupportedAddressFamily, msg...)
 	}
@@ -212,7 +205,7 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 	if req.QuotaHandler != nil && !req.QuotaHandler(userID, realmAttr.String(), req.SrcAddr) {
 		quotaReachedMsg := buildMsg(stunMsg.TransactionID,
 			stun.NewType(stun.MethodAllocate, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeAllocQuotaReached})
+			&stun.ErrorCodeAttribute{Code: stun.CodeAllocQuotaReached}, messageIntegrity)
 
 		return buildAndSend(req.Conn, req.SrcAddr, quotaReachedMsg...)
 	}
@@ -319,8 +312,7 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 	badRequestMsg := buildMsg(
 		stunMsg.TransactionID,
 		stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
-		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
-	)
+		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest}, messageIntegrity)
 	if err = requestedFamily.GetFrom(stunMsg); err != nil {
 		switch {
 		case errors.Is(err, stun.ErrAttributeNotFound):
@@ -330,8 +322,7 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 			msg := buildMsg(
 				stunMsg.TransactionID,
 				stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
-				&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch},
-			)
+				&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch}, messageIntegrity)
 
 			return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, msg...)
 		}
@@ -339,8 +330,7 @@ func handleRefreshRequest(req Request, stunMsg *stun.Message) error {
 		msg := buildMsg(
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodRefresh, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch},
-		)
+			&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch}, messageIntegrity)
 
 		return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, msg...)
 	}
@@ -487,16 +477,15 @@ func handleSendIndication(req Request, stunMsg *stun.Message) error {
 func handleChannelBindRequest(req Request, stunMsg *stun.Message) error { // nolint:cyclop
 	req.Log.Debugf("Received ChannelBindRequest from %s", req.SrcAddr)
 
-	badRequestMsg := buildMsg(
-		stunMsg.TransactionID,
-		stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
-		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
-	)
-
 	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodChannelBind)
 	if !hasAuth {
 		return err
 	}
+
+	badRequestMsg := buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
+		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest}, messageIntegrity)
 
 	alloc := req.AllocationManager.GetAllocationForUserID(&allocation.FiveTuple{
 		SrcAddr:  req.SrcAddr,
@@ -523,7 +512,7 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error { // nol
 
 		peerAddrFamilyMismatchMsg := buildMsg(stunMsg.TransactionID,
 			stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch})
+			&stun.ErrorCodeAttribute{Code: stun.CodePeerAddrFamilyMismatch}, messageIntegrity)
 
 		return buildAndSendErr(req.Conn, req.SrcAddr, errPeerAddressFamilyMismatch, peerAddrFamilyMismatchMsg...)
 	}
@@ -533,7 +522,7 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error { // nol
 
 		unauthorizedRequestMsg := buildMsg(stunMsg.TransactionID,
 			stun.NewType(stun.MethodChannelBind, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeUnauthorized})
+			&stun.ErrorCodeAttribute{Code: stun.CodeUnauthorized}, messageIntegrity)
 
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, unauthorizedRequestMsg...)
 	}
@@ -635,8 +624,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
-		)...)
+			&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest}, messageIntegrity)...)
 	}
 
 	if err = req.AllocationManager.GrantPermission(req.SrcAddr, peerAddr.IP); err != nil {
@@ -645,8 +633,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
 			stunMsg.TransactionID,
 			stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
-			&stun.ErrorCodeAttribute{Code: stun.CodeForbidden},
-		)...)
+			&stun.ErrorCodeAttribute{Code: stun.CodeForbidden}, messageIntegrity)...)
 	}
 
 	connectionID, err := req.AllocationManager.CreateTCPConnection(alloc, peerAddr)
@@ -663,8 +650,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 			return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
 				stunMsg.TransactionID,
 				stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
-				&stun.ErrorCodeAttribute{Code: stun.CodeConnAlreadyExists},
-			)...)
+				&stun.ErrorCodeAttribute{Code: stun.CodeConnAlreadyExists}, messageIntegrity)...)
 		}
 
 		// Otherwise, the server MUST initiate an outgoing TCP connection.  The
@@ -677,8 +663,7 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 			return buildAndSendErr(req.Conn, req.SrcAddr, err, buildMsg(
 				stunMsg.TransactionID,
 				stun.NewType(stun.MethodConnect, stun.ClassErrorResponse),
-				&stun.ErrorCodeAttribute{Code: stun.CodeConnTimeoutOrFailure},
-			)...)
+				&stun.ErrorCodeAttribute{Code: stun.CodeConnTimeoutOrFailure}, messageIntegrity)...)
 		}
 
 		return err
@@ -697,16 +682,15 @@ func handleConnectRequest(req Request, stunMsg *stun.Message) error {
 
 func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 	req.Log.Debugf("Received ConnectBind from %s", req.SrcAddr)
-	badRequestMsg := buildMsg(
-		stunMsg.TransactionID,
-		stun.NewType(stun.MethodConnectionBind, stun.ClassErrorResponse),
-		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest},
-	)
-
-	_, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
+	messageIntegrity, hasAuth, userID, err := authenticateRequest(req, stunMsg, stun.MethodConnectionBind)
 	if !hasAuth {
 		return err
 	}
+
+	badRequestMsg := buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stun.MethodConnectionBind, stun.ClassErrorResponse),
+		&stun.ErrorCodeAttribute{Code: stun.CodeBadRequest}, messageIntegrity)
 
 	var connectionID proto.ConnectionID
 	if err = connectionID.GetFrom(stunMsg); err != nil {
@@ -731,6 +715,7 @@ func handleConnectionBindRequest(req Request, stunMsg *stun.Message) error {
 		stunMsg.TransactionID,
 		stun.NewType(stun.MethodConnectionBind, stun.ClassSuccessResponse),
 		connectionID,
+		messageIntegrity,
 	)...); err != nil {
 		return err
 	}

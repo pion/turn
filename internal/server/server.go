@@ -99,20 +99,7 @@ func handleTURNPacket(req Request) error {
 	}
 
 	if len(unknownAttributes) != 0 {
-		req.Log.Errorf(
-			"%v-%v with unknown comprehension-required attributes from %v: %v",
-			stunMsg.Type.Method,
-			stunMsg.Type.Class,
-			req.SrcAddr,
-			unknownAttributes,
-		)
-
-		return buildAndSend(req.Conn, req.SrcAddr, buildMsg(
-			stunMsg.TransactionID,
-			stun.NewType(stunMsg.Type.Method, stun.ClassErrorResponse),
-			stun.CodeUnknownAttribute,
-			stun.UnknownAttributes(unknownAttributes),
-		)...)
+		return handleUnknownAttributes(req, stunMsg, unknownAttributes)
 	}
 
 	if err = handler(req, stunMsg); err != nil {
@@ -128,6 +115,40 @@ func handleTURNPacket(req Request) error {
 	}
 
 	return nil
+}
+
+func handleUnknownAttributes(req Request, stunMsg *stun.Message, unknownAttributes []stun.AttrType) error {
+	if stunMsg.Type.Class != stun.ClassRequest {
+		return nil
+	}
+	var integrity stun.MessageIntegrity
+	var err error
+	if stunMsg.Type.Method != stun.MethodBinding {
+		var authenticated bool
+		integrity, authenticated, _, err = authenticateRequest(req, stunMsg, stunMsg.Type.Method)
+		if !authenticated {
+			return err
+		}
+	}
+	req.Log.Errorf(
+		"%v-%v with unknown comprehension-required attributes from %v: %v",
+		stunMsg.Type.Method,
+		stunMsg.Type.Class,
+		req.SrcAddr,
+		unknownAttributes,
+	)
+
+	response := buildMsg(
+		stunMsg.TransactionID,
+		stun.NewType(stunMsg.Type.Method, stun.ClassErrorResponse),
+		stun.CodeUnknownAttribute,
+		stun.UnknownAttributes(unknownAttributes),
+	)
+	if integrity != nil {
+		response = append(response, integrity)
+	}
+
+	return buildAndSend(req.Conn, req.SrcAddr, response...)
 }
 
 func getMessageHandler(class stun.MessageClass, method stun.Method) ( // nolint:cyclop
