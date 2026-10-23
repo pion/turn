@@ -607,7 +607,12 @@ func (c *Client) PerformTransactionWithContext(msg *stun.Message, to net.Addr, i
 	raw := make([]byte, len(msg.Raw))
 	copy(raw, msg.Raw)
 
+	var integrity stun.MessageIntegrity
+	if msg.Contains(stun.AttrMessageIntegrity) {
+		integrity = append(stun.MessageIntegrity{}, c.integrity...)
+	}
 	tr := client.NewTransaction(&client.TransactionConfig{
+		Integrity:    integrity,
 		Key:          trKey,
 		Raw:          raw,
 		To:           to,
@@ -785,11 +790,19 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:
 
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
 
-	tr, ok := c.removeTransaction(trKey)
+	tr, ok := c.trMap.Find(trKey)
 	if !ok {
 		// Silently discard
 		c.log.Debugf("No transaction for %s", msg)
 
+		return nil
+	}
+
+	if !tr.CheckIntegrity(msg) {
+		return nil
+	}
+	tr, ok = c.removeTransaction(trKey)
+	if !ok {
 		return nil
 	}
 

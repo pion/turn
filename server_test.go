@@ -1373,6 +1373,7 @@ func TestSTUNOnly(t *testing.T) {
 
 	client, err := NewClient(&ClientConfig{
 		Conn:           conn,
+		RTO:            time.Millisecond,
 		STUNServerAddr: testAddr,
 		TURNServerAddr: testAddr,
 		Username:       testUser,
@@ -1391,7 +1392,7 @@ func TestSTUNOnly(t *testing.T) {
 	assert.True(t, ok)
 
 	_, err = client.Allocate()
-	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
+	assert.ErrorContains(t, err, "all retransmissions failed")
 
 	assert.NoError(t, conn.Close())
 }
