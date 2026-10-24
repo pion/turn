@@ -699,6 +699,10 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	case stun.IsMessage(data):
 		return true, c.handleSTUNMessage(data, from)
 	case proto.IsChannelData(data):
+		if !c.isTURNServer(from) {
+			return true, nil
+		}
+
 		return true, c.handleChannelData(data)
 	case c.stunServerAddr != nil && from.String() == c.stunServerAddr.String():
 		// Received from STUN server but it is not a STUN message
@@ -709,6 +713,15 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (c *Client) isTURNServer(from net.Addr) bool {
+	server := c.turnServerAddr
+	if conn, ok := c.conn.(interface{ RemoteAddr() net.Addr }); ok && conn.RemoteAddr() != nil {
+		server = conn.RemoteAddr()
+	}
+
+	return from != nil && server != nil && from.String() == server.String()
 }
 
 func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:cyclop
@@ -725,6 +738,9 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:
 	}
 
 	if msg.Type.Class == stun.ClassIndication { // nolint:nestif
+		if !c.isTURNServer(from) {
+			return nil
+		}
 		switch msg.Type.Method {
 		case stun.MethodData:
 			var peerAddr proto.PeerAddress

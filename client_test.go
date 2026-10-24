@@ -254,7 +254,7 @@ func TestTCPClient(t *testing.T) {
 	msg, err := stun.Build(attrs...)
 	require.NoError(t, err)
 
-	require.NoError(t, client.handleSTUNMessage(msg.Raw, peerAddr))
+	require.NoError(t, client.handleSTUNMessage(msg.Raw, conn.RemoteAddr()))
 
 	// Shutdown
 	require.NoError(t, allocation.Close())
@@ -983,4 +983,43 @@ func TestClientAllocateContext(t *testing.T) {
 
 	// Shutdown
 	assert.NoError(t, conn.Close())
+}
+
+func TestClientRelaySource(t *testing.T) {
+	udpConn, err := net.ListenPacket("udp4", "127.0.0.1:0") //nolint:noctx
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, udpConn.Close()) })
+	stream, peer := net.Pipe()
+	t.Cleanup(func() {
+		require.NoError(t, stream.Close())
+		require.NoError(t, peer.Close())
+	})
+	server := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 3478}
+	attacker := &net.UDPAddr{IP: server.IP, Port: 3479}
+	for _, conn := range []net.PacketConn{udpConn, NewSTUNConn(stream)} {
+		turnClient, clientErr := NewClient(&ClientConfig{Conn: conn, TURNServerAddr: server.String()})
+		require.NoError(t, clientErr)
+		trusted := net.Addr(server)
+		if conn != udpConn {
+			trusted = stream.RemoteAddr()
+			require.False(t, turnClient.isTURNServer(server), "use the connected endpoint, not the resolved address")
+		}
+		// An invalid indication must be dropped before parsing its untrusted payload.
+		indication := stun.MustBuild(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication))
+		require.True(t, turnClient.isTURNServer(trusted))
+		for _, packet := range []struct {
+			data      []byte
+			wantError bool
+		}{{[]byte{0x40, 0, 0, 0}, false}, {indication.Raw, true}} {
+			for _, from := range []net.Addr{attacker, nil} {
+				handled, inboundErr := turnClient.HandleInbound(packet.data, from)
+				require.True(t, handled)
+				require.NoError(t, inboundErr)
+			}
+			handled, inboundErr := turnClient.HandleInbound(packet.data, trusted)
+			require.True(t, handled)
+			require.Equal(t, packet.wantError, inboundErr != nil, "trusted relay packets reach the handler")
+		}
+		turnClient.Close()
+	}
 }

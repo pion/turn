@@ -131,6 +131,11 @@ func (s *STUNConn) SetWriteDeadline(t time.Time) error {
 	return s.nextConn.SetWriteDeadline(t)
 }
 
+// RemoteAddr returns the connected peer, which may differ from a DNS result.
+func (s *STUNConn) RemoteAddr() net.Addr {
+	return s.nextConn.RemoteAddr()
+}
+
 // Conn returns the net.Conn used for this STUNConn.
 func (s *STUNConn) Conn() net.Conn {
 	return s.nextConn
