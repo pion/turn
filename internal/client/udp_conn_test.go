@@ -766,3 +766,47 @@ func TestCreatePermissions(t *testing.T) {
 		assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
 	})
 }
+
+func TestRefusedPermissionIsNotRequestedAgain(t *testing.T) {
+	calls := 0
+	client := &mockClient{
+		performTransaction: func(*stun.Message, net.Addr, bool, context.Context) (TransactionResult, error) {
+			calls++
+			res := stun.MustBuild(
+				stun.NewType(stun.MethodCreatePermission, stun.ClassErrorResponse),
+				stun.ErrorCodeAttribute{Code: stun.CodeForbidden, Reason: []byte("Forbidden")},
+			)
+
+			return TransactionResult{Msg: res}, nil
+		},
+	}
+	conn := UDPConn{
+		allocation: allocation{
+			client:     client,
+			log:        logging.NewDefaultLoggerFactory().NewLogger("test"),
+			serverAddr: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3478},
+			username:   stun.NewUsername("user"),
+			realm:      stun.NewRealm("realm"),
+			integrity:  stun.NewShortTermIntegrity("pass"),
+			_nonce:     stun.NewNonce("nonce"),
+			permMap:    newPermissionMap(),
+		},
+		bindingMgr: newBindingManager(),
+	}
+	peer := &net.UDPAddr{IP: net.IPv4(192, 168, 1, 2), Port: 1234}
+
+	for range 3 {
+		_, err := conn.WriteTo([]byte("hi"), peer)
+		assert.Error(t, err)
+	}
+	assert.Equal(t, 1, calls, "a refused permission is requested once")
+	assert.Empty(t, conn.permMap.addrs(), "a refused permission is not refreshed")
+
+	// Once the backoff has passed, it is requested again.
+	perm, ok := conn.permMap.find(peer)
+	assert.True(t, ok)
+	perm.refusedUntil.Store(time.Now().Add(-time.Second).UnixNano())
+	_, err := conn.WriteTo([]byte("hi"), peer)
+	assert.Error(t, err)
+	assert.Equal(t, 2, calls)
+}
