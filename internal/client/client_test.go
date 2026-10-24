@@ -24,7 +24,7 @@ func (c *mockClient) WriteTo(data []byte, to net.Addr) (int, error) {
 	return 0, nil
 }
 
-func (c *mockClient) PerformTransactionWithContext(msg *stun.Message, to net.Addr, dontWait bool, ctx context.Context) (TransactionResult, error) {
+func (c *mockClient) PerformTransactionWithContext(ctx context.Context, msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error) {
 	if c.performTransaction != nil {
 		return c.performTransaction(msg, to, dontWait, ctx)
 	}
