@@ -130,6 +130,12 @@ type EventHandler = allocation.EventHandler
 // QuotaHandler is a callback allows allocations to be rejected when a per-user quota is
 // exceeded. If the callback returns true the allocation request is accepted, otherwise it is
 // rejected and a 486 (Allocation Quota Reached) error is returned to the user.
+//
+// The callback is not serialized with allocation creation: Allocate requests from different
+// TCP connections may call it concurrently, and an accepted request may still fail to create
+// an allocation. To enforce an exact limit, reserve the slot in the callback itself and release
+// it in EventHandler.OnAllocationFailed and EventHandler.OnAllocationDeleted. Counting in
+// EventHandler.OnAllocationCreated admits more allocations than the limit allows.
 type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
 
 // ServerConfig configures the Pion TURN Server.
@@ -150,7 +156,7 @@ type ServerConfig struct {
 	AuthHandler AuthHandler
 
 	// QuotaHandler is a callback used to reject new allocations when a
-	// per-user quota is exceeded.
+	// per-user quota is exceeded. See QuotaHandler for how to enforce an exact limit.
 	QuotaHandler QuotaHandler
 
 	// EventHandlers is a set of callbacks for tracking allocation lifecycle.

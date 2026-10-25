@@ -1885,3 +1885,128 @@ func TestHandleSendIndicationPermissionBeforeFamily(t *testing.T) {
 	assert.ErrorIs(t, err, errNoPermission)
 	assert.Empty(t, relayConn.lastWrite, "data without permission must not be relayed")
 }
+
+var errTestRelayAllocation = errors.New("relay allocation failed")
+
+func TestHandleAllocateRequestFailedEvent(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		relayErr    error
+		lifetime    *time.Duration
+		quotaOK     bool
+		wantCode    stun.ErrorCode
+		wantCreated int
+		wantFailed  int
+	}{
+		{name: "Success", quotaOK: true, wantCreated: 1},
+		{
+			name: "RelayError", relayErr: errTestRelayAllocation, quotaOK: true,
+			wantCode: stun.CodeInsufficientCapacity, wantFailed: 1,
+		},
+		{
+			name: "LifetimeZero", lifetime: new(time.Duration), quotaOK: true,
+			wantCode: stun.CodeInsufficientCapacity, wantFailed: 1,
+		},
+		{name: "QuotaReached", wantCode: stun.CodeAllocQuotaReached},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := logging.NewDefaultLoggerFactory().NewLogger("turn")
+
+			var created, failed int
+			var failedUserID, failedRealm string
+			var failedErr error
+			allocationManager, err := allocation.NewManager(allocation.ManagerConfig{
+				AllocatePacketConn: func(conf allocation.AllocateListenerConfig) (net.PacketConn, net.Addr, error) {
+					if tc.relayErr != nil {
+						return nil, nil, tc.relayErr
+					}
+					con, listenErr := net.ListenPacket(conf.Network, "127.0.0.1:0") // nolint: noctx
+					if listenErr != nil {
+						return nil, nil, listenErr
+					}
+
+					return con, con.LocalAddr(), nil
+				},
+				AllocateListener: func(allocation.AllocateListenerConfig) (net.Listener, net.Addr, error) {
+					return nil, nil, nil
+				},
+				AllocateConn: func(allocation.AllocateConnConfig) (net.Conn, error) {
+					return nil, nil //nolint:nilnil
+				},
+				EventHandler: allocation.EventHandler{
+					OnAllocationCreated: func(_, _ net.Addr, _, _, _ string, _ net.Addr, _ int) {
+						created++
+					},
+					OnAllocationFailed: func(_, _ net.Addr, _, userID, realm string, err error) {
+						failed++
+						failedUserID, failedRealm, failedErr = userID, realm, err
+					},
+				},
+				LeveledLogger: logger,
+			})
+			assert.NoError(t, err)
+			defer allocationManager.Close() //nolint:errcheck
+
+			nonceHash, err := NewShortNonceHash(0)
+			assert.NoError(t, err)
+			staticKey, err := nonceHash.Generate()
+			assert.NoError(t, err)
+
+			conn := newCapturePacketConn(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3478})
+			req := Request{
+				AllocationManager:  allocationManager,
+				NonceHash:          nonceHash,
+				Conn:               conn,
+				SrcAddr:            &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5000},
+				Log:                logger,
+				AllocationLifetime: proto.DefaultLifetime,
+				AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
+					return "test-id", []byte(staticKey), true
+				},
+				QuotaHandler: func(string, string, net.Addr) bool {
+					return tc.quotaOK
+				},
+			}
+
+			msg := &stun.Message{}
+			msg.TransactionID = stun.NewTransactionID()
+			assert.NoError(t, msg.Build(stun.NewType(stun.MethodAllocate, stun.ClassRequest)))
+			assert.NoError(t, (proto.RequestedTransport{Protocol: proto.ProtoUDP}).AddTo(msg))
+			if tc.lifetime != nil {
+				assert.NoError(t, (proto.Lifetime{Duration: *tc.lifetime}).AddTo(msg))
+			}
+			assert.NoError(t, stun.MessageIntegrity(staticKey).AddTo(msg))
+			assert.NoError(t, stun.Nonce(staticKey).AddTo(msg))
+			assert.NoError(t, stun.Realm(staticKey).AddTo(msg))
+			assert.NoError(t, stun.Username("test-name").AddTo(msg))
+
+			err = handleAllocateRequest(req, msg)
+			if tc.wantFailed > 0 {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			res := &stun.Message{Raw: conn.LastWrite()}
+			assert.NoError(t, res.Decode())
+			var code stun.ErrorCodeAttribute
+			if tc.wantCode == 0 {
+				assert.Equal(t, stun.ClassSuccessResponse, res.Type.Class)
+			} else {
+				assert.NoError(t, code.GetFrom(res))
+				assert.Equal(t, tc.wantCode, code.Code)
+			}
+
+			assert.Equal(t, tc.wantCreated, created, "OnAllocationCreated calls")
+			assert.Equal(t, tc.wantFailed, failed, "OnAllocationFailed calls")
+			if tc.wantFailed > 0 {
+				assert.Equal(t, "test-id", failedUserID)
+				assert.Equal(t, staticKey, failedRealm)
+				assert.ErrorIs(t, failedErr, err)
+			}
+			if tc.relayErr != nil {
+				assert.ErrorIs(t, failedErr, tc.relayErr)
+			}
+		})
+	}
+}
