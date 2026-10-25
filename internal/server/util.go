@@ -113,18 +113,16 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 		Method:   callingMethod,
 	})
 	if !ok {
-		return nil, false, "", buildAndSendErr(
-			req.Conn,
-			req.SrcAddr,
-			fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()),
-			badRequestMsg...,
-		)
+		_, _, _, sendErr := respondWithNonce(stun.CodeUnauthorized)
+
+		return nil, false, "", errors.Join(fmt.Errorf("%w %s", errNoSuchUser, usernameAttr.String()), sendErr)
 	}
 
 	if err := stun.MessageIntegrity(ourKey).Check(stunMsg); err != nil {
 		genAuthEvent(req, stunMsg, callingMethod, false)
+		_, _, _, sendErr := respondWithNonce(stun.CodeUnauthorized)
 
-		return nil, false, "", buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
+		return nil, false, "", errors.Join(err, sendErr)
 	}
 
 	genAuthEvent(req, stunMsg, callingMethod, true)

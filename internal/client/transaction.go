@@ -26,6 +26,7 @@ type TransactionResult struct {
 
 // TransactionConfig is a set of config params used by NewTransaction.
 type TransactionConfig struct {
+	Integrity    stun.MessageIntegrity
 	Key          string
 	Raw          []byte
 	To           net.Addr
@@ -44,6 +45,8 @@ type Transaction struct {
 	resultCh   chan TransactionResult
 	resultOnce sync.Once
 	mutex      sync.RWMutex
+
+	integrity stun.MessageIntegrity // Read-only
 }
 
 // NewTransaction creates a new instance of Transaction.
@@ -59,7 +62,26 @@ func NewTransaction(config *TransactionConfig) *Transaction {
 		To:       config.To,       // Read-only
 		interval: config.Interval, // Modified only by the timer thread
 		resultCh: resultCh,        // Thread-safe
+
+		integrity: config.Integrity,
 	}
+}
+
+// CheckIntegrity validates responses to authenticated requests.
+func (t *Transaction) CheckIntegrity(msg *stun.Message) bool {
+	if t.integrity == nil {
+		return true
+	}
+	if !msg.Contains(stun.AttrMessageIntegrity) && msg.Type.Class == stun.ClassErrorResponse {
+		var code stun.ErrorCodeAttribute
+		if code.GetFrom(msg) == nil && (code.Code == stun.CodeUnauthorized || code.Code == stun.CodeStaleNonce) {
+			return true
+		}
+	}
+	// MESSAGE-INTEGRITY carries a 20-byte HMAC-SHA1.
+	value, err := msg.Get(stun.AttrMessageIntegrity)
+
+	return err == nil && len(value) == 20 && t.integrity.Check(msg) == nil
 }
 
 // StartRtxTimer starts the transaction timer.

@@ -113,7 +113,10 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return 0, fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
+			return 0, &stun.TurnError{
+				StunMessageType: res.Type,
+				ErrorCodeAttr:   code,
+			}
 		}
 
 		return 0, fmt.Errorf("%s", res.Type) //nolint // dynamic errors

@@ -28,6 +28,7 @@ import (
 	"github.com/pion/turn/v5/internal/allocation"
 	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -728,7 +729,7 @@ func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
 
 	server, err := NewServer(ServerConfig{
 		AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
-			return "", nil, false
+			return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 		},
 		PacketConnConfigs: []PacketConnConfig{
 			{
@@ -786,6 +787,35 @@ func TestServerHandleComprehensionRequiredAttribute(t *testing.T) {
 		Length: 0x4,
 		Value:  []uint8{0x7, 0xad, 0x7f, 0xff},
 	})
+
+	var nonce stun.Nonce
+	key := stun.NewLongTermIntegrity("user", "pion.ly", "pass")
+	for _, authenticated := range []bool{false, true} {
+		attrs := []stun.Setter{
+			stun.TransactionID, stun.NewType(stun.MethodAllocate, stun.ClassRequest),
+			stun.RawAttribute{Type: 0x7AD, Value: []byte{0}},
+		}
+		if authenticated {
+			attrs = append(attrs, stun.NewUsername("user"), stun.NewRealm("pion.ly"), nonce, key)
+		}
+		request := stun.MustBuild(attrs...)
+		_, err = conn.WriteTo(request.Raw, udpListener.LocalAddr())
+		require.NoError(t, err)
+		buffer := make([]byte, 1500)
+		n, _, readErr := conn.ReadFrom(buffer)
+		require.NoError(t, readErr)
+		response := &stun.Message{Raw: buffer[:n]}
+		require.NoError(t, response.Decode())
+		var code stun.ErrorCodeAttribute
+		require.NoError(t, code.GetFrom(response))
+		if authenticated {
+			require.Equal(t, stun.CodeUnknownAttribute, code.Code)
+			require.NoError(t, key.Check(response))
+		} else {
+			require.Equal(t, stun.CodeUnauthorized, code.Code)
+			require.NoError(t, nonce.GetFrom(response))
+		}
+	}
 
 	assert.NoError(t, conn.Close())
 	assert.NoError(t, server.Close())
@@ -1343,6 +1373,7 @@ func TestSTUNOnly(t *testing.T) {
 
 	client, err := NewClient(&ClientConfig{
 		Conn:           conn,
+		RTO:            time.Millisecond,
 		STUNServerAddr: testAddr,
 		TURNServerAddr: testAddr,
 		Username:       testUser,
@@ -1361,7 +1392,7 @@ func TestSTUNOnly(t *testing.T) {
 	assert.True(t, ok)
 
 	_, err = client.Allocate()
-	assert.Equal(t, err.Error(), "Allocate error response (error 400: )")
+	assert.ErrorContains(t, err, "all retransmissions failed")
 
 	assert.NoError(t, conn.Close())
 }

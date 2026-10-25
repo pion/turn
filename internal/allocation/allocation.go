@@ -92,18 +92,17 @@ func (a *Allocation) GetPermission(addr net.Addr) *Permission {
 func (a *Allocation) AddPermission(perms *Permission) {
 	fingerprint := ipnet.FingerprintAddr(perms.Addr)
 
-	a.permissionsLock.RLock()
+	a.permissionsLock.Lock()
 	existedPermission, ok := a.permissions[fingerprint]
-	a.permissionsLock.RUnlock()
-
 	if ok {
 		existedPermission.refresh(perms.timeout)
+		a.permissionsLock.Unlock()
 
 		return
 	}
 
 	perms.allocation = a
-	a.permissionsLock.Lock()
+	perms.start(perms.timeout)
 	a.permissions[fingerprint] = perms
 	a.permissionsLock.Unlock()
 
@@ -114,8 +113,6 @@ func (a *Allocation) AddPermission(perms *Permission) {
 				a.RelayAddr, u.IP)
 		}
 	}
-
-	perms.start(perms.timeout)
 }
 
 // RemovePermission removes the net.Addr's fingerprint from the allocation's permissions.

@@ -5,6 +5,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -115,7 +116,9 @@ func TestTCPConn(t *testing.T) {
 		}
 
 		_, err = alloc.Connect(addr)
-		assert.ErrorContains(t, err, "Connect error response", "error 400")
+		var turnErr *stun.TurnError
+		assert.True(t, errors.As(err, &turnErr))
+		assert.Equal(t, stun.CodeBadRequest, turnErr.ErrorCodeAttr.Code)
 	})
 
 	t.Run("SetDeadline()", func(t *testing.T) {
