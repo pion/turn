@@ -199,9 +199,9 @@ func isFinalRefreshError(err error) bool {
 		switch turnErr.ErrorCodeAttr.Code {
 		case stun.CodeBadRequest, stun.CodeUnauthorized, stun.CodeForbidden, stun.CodeAllocMismatch:
 			return true
+		default:
+			return false
 		}
-
-		return false
 	}
 
 	return errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET)
