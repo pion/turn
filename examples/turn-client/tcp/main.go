@@ -5,7 +5,9 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"strconv"
@@ -32,46 +34,25 @@ func main() { //nolint:cyclop
 		log.Fatalf("'user' is required")
 	}
 
-	// Dial TURN Server
-	turnServerAddr := net.JoinHostPort(*host, strconv.Itoa(*port))
-	conn, err := net.Dial("tcp", turnServerAddr) // nolint: noctx
-	if err != nil {
-		log.Panicf("Failed to connect to TURN server: %s", err)
-	}
-
 	cred := strings.SplitN(*user, "=", 2)
-
-	// Start a new TURN Client and wrap our net.Conn in a STUNConn
-	// This allows us to simulate datagram based communication over a net.Conn
 	cfg := &turn.ClientConfig{
-		STUNServerAddr: turnServerAddr,
-		TURNServerAddr: turnServerAddr,
-		Conn:           turn.NewSTUNConn(conn),
-		Username:       cred[0],
-		Password:       cred[1],
-		Realm:          *realm,
-		LoggerFactory:  logging.NewDefaultLoggerFactory(),
+		Username:      cred[0],
+		Password:      cred[1],
+		Realm:         *realm,
+		LoggerFactory: logging.NewDefaultLoggerFactory(),
 	}
 
-	client, err := turn.NewClient(cfg)
-	if err != nil {
-		log.Panicf("Failed to create TURN client: %s", err)
+	client, relayConn, err := allocate(net.JoinHostPort(*host, strconv.Itoa(*port)), cfg)
+	// Over TCP, a 300 (Try Alternate) redirect is followed by connecting to the alternate.
+	var redirect *turn.TryAlternateError
+	if errors.As(err, &redirect) && redirect.Alternate != nil {
+		log.Printf("Redirected to %s", redirect.Alternate)
+		client, relayConn, err = allocate(redirect.Alternate.String(), cfg)
 	}
-	defer client.Close()
-
-	// Start listening on the conn provided.
-	err = client.Listen()
-	if err != nil {
-		log.Panicf("Failed to listen: %s", err)
-	}
-
-	// Allocate a relay socket on the TURN server. On success, it
-	// will return a net.PacketConn which represents the remote
-	// socket.
-	relayConn, err := client.Allocate()
 	if err != nil {
 		log.Panicf("Failed to allocate: %s", err)
 	}
+	defer client.Close()
 	defer func() {
 		if closeErr := relayConn.Close(); closeErr != nil {
 			log.Fatalf("Failed to close connection: %s", closeErr)
@@ -90,6 +71,38 @@ func main() { //nolint:cyclop
 			log.Panicf("Failed to ping: %s", err)
 		}
 	}
+}
+
+// allocate connects to the TURN server at addr and allocates a relay socket on it,
+// which represents the remote socket.
+func allocate(addr string, cfg *turn.ClientConfig) (*turn.Client, net.PacketConn, error) {
+	// Dial TURN Server
+	conn, err := net.Dial("tcp", addr) // nolint: noctx
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to TURN server: %w", err)
+	}
+
+	// Start a new TURN Client and wrap our net.Conn in a STUNConn
+	// This allows us to simulate datagram based communication over a net.Conn
+	cfg.STUNServerAddr, cfg.TURNServerAddr, cfg.Conn = addr, addr, turn.NewSTUNConn(conn)
+	client, err := turn.NewClient(cfg)
+	if err != nil {
+		_ = conn.Close()
+
+		return nil, nil, fmt.Errorf("failed to create TURN client: %w", err)
+	}
+
+	// Start listening on the conn provided, then allocate.
+	var relayConn net.PacketConn
+	if err = client.Listen(); err == nil {
+		if relayConn, err = client.Allocate(); err == nil {
+			return client, relayConn, nil
+		}
+	}
+	client.Close()
+	_ = conn.Close()
+
+	return nil, nil, err
 }
 
 func doPingTest(client *turn.Client, relayConn net.PacketConn) error { //nolint:cyclop
