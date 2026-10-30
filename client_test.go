@@ -7,9 +7,11 @@ package turn
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/pion/logging"
 	"github.com/pion/stun/v4"
+	"github.com/pion/transport/v5/vnet"
 	"github.com/pion/turn/v5/internal/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1022,4 +1025,506 @@ func TestClientRelaySource(t *testing.T) {
 		}
 		turnClient.Close()
 	}
+}
+
+var errTestCredentialLookup = errors.New("credential lookup failed")
+
+type tryAlternateCtxKey struct{}
+
+// startTestServer runs a TURN server that accepts the users foo:pass and bar:secret.
+func startTestServer(t *testing.T, config ServerConfig) {
+	t.Helper()
+
+	config.Realm = "pion.ly"
+	config.AuthHandler = func(ra *RequestAttributes) (string, []byte, bool) {
+		password, ok := map[string]string{"foo": "pass", "bar": "secret"}[ra.Username]
+
+		return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, password), ok
+	}
+	server, err := NewServer(config)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, server.Close()) })
+}
+
+// listenTestServer runs startTestServer on a loopback UDP port and returns its address.
+func listenTestServer(t *testing.T) net.Addr {
+	t.Helper()
+
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	startTestServer(t, ServerConfig{PacketConnConfigs: []PacketConnConfig{{
+		PacketConn:            conn,
+		RelayAddressGenerator: &RelayAddressGeneratorStatic{RelayAddress: net.ParseIP("127.0.0.1"), Address: "0.0.0.0"},
+	}}})
+
+	return conn.LocalAddr()
+}
+
+// serveTryAlternate answers every request on conn as relay.communication.microsoft.com does:
+// 300 (Try Alternate) with NONCE, REALM and attrs, even when the request is authenticated.
+// It returns the number of distinct requests received.
+func serveTryAlternate(t *testing.T, conn net.PacketConn, attrs ...stun.Setter) *atomic.Int32 {
+	t.Helper()
+
+	var requests atomic.Int32
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		seen := map[[stun.TransactionIDSize]byte]struct{}{}
+		buf := make([]byte, 1500)
+		for {
+			n, from, err := conn.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			req := &stun.Message{Raw: append([]byte(nil), buf[:n]...)}
+			if req.Decode() != nil {
+				continue
+			}
+			if _, ok := seen[req.TransactionID]; !ok {
+				seen[req.TransactionID] = struct{}{}
+				requests.Add(1)
+			}
+			setters := append([]stun.Setter{
+				&stun.Message{TransactionID: req.TransactionID},
+				stun.NewType(req.Type.Method, stun.ClassErrorResponse),
+				stun.CodeTryAlternate, stun.NewNonce("nonce"), stun.NewRealm("rtcmedia"),
+			}, attrs...)
+			res, err := stun.Build(append(setters, stun.Fingerprint)...)
+			if assert.NoError(t, err) {
+				_, _ = conn.WriteTo(res.Raw, from)
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		assert.NoError(t, conn.Close())
+		<-done
+	})
+
+	return &requests
+}
+
+func alternateAttr(t *testing.T, addr net.Addr) *stun.AlternateServer {
+	t.Helper()
+
+	switch addr := addr.(type) {
+	case *net.UDPAddr:
+		return &stun.AlternateServer{IP: addr.IP, Port: addr.Port}
+	case *net.TCPAddr:
+		return &stun.AlternateServer{IP: addr.IP, Port: addr.Port}
+	default:
+		assert.Failf(t, "unexpected address type", "%T", addr)
+
+		return nil
+	}
+}
+
+// newUDPTestClient returns a listening client on a loopback UDP port.
+func newUDPTestClient(t *testing.T, config ClientConfig) *Client {
+	t.Helper()
+
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	config.Conn = conn
+	client, err := NewClient(&config)
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+	t.Cleanup(func() {
+		client.Close()
+		assert.NoError(t, conn.Close())
+	})
+
+	return client
+}
+
+// newTCPTestClient returns a listening client on conn, configured like pion/ice does over TCP.
+func newTCPTestClient(t *testing.T, conn net.Conn, handler TryAlternateHandler) *Client {
+	t.Helper()
+
+	client, err := NewClient(&ClientConfig{
+		Conn:                NewSTUNConn(conn),
+		Username:            "foo",
+		Password:            "pass",
+		TryAlternateHandler: handler,
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+	t.Cleanup(func() {
+		client.Close()
+		assert.NoError(t, conn.Close())
+	})
+
+	return client
+}
+
+// tryAlternateConn stands in for TURN servers over a packet transport. It answers the n-th
+// distinct request with an error response carrying respond(n).
+type tryAlternateConn struct {
+	client  *Client
+	respond func(n int) []stun.Setter
+
+	mu     sync.Mutex
+	seen   map[[stun.TransactionIDSize]byte]int
+	sentTo []string
+}
+
+func newStubClient(t *testing.T, server string, respond func(n int) []stun.Setter) (*Client, *tryAlternateConn) {
+	t.Helper()
+
+	stub := &tryAlternateConn{respond: respond, seen: map[[stun.TransactionIDSize]byte]int{}}
+	client, err := NewClient(&ClientConfig{Conn: stub, TURNServerAddr: server, Username: "foo", Password: "pass"})
+	require.NoError(t, err)
+	stub.client = client
+	t.Cleanup(client.Close)
+
+	return client, stub
+}
+
+func (c *tryAlternateConn) WriteTo(packet []byte, addr net.Addr) (int, error) {
+	req := &stun.Message{Raw: append([]byte(nil), packet...)}
+	if err := req.Decode(); err != nil {
+		return 0, err
+	}
+	c.mu.Lock()
+	n, ok := c.seen[req.TransactionID]
+	if !ok {
+		c.sentTo = append(c.sentTo, addr.String())
+		n = len(c.sentTo)
+		c.seen[req.TransactionID] = n
+	}
+	c.mu.Unlock()
+
+	setters := append([]stun.Setter{
+		&stun.Message{TransactionID: req.TransactionID},
+		stun.NewType(req.Type.Method, stun.ClassErrorResponse),
+	}, c.respond(n)...)
+	res, err := stun.Build(append(setters, stun.Fingerprint)...)
+	if err != nil {
+		return 0, err
+	}
+	go func() { _, _ = c.client.HandleInbound(res.Raw, addr) }()
+
+	return len(packet), nil
+}
+
+// destinations returns the servers each distinct request was sent to.
+func (c *tryAlternateConn) destinations() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.sentTo)
+}
+
+func (c *tryAlternateConn) ReadFrom([]byte) (int, net.Addr, error) { return 0, nil, io.EOF }
+func (c *tryAlternateConn) Close() error                           { return nil }
+func (c *tryAlternateConn) LocalAddr() net.Addr                    { return &net.UDPAddr{IP: net.IPv4zero} }
+func (c *tryAlternateConn) SetDeadline(time.Time) error            { return nil }
+func (c *tryAlternateConn) SetReadDeadline(time.Time) error        { return nil }
+func (c *tryAlternateConn) SetWriteDeadline(time.Time) error       { return nil }
+
+// A 300 (Try Alternate) carrying NONCE and REALM is followed, not answered with credentials.
+func TestClientAllocateFollowsTryAlternate(t *testing.T) {
+	alternate := listenTestServer(t)
+	redirectConn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	requests := serveTryAlternate(t, redirectConn, alternateAttr(t, alternate))
+
+	client := newUDPTestClient(t, ClientConfig{
+		TURNServerAddr: redirectConn.LocalAddr().String(),
+		Username:       "foo",
+		Password:       "pass",
+	})
+	relayConn, err := client.Allocate()
+	require.NoError(t, err)
+	assert.Equal(t, alternate.String(), client.TURNServerAddr().String())
+	assert.Equal(t, int32(1), requests.Load(), "no authenticated request to the redirecting server")
+	assert.NoError(t, relayConn.Close())
+}
+
+func TestClientTryAlternateHandler(t *testing.T) {
+	setup := func(t *testing.T, password string, handler TryAlternateHandler) (*Client, net.Addr, net.Addr) {
+		t.Helper()
+
+		alternate := listenTestServer(t)
+		redirectConn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+		require.NoError(t, err)
+		serveTryAlternate(t, redirectConn, alternateAttr(t, alternate))
+		client := newUDPTestClient(t, ClientConfig{
+			TURNServerAddr:      redirectConn.LocalAddr().String(),
+			Username:            "foo",
+			Password:            password,
+			TryAlternateHandler: handler,
+		})
+
+		return client, redirectConn.LocalAddr(), alternate
+	}
+
+	t.Run("new credentials", func(t *testing.T) {
+		var got *TryAlternateError
+		client, server, alternate := setup(t, "expired", func(ctx context.Context, redirect *TryAlternateError) (string, string, error) {
+			assert.Equal(t, "allocate", ctx.Value(tryAlternateCtxKey{}))
+			got = redirect
+
+			return "bar", "secret", nil
+		})
+
+		ctx := context.WithValue(context.Background(), tryAlternateCtxKey{}, "allocate")
+		relayConn, err := client.AllocateWithContext(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, server.String(), got.Server.String())
+		assert.Equal(t, alternate.String(), got.Alternate.String())
+		assert.Equal(t, "bar", client.Username().String())
+		assert.NoError(t, relayConn.Close())
+	})
+
+	t.Run("error stops the redirect", func(t *testing.T) {
+		client, server, _ := setup(t, "pass", func(context.Context, *TryAlternateError) (string, string, error) {
+			return "", "", errTestCredentialLookup
+		})
+
+		_, err := client.Allocate()
+		assert.ErrorIs(t, err, errTestCredentialLookup)
+		assert.Equal(t, server.String(), client.TURNServerAddr().String())
+	})
+
+	t.Run("declined", func(t *testing.T) {
+		client, server, alternate := setup(t, "pass", func(_ context.Context, redirect *TryAlternateError) (string, string, error) {
+			return "", "", redirect
+		})
+
+		_, err := client.Allocate()
+		var redirect *TryAlternateError
+		require.ErrorAs(t, err, &redirect)
+		assert.Equal(t, alternate.String(), redirect.Alternate.String())
+		var turnErr *stun.TurnError
+		require.ErrorAs(t, err, &turnErr)
+		assert.Equal(t, stun.CodeTryAlternate, turnErr.ErrorCodeAttr.Code)
+		assert.Equal(t, server.String(), client.TURNServerAddr().String())
+	})
+}
+
+// Two servers redirecting to each other are each sent the request once.
+func TestClientTryAlternateLoop(t *testing.T) {
+	first, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	second, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	firstRequests := serveTryAlternate(t, first, alternateAttr(t, second.LocalAddr()))
+	secondRequests := serveTryAlternate(t, second, alternateAttr(t, first.LocalAddr()))
+
+	client := newUDPTestClient(t, ClientConfig{TURNServerAddr: first.LocalAddr().String(), Username: "foo", Password: "pass"})
+	_, err = client.Allocate()
+	assert.ErrorIs(t, err, errAlternateServerLoop)
+	var redirect *TryAlternateError
+	assert.ErrorAs(t, err, &redirect)
+	assert.Equal(t, int32(1), firstRequests.Load())
+	assert.Equal(t, int32(1), secondRequests.Load())
+}
+
+// An endless chain of distinct alternates is cut off after maxAlternateRedirects.
+func TestClientTryAlternateLimit(t *testing.T) {
+	client, stub := newStubClient(t, "127.0.0.1:3478", func(n int) []stun.Setter {
+		return []stun.Setter{stun.CodeTryAlternate, &stun.AlternateServer{IP: net.IPv4(127, 0, 0, 1), Port: 3478 + n}}
+	})
+
+	_, err := client.Allocate()
+	assert.ErrorIs(t, err, errTooManyAlternateRedirects)
+	var redirect *TryAlternateError
+	assert.ErrorAs(t, err, &redirect)
+	assert.Len(t, stub.destinations(), maxAlternateRedirects+1)
+}
+
+// Invalid ALTERNATE-SERVER attributes and ones of the other address family are skipped.
+func TestClientTryAlternateAttributes(t *testing.T) {
+	alternate := func(ip string, port int) stun.Setter { return &stun.AlternateServer{IP: net.ParseIP(ip), Port: port} }
+	raw := func(value ...byte) stun.Setter {
+		return stun.RawAttribute{Type: stun.AttrAlternateServer, Value: value}
+	}
+	for _, test := range []struct {
+		name   string
+		server string
+		attrs  []stun.Setter
+		sentTo []string // Servers the request is sent to before Allocate fails.
+	}{
+		{"missing", "127.0.0.1:3478", nil, []string{"127.0.0.1:3478"}},
+		{"truncated", "127.0.0.1:3478", []stun.Setter{raw(0, 1, 0x0d, 0x96, 127, 0)}, []string{"127.0.0.1:3478"}},
+		{"unknown family", "127.0.0.1:3478", []stun.Setter{raw(0, 3, 0x0d, 0x96, 127, 0, 0, 2)}, []string{"127.0.0.1:3478"}},
+		{"unspecified address", "127.0.0.1:3478", []stun.Setter{alternate("0.0.0.0", 3478)}, []string{"127.0.0.1:3478"}},
+		{"zero port", "127.0.0.1:3478", []stun.Setter{alternate("127.0.0.2", 0)}, []string{"127.0.0.1:3478"}},
+		{"other family only", "127.0.0.1:3478", []stun.Setter{alternate("2001:db8::1", 3478)}, []string{"127.0.0.1:3478"}},
+		{
+			"IPv4 server skips IPv6", "127.0.0.1:3478",
+			[]stun.Setter{alternate("2001:db8::1", 3478), alternate("127.0.0.2", 3478)},
+			[]string{"127.0.0.1:3478", "127.0.0.2:3478"},
+		},
+		{
+			"IPv6 server skips IPv4", "[::1]:3478",
+			[]stun.Setter{alternate("127.0.0.2", 3478), alternate("::2", 3478)},
+			[]string{"[::1]:3478", "[::2]:3478"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, stub := newStubClient(t, test.server, func(int) []stun.Setter {
+				return append([]stun.Setter{stun.CodeTryAlternate}, test.attrs...)
+			})
+
+			_, err := client.Allocate()
+			var redirect *TryAlternateError
+			require.ErrorAs(t, err, &redirect)
+			assert.Equal(t, test.sentTo, stub.destinations())
+			if len(test.sentTo) == 1 {
+				assert.Nil(t, redirect.Alternate)
+			} else {
+				assert.ErrorIs(t, err, errAlternateServerLoop, "the alternate redirects to itself")
+			}
+		})
+	}
+}
+
+// A TryAlternateError built by a caller, such as a handler test, has no TURN error to unwrap.
+func TestTryAlternateErrorWithoutResponse(t *testing.T) {
+	redirect := &TryAlternateError{Server: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3478}}
+	assert.Equal(t, "turn: 1.2.3.4:3478 answered 300 (Try Alternate) without a valid ALTERNATE-SERVER", redirect.Error())
+	assert.NoError(t, errors.Unwrap(redirect))
+
+	redirect.Alternate = &net.UDPAddr{IP: net.IPv4(1, 2, 3, 5), Port: 3478}
+	assert.Equal(t, "turn: 1.2.3.4:3478 answered 300 (Try Alternate) with alternate server 1.2.3.5:3478", redirect.Error())
+}
+
+// Only 401 and 438 are challenges; another error carrying NONCE and REALM ends the Allocate.
+func TestClientAllocateErrorWithNonce(t *testing.T) {
+	client, stub := newStubClient(t, "127.0.0.1:3478", func(int) []stun.Setter {
+		return []stun.Setter{stun.CodeForbidden, stun.NewNonce("nonce"), stun.NewRealm("pion.ly")}
+	})
+
+	_, err := client.Allocate()
+	var turnErr *stun.TurnError
+	require.ErrorAs(t, err, &turnErr)
+	assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
+	assert.Len(t, stub.destinations(), 1)
+}
+
+// Over TCP the redirect is returned with a TCP alternate, for the caller to connect to.
+func TestTCPClientTryAlternate(t *testing.T) {
+	alternateListener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	startTestServer(t, ServerConfig{ListenerConfigs: []ListenerConfig{{
+		Listener:              alternateListener,
+		RelayAddressGenerator: &RelayAddressGeneratorStatic{RelayAddress: net.ParseIP("127.0.0.1"), Address: "0.0.0.0"},
+	}}})
+	redirectListener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, redirectListener.Close()) })
+
+	for _, test := range []struct {
+		name     string
+		allocate func(*Client) (io.Closer, error)
+	}{
+		{"Allocate", func(c *Client) (io.Closer, error) { return c.Allocate() }},
+		{"AllocateTCP", func(c *Client) (io.Closer, error) { return c.AllocateTCP() }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			conn, err := net.Dial("tcp4", redirectListener.Addr().String()) // nolint: noctx
+			require.NoError(t, err)
+			accepted, err := redirectListener.Accept()
+			require.NoError(t, err)
+			serveTryAlternate(t, NewSTUNConn(accepted), alternateAttr(t, alternateListener.Addr()),
+				stun.RawAttribute{Type: stun.AttrAlternateDomain, Value: []byte("turn.pion.ly")})
+			client := newTCPTestClient(t, conn, func(context.Context, *TryAlternateError) (string, string, error) {
+				assert.Fail(t, "redirects over TCP are left to the caller")
+
+				return "", "", errTestCredentialLookup
+			})
+
+			_, err = test.allocate(client)
+			var redirect *TryAlternateError
+			require.ErrorAs(t, err, &redirect)
+			assert.Equal(t, conn.RemoteAddr().String(), redirect.Server.String())
+			assert.IsType(t, &net.TCPAddr{}, redirect.Alternate)
+			assert.Equal(t, alternateListener.Addr().String(), redirect.Alternate.String())
+			assert.Equal(t, "turn.pion.ly", redirect.Domain)
+
+			alternateConn, err := net.Dial(redirect.Alternate.Network(), redirect.Alternate.String()) // nolint: noctx
+			require.NoError(t, err)
+			allocation, err := test.allocate(newTCPTestClient(t, alternateConn, nil))
+			require.NoError(t, err)
+			assert.NoError(t, allocation.Close())
+		})
+	}
+}
+
+// A redirect shaped like relay.communication.microsoft.com's, end to end on a virtual network:
+// data relayed by the alternate reaches the client.
+func TestClientTryAlternateVNet(t *testing.T) {
+	loggerFactory := logging.NewDefaultLoggerFactory()
+	wan, err := vnet.NewRouter(&vnet.RouterConfig{CIDR: "0.0.0.0/0", LoggerFactory: loggerFactory})
+	require.NoError(t, err)
+	newNet := func(ip string) *vnet.Net {
+		vnetNet, netErr := vnet.NewNet(&vnet.NetConfig{StaticIPs: []string{ip}})
+		require.NoError(t, netErr)
+		require.NoError(t, wan.AddNet(vnetNet))
+
+		return vnetNet
+	}
+	redirectNet, turnNet, clientNet, peerNet := newNet("1.2.3.4"), newNet("1.2.3.5"), newNet("1.2.3.6"), newNet("1.2.3.7")
+	require.NoError(t, wan.AddHost("turn.pion.ly", "1.2.3.4"))
+	require.NoError(t, wan.Start())
+	t.Cleanup(func() { assert.NoError(t, wan.Stop()) })
+
+	turnConn, err := turnNet.ListenPacket("udp4", "1.2.3.5:3478")
+	require.NoError(t, err)
+	startTestServer(t, ServerConfig{
+		PacketConnConfigs: []PacketConnConfig{{
+			PacketConn:            turnConn,
+			RelayAddressGenerator: &RelayAddressGeneratorNone{Address: "1.2.3.5", Net: turnNet},
+		}},
+		LoggerFactory: loggerFactory,
+	})
+	redirectConn, err := redirectNet.ListenPacket("udp4", "1.2.3.4:3478")
+	require.NoError(t, err)
+	serveTryAlternate(t, redirectConn, &stun.AlternateServer{IP: net.ParseIP("1.2.3.5"), Port: 3478})
+
+	clientConn, err := clientNet.ListenPacket("udp4", "0.0.0.0:0")
+	require.NoError(t, err)
+	client, err := NewClient(&ClientConfig{
+		Conn:           clientConn,
+		TURNServerAddr: "turn.pion.ly:3478",
+		Username:       "foo",
+		Password:       "pass",
+		Net:            clientNet,
+		LoggerFactory:  loggerFactory,
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Listen())
+	relayConn, err := client.Allocate()
+	require.NoError(t, err)
+	assert.Equal(t, "1.2.3.5:3478", client.TURNServerAddr().String())
+
+	peerConn, err := peerNet.ListenPacket("udp4", "1.2.3.7:5000")
+	require.NoError(t, err)
+	deadline := time.Now().Add(5 * time.Second)
+	require.NoError(t, peerConn.SetReadDeadline(deadline))
+	require.NoError(t, relayConn.SetReadDeadline(deadline))
+
+	// Writing first installs the permission the peer's reply needs.
+	_, err = relayConn.WriteTo([]byte("ping"), peerConn.LocalAddr())
+	require.NoError(t, err)
+	buf := make([]byte, 64)
+	n, from, err := peerConn.ReadFrom(buf)
+	require.NoError(t, err)
+	assert.Equal(t, "ping", string(buf[:n]))
+	assert.Equal(t, relayConn.LocalAddr().String(), from.String())
+
+	_, err = peerConn.WriteTo([]byte("pong"), from)
+	require.NoError(t, err)
+	n, from, err = relayConn.ReadFrom(buf)
+	require.NoError(t, err)
+	assert.Equal(t, "pong", string(buf[:n]))
+	assert.Equal(t, peerConn.LocalAddr().String(), from.String())
+
+	assert.NoError(t, relayConn.Close())
+	assert.NoError(t, peerConn.Close())
+	client.Close()
+	assert.NoError(t, clientConn.Close())
 }
