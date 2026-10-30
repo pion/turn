@@ -111,9 +111,9 @@ type Client struct {
 	tryAlternateHandler TryAlternateHandler // Read-only
 }
 
-// TryAlternateHandler is called with the context of the Allocate call before it follows
-// redirect. It returns the credentials for redirect.Alternate, or an error that Allocate
-// returns instead; returning redirect itself declines the redirect.
+// TryAlternateHandler returns the credentials Allocate uses at redirect.Alternate, or an
+// error that Allocate returns instead; returning redirect itself declines the redirect.
+// ctx is the context of the Allocate call.
 type TryAlternateHandler func(ctx context.Context, redirect *TryAlternateError) (username, password string, err error)
 
 // TryAlternateError is a 300 (Try Alternate) Allocate error response (RFC 8489 Section 10).
@@ -130,10 +130,10 @@ type TryAlternateError struct {
 
 func (e *TryAlternateError) Error() string {
 	if e.Alternate == nil {
-		return fmt.Sprintf("turn: %v answered 300 (Try Alternate) without a valid ALTERNATE-SERVER", e.Server)
+		return fmt.Sprintf("%v answered 300 (Try Alternate) without a valid ALTERNATE-SERVER", e.Server)
 	}
 
-	return fmt.Sprintf("turn: %v answered 300 (Try Alternate) with alternate server %v", e.Server, e.Alternate)
+	return fmt.Sprintf("%v answered 300 (Try Alternate) with alternate server %v", e.Server, e.Alternate)
 }
 
 // Unwrap returns the *stun.TurnError of the response.

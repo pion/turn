@@ -12,6 +12,7 @@ import (
 	"net"
 	"runtime"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1158,17 +1159,19 @@ func newTCPTestClient(t *testing.T, conn net.Conn, handler TryAlternateHandler) 
 }
 
 // tryAlternateConn stands in for TURN servers over a packet transport. It answers the n-th
-// distinct request with an error response carrying respond(n).
+// distinct request req with an error response carrying respond(n, req).
 type tryAlternateConn struct {
 	client  *Client
-	respond func(n int) []stun.Setter
+	respond func(n int, req *stun.Message) []stun.Setter
 
 	mu     sync.Mutex
 	seen   map[[stun.TransactionIDSize]byte]int
 	sentTo []string
 }
 
-func newStubClient(t *testing.T, server string, respond func(n int) []stun.Setter) (*Client, *tryAlternateConn) {
+func newStubClient(
+	t *testing.T, server string, respond func(n int, req *stun.Message) []stun.Setter,
+) (*Client, *tryAlternateConn) {
 	t.Helper()
 
 	stub := &tryAlternateConn{respond: respond, seen: map[[stun.TransactionIDSize]byte]int{}}
@@ -1197,7 +1200,7 @@ func (c *tryAlternateConn) WriteTo(packet []byte, addr net.Addr) (int, error) {
 	setters := append([]stun.Setter{
 		&stun.Message{TransactionID: req.TransactionID},
 		stun.NewType(req.Type.Method, stun.ClassErrorResponse),
-	}, c.respond(n)...)
+	}, c.respond(n, req)...)
 	res, err := stun.Build(append(setters, stun.Fingerprint)...)
 	if err != nil {
 		return 0, err
@@ -1324,7 +1327,7 @@ func TestClientTryAlternateLoop(t *testing.T) {
 
 // An endless chain of distinct alternates is cut off after maxAlternateRedirects.
 func TestClientTryAlternateLimit(t *testing.T) {
-	client, stub := newStubClient(t, "127.0.0.1:3478", func(n int) []stun.Setter {
+	client, stub := newStubClient(t, "127.0.0.1:3478", func(n int, _ *stun.Message) []stun.Setter {
 		return []stun.Setter{stun.CodeTryAlternate, &stun.AlternateServer{IP: net.IPv4(127, 0, 0, 1), Port: 3478 + n}}
 	})
 
@@ -1365,7 +1368,7 @@ func TestClientTryAlternateAttributes(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			client, stub := newStubClient(t, test.server, func(int) []stun.Setter {
+			client, stub := newStubClient(t, test.server, func(int, *stun.Message) []stun.Setter {
 				return append([]stun.Setter{stun.CodeTryAlternate}, test.attrs...)
 			})
 
@@ -1385,24 +1388,65 @@ func TestClientTryAlternateAttributes(t *testing.T) {
 // A TryAlternateError built by a caller, such as a handler test, has no TURN error to unwrap.
 func TestTryAlternateErrorWithoutResponse(t *testing.T) {
 	redirect := &TryAlternateError{Server: &net.UDPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 3478}}
-	assert.Equal(t, "turn: 1.2.3.4:3478 answered 300 (Try Alternate) without a valid ALTERNATE-SERVER", redirect.Error())
+	assert.Equal(t, "1.2.3.4:3478 answered 300 (Try Alternate) without a valid ALTERNATE-SERVER", redirect.Error())
 	assert.NoError(t, errors.Unwrap(redirect))
 
 	redirect.Alternate = &net.UDPAddr{IP: net.IPv4(1, 2, 3, 5), Port: 3478}
-	assert.Equal(t, "turn: 1.2.3.4:3478 answered 300 (Try Alternate) with alternate server 1.2.3.5:3478", redirect.Error())
+	assert.Equal(t, "1.2.3.4:3478 answered 300 (Try Alternate) with alternate server 1.2.3.5:3478", redirect.Error())
 }
 
-// Only 401 and 438 are challenges; another error carrying NONCE and REALM ends the Allocate.
-func TestClientAllocateErrorWithNonce(t *testing.T) {
-	client, stub := newStubClient(t, "127.0.0.1:3478", func(int) []stun.Setter {
-		return []stun.Setter{stun.CodeForbidden, stun.NewNonce("nonce"), stun.NewRealm("pion.ly")}
+// Only a 401 or 438 is answered with credentials; another error carrying NONCE and REALM ends the Allocate.
+func TestClientAllocateChallenge(t *testing.T) {
+	for _, test := range []struct {
+		code     stun.ErrorCode
+		requests int // Requests sent before Allocate fails.
+	}{
+		{stun.CodeUnauthorized, 2},
+		{stun.CodeStaleNonce, 2},
+		{stun.CodeTryAlternate, 1},
+		{stun.CodeForbidden, 1},
+	} {
+		t.Run(strconv.Itoa(int(test.code)), func(t *testing.T) {
+			client, stub := newStubClient(t, "127.0.0.1:3478", func(n int, req *stun.Message) []stun.Setter {
+				assert.Equal(t, n == 2, req.Contains(stun.AttrMessageIntegrity), "request %d", n)
+
+				return []stun.Setter{test.code, stun.NewNonce("nonce"), stun.NewRealm("pion.ly")}
+			})
+
+			_, err := client.Allocate()
+			var turnErr *stun.TurnError
+			require.ErrorAs(t, err, &turnErr)
+			assert.Equal(t, test.code, turnErr.ErrorCodeAttr.Code)
+			assert.Len(t, stub.destinations(), test.requests)
+		})
+	}
+}
+
+// An authenticated 300 (Try Alternate) is followed with the same credentials, after the
+// alternate's own challenge.
+func TestClientTryAlternateAfterChallenge(t *testing.T) {
+	integrity := stun.NewLongTermIntegrity("foo", "pion.ly", "pass")
+	client, stub := newStubClient(t, "127.0.0.1:3478", func(n int, req *stun.Message) []stun.Setter {
+		switch n {
+		case 1, 3:
+			assert.False(t, req.Contains(stun.AttrUsername), "request %d", n)
+
+			return []stun.Setter{stun.CodeUnauthorized, stun.NewNonce("nonce"), stun.NewRealm("pion.ly")}
+		case 2:
+			return []stun.Setter{stun.CodeTryAlternate, &stun.AlternateServer{IP: net.IPv4(127, 0, 0, 2), Port: 3478}, integrity}
+		default:
+			assert.NoError(t, integrity.Check(req))
+
+			return []stun.Setter{stun.CodeForbidden, integrity}
+		}
 	})
 
 	_, err := client.Allocate()
 	var turnErr *stun.TurnError
 	require.ErrorAs(t, err, &turnErr)
 	assert.Equal(t, stun.CodeForbidden, turnErr.ErrorCodeAttr.Code)
-	assert.Len(t, stub.destinations(), 1)
+	assert.Equal(t, []string{"127.0.0.1:3478", "127.0.0.1:3478", "127.0.0.2:3478", "127.0.0.2:3478"}, stub.destinations())
+	assert.Equal(t, "127.0.0.1:3478", client.TURNServerAddr().String(), "a failed Allocate keeps the server")
 }
 
 // Over TCP the redirect is returned with a TCP alternate, for the caller to connect to.
