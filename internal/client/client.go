@@ -14,6 +14,6 @@ import (
 // Client is an interface for the public turn.Client in order to break cyclic dependencies.
 type Client interface {
 	WriteTo(data []byte, to net.Addr) (int, error)
-	PerformTransactionWithContext(msg *stun.Message, to net.Addr, dontWait bool, ctx context.Context) (TransactionResult, error)
+	PerformTransactionWithContext(ctx context.Context, msg *stun.Message, to net.Addr, dontWait bool) (TransactionResult, error)
 	OnDeallocated(relayedAddr net.Addr)
 }
