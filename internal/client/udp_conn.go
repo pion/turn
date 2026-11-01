@@ -24,6 +24,7 @@ const (
 	defaultBindingRefreshInterval = 5 * time.Minute
 	defaultBindingCheckInterval   = 30 * time.Second
 	maxRetryAttempts              = 3
+	permissionRefusalBackoff      = 30 * time.Second
 )
 
 const (
@@ -167,10 +168,26 @@ func (a *allocation) createPermission(perm *permission, addr net.Addr) error {
 	perm.mutex.Lock()
 	defer perm.mutex.Unlock()
 
+	// A permission the server refused is not requested again until
+	// permissionRefusalBackoff has passed. Each request blocks the writer for
+	// a round trip to the server; ICE agents write connectivity checks to
+	// every remote candidate from a single loop, and asking again on every
+	// check stalled that loop for seconds when the server refused peers at
+	// private addresses.
+	if until := perm.refusedUntil.Load(); until != 0 && time.Now().UnixNano() < until {
+		return perm.refusal
+	}
+
 	if perm.state() == permStateIdle {
 		// Punch a hole! (this would block a bit..)
 		if err := a.CreatePermissions(addr); err != nil {
-			a.permMap.delete(addr)
+			if errors.Is(err, errTryAgain) {
+				a.permMap.delete(addr)
+
+				return err
+			}
+			perm.refusal = err
+			perm.refusedUntil.Store(time.Now().Add(permissionRefusalBackoff).UnixNano())
 
 			return err
 		}
