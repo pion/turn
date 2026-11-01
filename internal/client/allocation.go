@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/pion/logging"
@@ -102,7 +103,8 @@ func (a *allocation) refreshAllocation(lifetime time.Duration, dontWait bool) er
 				return errTryAgain
 			}
 
-			return err
+			// err is nil here: returning it reported a rejected refresh as a success.
+			return &stun.TurnError{StunMessageType: res.Type, ErrorCodeAttr: code}
 		}
 
 		return fmt.Errorf("%s", res.Type) //nolint:err113
@@ -156,6 +158,7 @@ func (a *allocation) onRefreshTimers(id int) {
 		}
 		if err != nil {
 			a.log.Warnf("Failed to refresh allocation: %s", err)
+			a.stopRefreshingIfFinal(err)
 		}
 	case timerIDRefreshPerms:
 		var err error
@@ -167,8 +170,41 @@ func (a *allocation) onRefreshTimers(id int) {
 		}
 		if err != nil {
 			a.log.Warnf("Failed to refresh permissions: %s", err)
+			a.stopRefreshingIfFinal(err)
 		}
 	}
+}
+
+// stopRefreshingIfFinal stops both refresh timers when err says no later refresh
+// of this allocation can succeed. Without it a client whose credentials expired
+// (TURN REST API usernames carry an expiry), or whose allocation the server lost
+// (a server restart), refreshes for the life of the allocation and every attempt
+// is rejected.
+func (a *allocation) stopRefreshingIfFinal(err error) {
+	if !isFinalRefreshError(err) {
+		return
+	}
+	a.log.Warnf("Stopped refreshing the allocation: %s", err)
+	a.refreshAllocTimer.Stop()
+	a.refreshPermsTimer.Stop()
+}
+
+// isFinalRefreshError reports whether a refresh failed in a way that retrying
+// with the same allocation and credentials cannot fix. A stale nonce is not one
+// (it is retried with the new nonce), and neither is a timeout (the network may
+// come back).
+func isFinalRefreshError(err error) bool {
+	var turnErr *stun.TurnError
+	if errors.As(err, &turnErr) {
+		switch turnErr.ErrorCodeAttr.Code {
+		case stun.CodeBadRequest, stun.CodeUnauthorized, stun.CodeForbidden, stun.CodeAllocMismatch:
+			return true
+		default:
+			return false
+		}
+	}
+
+	return errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET)
 }
 
 func (a *allocation) nonce() stun.Nonce {
