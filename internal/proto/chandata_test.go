@@ -21,7 +21,7 @@ func TestChannelData_Encode(t *testing.T) {
 	chanData.Encode()
 	b := &ChannelData{}
 	b.Raw = append(b.Raw, chanData.Raw...)
-	assert.NoError(t, b.Decode())
+	assert.NoError(t, b.Decode(ChannelNumberRangeRFC5766()))
 	assert.True(t, b.Equal(chanData))
 	assert.True(t, IsChannelData(b.Raw) && IsChannelData(chanData.Raw))
 }
@@ -108,12 +108,12 @@ func TestChannelData_Decode(t *testing.T) {
 		{
 			name: "zeroes",
 			buf:  []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-			err:  ErrInvalidChannelNumber,
+			err:  ErrInvalidChannelNumberRFC5766,
 		},
 		{
 			name: "bad chan number",
 			buf:  []byte{63, 255, 0, 0, 0, 4, 0, 0, 1, 2, 3, 4},
-			err:  ErrInvalidChannelNumber,
+			err:  ErrInvalidChannelNumberRFC5766,
 		},
 		{
 			name: "bad length",
@@ -124,7 +124,7 @@ func TestChannelData_Decode(t *testing.T) {
 		m := &ChannelData{
 			Raw: tc.buf,
 		}
-		assert.ErrorIs(t, m.Decode(), tc.err)
+		assert.ErrorIs(t, m.Decode(ChannelNumberRangeRFC5766()), tc.err)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestChannelData_Reset(t *testing.T) {
 	copy(buf, d.Raw)
 	d.Reset()
 	d.Raw = buf
-	assert.NoError(t, d.Decode())
+	assert.NoError(t, d.Decode(ChannelNumberRangeRFC5766()))
 }
 
 func TestIsChannelData(t *testing.T) {
@@ -197,7 +197,7 @@ func BenchmarkChannelData_Decode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		d.Reset()
 		d.Raw = buf
-		assert.NoError(b, d.Decode())
+		assert.NoError(b, d.Decode(ChannelNumberRangeRFC5766()))
 	}
 }
 
@@ -220,7 +220,7 @@ func TestChromeChannelData(t *testing.T) {
 	for i, packet := range data {
 		chanData := new(ChannelData)
 		chanData.Raw = packet
-		assert.NoError(t, chanData.Decode(), "Packet %d errored", i)
+		assert.NoError(t, chanData.Decode(ChannelNumberRangeRFC5766()), "Packet %d errored", i)
 
 		encoded := &ChannelData{
 			Data:   chanData.Data,
@@ -229,7 +229,7 @@ func TestChromeChannelData(t *testing.T) {
 		encoded.Encode()
 		decoded := new(ChannelData)
 		decoded.Raw = encoded.Raw
-		assert.NoError(t, decoded.Decode())
+		assert.NoError(t, decoded.Decode(ChannelNumberRangeRFC5766()))
 		assert.True(t, decoded.Equal(chanData))
 
 		messages = append(messages, chanData)

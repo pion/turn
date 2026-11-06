@@ -42,6 +42,7 @@ type Request struct {
 	PermissionTimeout   time.Duration
 	AllocationLifetime  time.Duration
 	StrictAddressFamily bool
+	ChannelNumberRange  proto.ChannelNumberRange
 }
 
 // HandleRequest processes the give Request.
@@ -58,7 +59,7 @@ func HandleRequest(r Request) error {
 func handleDataPacket(req Request) error {
 	req.Log.Debugf("Received DataPacket from %s", req.SrcAddr.String())
 	c := proto.ChannelData{Raw: req.Buff}
-	if err := c.Decode(); err != nil {
+	if err := c.Decode(req.ChannelNumberRange); err != nil {
 		return fmt.Errorf("%w: %v", errFailedToCreateChannelData, err) //nolint:errorlint
 	}
 

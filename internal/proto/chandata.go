@@ -101,7 +101,7 @@ func (c *ChannelData) WriteHeader() {
 var ErrBadChannelDataLength = errors.New("channelData length != len(Data)")
 
 // Decode decodes The ChannelData Message from Raw.
-func (c *ChannelData) Decode() error {
+func (c *ChannelData) Decode(channelNumberRange ChannelNumberRange) error {
 	buf := c.Raw
 	if len(buf) < channelDataHeaderSize {
 		return io.ErrUnexpectedEOF
@@ -111,8 +111,8 @@ func (c *ChannelData) Decode() error {
 	l := binary.BigEndian.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])
 	c.Data = buf[channelDataHeaderSize:]
 	c.Length = int(l)
-	if !c.Number.Valid() {
-		return ErrInvalidChannelNumber
+	if !channelNumberRange.Contains(c.Number) {
+		return channelNumberRange.ErrInvalidChannelNumber
 	}
 	if int(l) < len(c.Data) {
 		c.Data = c.Data[:int(l)]
@@ -140,8 +140,10 @@ func IsChannelData(buf []byte) bool {
 		return false
 	}
 
-	// Quick check for channel number.
+	// Quick check for channel number: framing must recognize any syntactically
+	// valid channel number (RFC 5766's full range is a superset of RFC 8656's),
+	// regardless of which range the caller enforces for acceptance.
 	num := binary.BigEndian.Uint16(buf[0:channelNumberSize])
 
-	return isChannelNumberValid(num)
+	return ChannelNumberRangeRFC5766().Contains(ChannelNumber(num))
 }

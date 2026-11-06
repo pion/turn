@@ -58,6 +58,11 @@ type ClientConfig struct {
 	// local address, falling back to IPv4 if inference fails. See RFC 6156.
 	RequestedAddressFamily RequestedAddressFamily
 
+	// ChannelNumberRange selects which RFC channel-number range (RFC 5766 or
+	// RFC 8656) the client enforces when decoding ChannelData received from
+	// the server. Defaults to RFC5766Range (0x4000-0x7FFF) if unset.
+	ChannelNumberRange ChannelNumberRange
+
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
 	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
 	bindingRefreshInterval time.Duration
@@ -98,6 +103,7 @@ type Client struct {
 	permissionRefreshInterval time.Duration
 	bindingRefreshInterval    time.Duration
 	bindingCheckInterval      time.Duration
+	channelNumberRange        proto.ChannelNumberRange
 }
 
 // inferAddressFamilyFromConn attempts to determine the address
@@ -233,6 +239,11 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 	}
 
+	channelNumberRange := proto.ChannelNumberRangeRFC5766()
+	if config.ChannelNumberRange == RFC8656Range {
+		channelNumberRange = proto.ChannelNumberRangeRFC8656()
+	}
+
 	client := &Client{
 		conn:                      config.Conn,
 		stunServerAddr:            stunServ,
@@ -251,6 +262,7 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		permissionRefreshInterval: config.PermissionRefreshInterval,
 		bindingRefreshInterval:    config.bindingRefreshInterval,
 		bindingCheckInterval:      config.bindingCheckInterval,
+		channelNumberRange:        channelNumberRange,
 	}
 
 	return client, nil
@@ -854,7 +866,7 @@ func (c *Client) handleChannelData(data []byte) error {
 		Raw: make([]byte, len(data)),
 	}
 	copy(chData.Raw, data)
-	if err := chData.Decode(); err != nil {
+	if err := chData.Decode(c.channelNumberRange); err != nil {
 		return err
 	}
 

@@ -39,6 +39,7 @@ type Server struct {
 	listenerConfigs    []ListenerConfig
 	allocationManagers []*allocation.Manager
 	inboundMTU         int
+	channelNumberRange proto.ChannelNumberRange
 }
 
 // NewServer creates the Pion TURN server.
@@ -62,6 +63,11 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		return nil, err
 	}
 
+	channelNumberRange := proto.ChannelNumberRangeRFC5766()
+	if config.ChannelNumberRange == RFC8656Range {
+		channelNumberRange = proto.ChannelNumberRangeRFC8656()
+	}
+
 	server := &Server{
 		log:                 loggerFactory.NewLogger("turn"),
 		authHandler:         config.AuthHandler,
@@ -76,6 +82,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		nonceHash:           nonceHash,
 		inboundMTU:          mtu,
 		eventHandler:        config.EventHandler,
+		channelNumberRange:  channelNumberRange,
 	}
 
 	if server.channelBindTimeout == 0 {
@@ -280,6 +287,7 @@ func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Man
 			AllocationLifetime:  s.allocationLifetime,
 			StrictAddressFamily: s.strictAddressFamily,
 			NonceHash:           s.nonceHash,
+			ChannelNumberRange:  s.channelNumberRange,
 		}); err != nil {
 			if s.eventHandler.OnAllocationError != nil {
 				s.eventHandler.OnAllocationError(addr, conn.LocalAddr(), allocation.UDP.String(), err.Error())

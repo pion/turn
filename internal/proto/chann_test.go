@@ -88,18 +88,24 @@ func TestChannelNumber(t *testing.T) {
 	})
 }
 
-func TestChannelNumber_Valid(t *testing.T) {
+func TestChannelNumberRange_Contains(t *testing.T) {
 	for _, tc := range []struct {
 		n     ChannelNumber
+		r     ChannelNumberRange
 		value bool
 	}{
-		{MinChannelNumber - 1, false},
-		{MinChannelNumber, true},
-		{MinChannelNumber + 1, true},
-		{MaxChannelNumber, true},
-		{MaxChannelNumber + 1, false},
+		{MinChannelNumber - 1, ChannelNumberRangeRFC5766(), false},
+		{MinChannelNumber - 1, ChannelNumberRangeRFC8656(), false},
+		{MinChannelNumber, ChannelNumberRangeRFC5766(), true},
+		{MinChannelNumber, ChannelNumberRangeRFC8656(), true},
+		{MinChannelNumber + 1, ChannelNumberRangeRFC5766(), true},
+		{MinChannelNumber + 1, ChannelNumberRangeRFC8656(), true},
+		{MaxChannelNumberRFC5766, ChannelNumberRangeRFC5766(), true},
+		{MaxChannelNumberRFC8656, ChannelNumberRangeRFC8656(), true},
+		{MaxChannelNumberRFC5766 + 1, ChannelNumberRangeRFC5766(), false},
+		{MaxChannelNumberRFC8656 + 1, ChannelNumberRangeRFC8656(), false},
 	} {
-		v := tc.n.Valid()
+		v := tc.r.Contains(tc.n)
 		assert.Equalf(t, tc.value, v, "unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)
 	}
 }

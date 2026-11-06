@@ -132,6 +132,16 @@ type EventHandler = allocation.EventHandler
 // rejected and a 486 (Allocation Quota Reached) error is returned to the user.
 type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
 
+// ChannelNumberRange is an enumeration that defines the possible values a channel number can take.
+// In RFC5766 section 11, this range can go from 0x4000 to 0x7FFF. But in RFC8656 it has been
+// redefined to 0x4000 to 0x4FFF.
+type ChannelNumberRange string
+
+const (
+	RFC5766Range ChannelNumberRange = "rfc5766" // range from 0x4000 to 0x7FFF
+	RFC8656Range ChannelNumberRange = "rfc8656" // range from 0x4000 to 0x4FFF
+)
+
 // ServerConfig configures the Pion TURN Server.
 type ServerConfig struct {
 	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners
@@ -172,6 +182,9 @@ type ServerConfig struct {
 
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
+
+	// Defines the channel number range that the server must use
+	ChannelNumberRange ChannelNumberRange
 }
 
 func (s *ServerConfig) validate() error {
