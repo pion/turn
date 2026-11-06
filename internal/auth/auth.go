@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"net"
 
+	"github.com/pion/dtls/v4"
 	"github.com/pion/stun/v5"
 )
 
@@ -18,8 +19,13 @@ type RequestAttributes struct {
 	Username string
 	Realm    string
 	SrcAddr  net.Addr
-	TLS      *tls.ConnectionState
 	Method   stun.Method
+
+	// TLS is the connection state of a TURN over TLS client, nil for other transports.
+	TLS *tls.ConnectionState
+
+	// DTLS is the connection state of a TURN over DTLS client, nil for other transports.
+	DTLS *dtls.State
 
 	// extend as needed
 }
