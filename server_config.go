@@ -13,6 +13,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/turn/v5/internal/allocation"
 	"github.com/pion/turn/v5/internal/auth"
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 // AllocateListenerConfig defines the parameters passed to the relay address allocator.
@@ -133,14 +134,40 @@ type EventHandler = allocation.EventHandler
 type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
 
 // ChannelNumberRange is an enumeration that defines the possible values a channel number can take.
-// In RFC5766 section 11, this range can go from 0x4000 to 0x7FFF. But in RFC8656 it has been
-// redefined to 0x4000 to 0x4FFF.
-type ChannelNumberRange string
+// In RFC5766 section 11, this range can go from 0x4000 to 0x7FFF.
+// But in RFC8656 it has been redefined to 0x4000 to 0x4FFF.
+type ChannelNumberRange struct {
+	Min uint16
+	Max uint16
+}
 
-const (
-	RFC5766Range ChannelNumberRange = "rfc5766" // range from 0x4000 to 0x7FFF
-	RFC8656Range ChannelNumberRange = "rfc8656" // range from 0x4000 to 0x4FFF
-)
+// RFC5766ChannelNumberRange is a convenience builder which provides the channel number range
+// defined by RFC5766 (0x4000 - 0x7FFF).
+func RFC5766ChannelNumberRange() *ChannelNumberRange {
+	return &ChannelNumberRange{
+		Min: 0x4000,
+		Max: 0x7FFF,
+	}
+}
+
+// toProto converts the public ChannelNumberRange into the wire-decoding
+// representation consumed by the internal proto package.
+func (c *ChannelNumberRange) toProto() proto.ChannelNumberRange {
+	return proto.ChannelNumberRange{
+		Min:                     proto.ChannelNumber(c.Min),
+		Max:                     proto.ChannelNumber(c.Max),
+		ErrInvalidChannelNumber: fmt.Errorf("%w: [0x%X, 0x%X]", errInvalidChannelNumber, c.Min, c.Max),
+	}
+}
+
+// RFC8656ChannelNumberRange is a convenience builder which provides the channel number range
+// defined by RFC8656 (0x4000 - 0x4FFF).
+func RFC8656ChannelNumberRange() *ChannelNumberRange {
+	return &ChannelNumberRange{
+		Min: 0x4000,
+		Max: 0x4FFF,
+	}
+}
 
 // ServerConfig configures the Pion TURN Server.
 type ServerConfig struct {
@@ -184,7 +211,7 @@ type ServerConfig struct {
 	InboundMTU int
 
 	// Defines the channel number range that the server must use
-	ChannelNumberRange ChannelNumberRange
+	ChannelNumberRange *ChannelNumberRange
 }
 
 func (s *ServerConfig) validate() error {
@@ -202,6 +229,14 @@ func (s *ServerConfig) validate() error {
 		if err := s.validate(); err != nil {
 			return err
 		}
+	}
+
+	if s.ChannelNumberRange.Min < 0x4000 {
+		return errMinChannelNumberRange
+	}
+
+	if s.ChannelNumberRange.Max > 0x7FFF {
+		return errMaxChannelNumberRange
 	}
 
 	return nil

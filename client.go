@@ -60,8 +60,8 @@ type ClientConfig struct {
 
 	// ChannelNumberRange selects which RFC channel-number range (RFC 5766 or
 	// RFC 8656) the client enforces when decoding ChannelData received from
-	// the server. Defaults to RFC5766Range (0x4000-0x7FFF) if unset.
-	ChannelNumberRange ChannelNumberRange
+	// the server. Defaults to RFC5766ChannelNumberRange() (0x4000-0x7FFF) if unset.
+	ChannelNumberRange *ChannelNumberRange
 
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
 	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
@@ -239,9 +239,8 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 	}
 
-	channelNumberRange := proto.ChannelNumberRangeRFC5766()
-	if config.ChannelNumberRange == RFC8656Range {
-		channelNumberRange = proto.ChannelNumberRangeRFC8656()
+	if config.ChannelNumberRange == nil {
+		config.ChannelNumberRange = RFC5766ChannelNumberRange()
 	}
 
 	client := &Client{
@@ -262,7 +261,7 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		permissionRefreshInterval: config.PermissionRefreshInterval,
 		bindingRefreshInterval:    config.bindingRefreshInterval,
 		bindingCheckInterval:      config.bindingCheckInterval,
-		channelNumberRange:        channelNumberRange,
+		channelNumberRange:        config.ChannelNumberRange.toProto(),
 	}
 
 	return client, nil

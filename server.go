@@ -44,6 +44,10 @@ type Server struct {
 
 // NewServer creates the Pion TURN server.
 func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
+	if config.ChannelNumberRange == nil {
+		config.ChannelNumberRange = RFC5766ChannelNumberRange()
+	}
+
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
@@ -63,11 +67,6 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		return nil, err
 	}
 
-	channelNumberRange := proto.ChannelNumberRangeRFC5766()
-	if config.ChannelNumberRange == RFC8656Range {
-		channelNumberRange = proto.ChannelNumberRangeRFC8656()
-	}
-
 	server := &Server{
 		log:                 loggerFactory.NewLogger("turn"),
 		authHandler:         config.AuthHandler,
@@ -82,7 +81,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		nonceHash:           nonceHash,
 		inboundMTU:          mtu,
 		eventHandler:        config.EventHandler,
-		channelNumberRange:  channelNumberRange,
+		channelNumberRange:  config.ChannelNumberRange.toProto(),
 	}
 
 	if server.channelBindTimeout == 0 {

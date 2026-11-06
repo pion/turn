@@ -88,6 +88,15 @@ func TestChannelNumber(t *testing.T) {
 	})
 }
 
+// maxChannelNumberRFC8656 is an helper constant for channelNumberRangeRFC8656.
+const maxChannelNumberRFC8656 = 0x4FFF
+
+// channelNumberRangeRFC8656 is an helper function which is used to make sure
+// that the only range covered is not only 0x4000-0x4FFF.
+func channelNumberRangeRFC8656() ChannelNumberRange {
+	return ChannelNumberRange{0x4000, 0x4FFF, nil}
+}
+
 func TestChannelNumberRange_Contains(t *testing.T) {
 	for _, tc := range []struct {
 		n     ChannelNumber
@@ -95,15 +104,15 @@ func TestChannelNumberRange_Contains(t *testing.T) {
 		value bool
 	}{
 		{MinChannelNumber - 1, ChannelNumberRangeRFC5766(), false},
-		{MinChannelNumber - 1, ChannelNumberRangeRFC8656(), false},
+		{MinChannelNumber - 1, channelNumberRangeRFC8656(), false},
 		{MinChannelNumber, ChannelNumberRangeRFC5766(), true},
-		{MinChannelNumber, ChannelNumberRangeRFC8656(), true},
+		{MinChannelNumber, channelNumberRangeRFC8656(), true},
 		{MinChannelNumber + 1, ChannelNumberRangeRFC5766(), true},
-		{MinChannelNumber + 1, ChannelNumberRangeRFC8656(), true},
-		{MaxChannelNumberRFC5766, ChannelNumberRangeRFC5766(), true},
-		{MaxChannelNumberRFC8656, ChannelNumberRangeRFC8656(), true},
-		{MaxChannelNumberRFC5766 + 1, ChannelNumberRangeRFC5766(), false},
-		{MaxChannelNumberRFC8656 + 1, ChannelNumberRangeRFC8656(), false},
+		{MinChannelNumber + 1, channelNumberRangeRFC8656(), true},
+		{MaxChannelNumber, ChannelNumberRangeRFC5766(), true},
+		{maxChannelNumberRFC8656, channelNumberRangeRFC8656(), true},
+		{MaxChannelNumber + 1, ChannelNumberRangeRFC5766(), false},
+		{maxChannelNumberRFC8656 + 1, channelNumberRangeRFC8656(), false},
 	} {
 		v := tc.r.Contains(tc.n)
 		assert.Equalf(t, tc.value, v, "unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)

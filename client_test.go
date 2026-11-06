@@ -7,6 +7,7 @@ package turn
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
 	"net"
 	"runtime"
@@ -1101,4 +1102,43 @@ func TestClientRelaySource(t *testing.T) {
 		}
 		turnClient.Close()
 	}
+}
+
+// TestClientChannelNumberRangeEnforcement verifies that the client enforces
+// its configured ChannelNumberRange when decoding ChannelData received from
+// the server, rejecting channel numbers that are syntactically valid under
+// RFC 5766 but outside a narrower configured range (e.g. RFC 8656).
+func TestClientChannelNumberRangeEnforcement(t *testing.T) {
+	// Channel number 0x7FFF is valid under the default RFC 5766 range
+	// (0x4000-0x7FFF) but outside RFC 8656's narrower range (0x4000-0x4FFF).
+	frame := make([]byte, 8)
+	binary.BigEndian.PutUint16(frame[0:2], 0x7FFF)
+	binary.BigEndian.PutUint16(frame[2:4], 4)
+	copy(frame[4:8], "DATA")
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	rfc8656Client, err := NewClient(&ClientConfig{
+		Conn:               conn,
+		ChannelNumberRange: RFC8656ChannelNumberRange(),
+	})
+	require.NoError(t, err)
+
+	err = rfc8656Client.handleChannelData(frame)
+	require.ErrorIs(t, err, errInvalidChannelNumber)
+	require.ErrorContains(t, err, "[0x4000, 0x4FFF]")
+
+	conn2, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	require.NoError(t, err)
+	defer conn2.Close() //nolint:errcheck
+
+	defaultClient, err := NewClient(&ClientConfig{Conn: conn2})
+	require.NoError(t, err)
+
+	// Same channel number is within the default RFC 5766 range: decoding
+	// succeeds (no relayed conn allocated yet, so the frame is silently
+	// discarded rather than rejected for its channel number).
+	require.NoError(t, defaultClient.handleChannelData(frame))
 }

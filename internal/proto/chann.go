@@ -52,14 +52,9 @@ func (n *ChannelNumber) GetFrom(m *stun.Message) error {
 //
 // 0x4000 through 0x7FFF: These values are the allowed channel
 // numbers (16,383 possible values).
-//
-// and https://tools.ietf.org/html/rfc8656/#section-12:
-//
-// 0x4000 through 0x4FFF: (4096 possible values).
 const (
-	MinChannelNumber        ChannelNumber = 0x4000
-	MaxChannelNumberRFC5766 ChannelNumber = 0x7FFF
-	MaxChannelNumberRFC8656 ChannelNumber = 0x4FFF
+	MinChannelNumber ChannelNumber = 0x4000
+	MaxChannelNumber ChannelNumber = 0x7FFF
 )
 
 type ChannelNumberRange struct {
@@ -71,19 +66,10 @@ type ChannelNumberRange struct {
 // ErrInvalidChannelNumberRFC5766 means that channel number is not valid as by RFC 5766 Section 11.
 var ErrInvalidChannelNumberRFC5766 = errors.New("channel number not in [0x4000, 0x7FFF]")
 
-// ErrInvalidChannelNumberRFC8656 means that channel number is not valid as by RFC 8656 Section 12.
-var ErrInvalidChannelNumberRFC8656 = errors.New("channel number not in [0x4000, 0x4FFF]")
-
 // ChannelNumberRangeRFC5766 returns the channel number range allowed by RFC 5766 Section 11
 // (0x4000-0x7FFF).
 func ChannelNumberRangeRFC5766() ChannelNumberRange {
-	return ChannelNumberRange{MinChannelNumber, MaxChannelNumberRFC5766, ErrInvalidChannelNumberRFC5766}
-}
-
-// ChannelNumberRangeRFC8656 returns the channel number range allowed by RFC 8656 Section 12
-// (0x4000-0x4FFF).
-func ChannelNumberRangeRFC8656() ChannelNumberRange {
-	return ChannelNumberRange{MinChannelNumber, MaxChannelNumberRFC8656, ErrInvalidChannelNumberRFC8656}
+	return ChannelNumberRange{MinChannelNumber, MaxChannelNumber, ErrInvalidChannelNumberRFC5766}
 }
 
 func (r ChannelNumberRange) Contains(channelNumber ChannelNumber) bool {
