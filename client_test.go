@@ -1121,8 +1121,11 @@ func TestClientChannelNumberRangeEnforcement(t *testing.T) {
 	defer conn.Close() //nolint:errcheck
 
 	rfc8656Client, err := NewClient(&ClientConfig{
-		Conn:               conn,
-		ChannelNumberRange: RFC8656ChannelNumberRange(),
+		Conn: conn,
+		ChannelNumberRange: &ChannelNumberRange{
+			Min: 0x4000,
+			Max: 0x4FFF,
+		},
 	})
 	require.NoError(t, err)
 

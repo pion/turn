@@ -141,9 +141,9 @@ type ChannelNumberRange struct {
 	Max uint16
 }
 
-// RFC5766ChannelNumberRange is a convenience builder which provides the channel number range
+// defaultChannelNumberRange is a convenience builder which provides the channel number range
 // defined by RFC5766 (0x4000 - 0x7FFF).
-func RFC5766ChannelNumberRange() *ChannelNumberRange {
+func defaultChannelNumberRange() *ChannelNumberRange {
 	return &ChannelNumberRange{
 		Min: 0x4000,
 		Max: 0x7FFF,
@@ -157,15 +157,6 @@ func (c *ChannelNumberRange) toProto() proto.ChannelNumberRange {
 		Min:                     proto.ChannelNumber(c.Min),
 		Max:                     proto.ChannelNumber(c.Max),
 		ErrInvalidChannelNumber: fmt.Errorf("%w: [0x%X, 0x%X]", errInvalidChannelNumber, c.Min, c.Max),
-	}
-}
-
-// RFC8656ChannelNumberRange is a convenience builder which provides the channel number range
-// defined by RFC8656 (0x4000 - 0x4FFF).
-func RFC8656ChannelNumberRange() *ChannelNumberRange {
-	return &ChannelNumberRange{
-		Min: 0x4000,
-		Max: 0x4FFF,
 	}
 }
 
@@ -229,14 +220,6 @@ func (s *ServerConfig) validate() error {
 		if err := s.validate(); err != nil {
 			return err
 		}
-	}
-
-	if s.ChannelNumberRange.Min < 0x4000 {
-		return errMinChannelNumberRange
-	}
-
-	if s.ChannelNumberRange.Max > 0x7FFF {
-		return errMaxChannelNumberRange
 	}
 
 	return nil

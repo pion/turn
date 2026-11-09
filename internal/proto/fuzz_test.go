@@ -93,7 +93,7 @@ func FuzzSetters(f *testing.F) {
 
 func FuzzChannelData(f *testing.F) {
 	channelData := &ChannelData{}
-	channelNumberRange := ChannelNumberRangeRFC5766() // default number range
+	channelNumberRange := defaultChannelNumberRange() // default number range
 
 	f.Fuzz(func(_ *testing.T, data []byte) {
 		channelData.Reset()

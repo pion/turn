@@ -353,7 +353,11 @@ func TestPacketHandler(t *testing.T) {
 	channelData := proto.ChannelData{
 		Raw: data,
 	}
-	assert.NoError(t, channelData.Decode(proto.ChannelNumberRangeRFC5766()), fmt.Sprintf("channel data decode with error: %v", err))
+	assert.NoError(
+		t,
+		channelData.Decode(proto.ChannelNumberRange{Min: proto.MinChannelNumber, Max: proto.MaxChannelNumber}),
+		fmt.Sprintf("channel data decode with error: %v", err),
+	)
 	assert.Equal(t, channelBind.Number, channelData.Number, "get channel data's number is invalid")
 	assert.Equal(t, targetText2, string(channelData.Data), "get data doesn't equal the target text.")
 

@@ -240,7 +240,7 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 	}
 
 	if config.ChannelNumberRange == nil {
-		config.ChannelNumberRange = RFC5766ChannelNumberRange()
+		config.ChannelNumberRange = defaultChannelNumberRange()
 	}
 
 	client := &Client{

@@ -53,7 +53,7 @@ func consumeSingleTURNFrame(b []byte) (int, error) {
 	// correctly recognizes any syntactically valid ChannelData regardless of
 	// which range the server/client enforces for acceptance. Decode() will make
 	// sure that the range configured either in the Client or Server is respected.
-	case ChannelNumberRangeRFC5766().Contains(ChannelNumber(binary.BigEndian.Uint16(b[0:2]))):
+	case (ChannelNumberRange{Min: MinChannelNumber, Max: MaxChannelNumber}).Contains(ChannelNumber(binary.BigEndian.Uint16(b[0:2]))):
 		dataLen := uint32(binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize]))
 		// Round up to the nearest multiple of the 4-byte padding.
 		paddedDataLen := (dataLen + channelDataPadding - 1) &^ (channelDataPadding - 1)

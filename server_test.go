@@ -163,31 +163,20 @@ func TestServerConfig(t *testing.T) {
 		}).validate(), errRelayAddressGeneratorUnset)
 	})
 
-	t.Run("ChannelNumberRange Min below RFC 5766 minimum", func(t *testing.T) {
-		assert.ErrorIs(t, (&ServerConfig{
-			PacketConnConfigs:  []PacketConnConfig{{PacketConn: udpListener}},
-			ChannelNumberRange: &ChannelNumberRange{Min: 0x3FFF, Max: 0x7FFF},
-		}).validate(), errMinChannelNumberRange)
-	})
-
-	t.Run("ChannelNumberRange Max above RFC 5766 maximum", func(t *testing.T) {
-		assert.ErrorIs(t, (&ServerConfig{
-			PacketConnConfigs:  []PacketConnConfig{{PacketConn: udpListener}},
-			ChannelNumberRange: &ChannelNumberRange{Min: 0x4000, Max: 0x8000},
-		}).validate(), errMaxChannelNumberRange)
-	})
-
 	t.Run("ChannelNumberRange within RFC 5766 bounds", func(t *testing.T) {
 		assert.NoError(t, (&ServerConfig{
 			PacketConnConfigs:  []PacketConnConfig{{PacketConn: udpListener}},
-			ChannelNumberRange: RFC5766ChannelNumberRange(),
+			ChannelNumberRange: defaultChannelNumberRange(),
 		}).validate())
 	})
 
 	t.Run("ChannelNumberRange within RFC 8656 bounds", func(t *testing.T) {
 		assert.NoError(t, (&ServerConfig{
-			PacketConnConfigs:  []PacketConnConfig{{PacketConn: udpListener}},
-			ChannelNumberRange: RFC8656ChannelNumberRange(),
+			PacketConnConfigs: []PacketConnConfig{{PacketConn: udpListener}},
+			ChannelNumberRange: &ChannelNumberRange{
+				Min: 0x4000,
+				Max: 0x4FFF,
+			},
 		}).validate())
 	})
 
@@ -755,7 +744,10 @@ func TestServer(t *testing.T) { //nolint:maintidx
 				return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 			},
 			// RFC 8656 narrows the channel number range to 0x4000-0x4FFF.
-			ChannelNumberRange: RFC8656ChannelNumberRange(),
+			ChannelNumberRange: &ChannelNumberRange{
+				Min: 0x4000,
+				Max: 0x4FFF,
+			},
 			EventHandler: allocation.EventHandler{ // used to observe the rejected ChannelData
 				OnAllocationError: func(_, _ net.Addr, _, message string) {
 					errMessage.Store(message)

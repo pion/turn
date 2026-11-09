@@ -5,7 +5,6 @@ package proto
 
 import (
 	"encoding/binary"
-	"errors"
 	"strconv"
 
 	"github.com/pion/stun/v4"
@@ -61,15 +60,6 @@ type ChannelNumberRange struct {
 	Min                     ChannelNumber
 	Max                     ChannelNumber
 	ErrInvalidChannelNumber error
-}
-
-// ErrInvalidChannelNumberRFC5766 means that channel number is not valid as by RFC 5766 Section 11.
-var ErrInvalidChannelNumberRFC5766 = errors.New("channel number not in [0x4000, 0x7FFF]")
-
-// ChannelNumberRangeRFC5766 returns the channel number range allowed by RFC 5766 Section 11
-// (0x4000-0x7FFF).
-func ChannelNumberRangeRFC5766() ChannelNumberRange {
-	return ChannelNumberRange{MinChannelNumber, MaxChannelNumber, ErrInvalidChannelNumberRFC5766}
 }
 
 func (r ChannelNumberRange) Contains(channelNumber ChannelNumber) bool {

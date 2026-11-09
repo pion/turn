@@ -145,5 +145,5 @@ func IsChannelData(buf []byte) bool {
 	// regardless of which range the caller enforces for acceptance.
 	num := binary.BigEndian.Uint16(buf[0:channelNumberSize])
 
-	return ChannelNumberRangeRFC5766().Contains(ChannelNumber(num))
+	return (ChannelNumberRange{Min: MinChannelNumber, Max: MaxChannelNumber}).Contains(ChannelNumber(num))
 }

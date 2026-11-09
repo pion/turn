@@ -45,7 +45,7 @@ type Server struct {
 // NewServer creates the Pion TURN server.
 func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 	if config.ChannelNumberRange == nil {
-		config.ChannelNumberRange = RFC5766ChannelNumberRange()
+		config.ChannelNumberRange = defaultChannelNumberRange()
 	}
 
 	if err := config.validate(); err != nil {
