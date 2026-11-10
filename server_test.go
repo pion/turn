@@ -165,15 +165,18 @@ func TestServerConfig(t *testing.T) {
 
 	t.Run("ChannelNumberRange within RFC 5766 bounds", func(t *testing.T) {
 		assert.NoError(t, (&ServerConfig{
-			PacketConnConfigs:  []PacketConnConfig{{PacketConn: udpListener}},
-			ChannelNumberRange: defaultChannelNumberRange(),
+			PacketConnConfigs: []PacketConnConfig{{PacketConn: udpListener}},
+			ChannelNumberRange: ChannelNumberRange{
+				Min: 0x4000,
+				Max: 0x7FFF,
+			},
 		}).validate())
 	})
 
 	t.Run("ChannelNumberRange within RFC 8656 bounds", func(t *testing.T) {
 		assert.NoError(t, (&ServerConfig{
 			PacketConnConfigs: []PacketConnConfig{{PacketConn: udpListener}},
-			ChannelNumberRange: &ChannelNumberRange{
+			ChannelNumberRange: ChannelNumberRange{
 				Min: 0x4000,
 				Max: 0x4FFF,
 			},
@@ -744,7 +747,7 @@ func TestServer(t *testing.T) { //nolint:maintidx
 				return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
 			},
 			// RFC 8656 narrows the channel number range to 0x4000-0x4FFF.
-			ChannelNumberRange: &ChannelNumberRange{
+			ChannelNumberRange: ChannelNumberRange{
 				Min: 0x4000,
 				Max: 0x4FFF,
 			},
@@ -2279,7 +2282,7 @@ func TestChannelNumberRangeValidation(t *testing.T) {
 			rng := tt.rng
 
 			// Without listeners NewServer still fails, but the range is checked first.
-			_, serverErr := NewServer(ServerConfig{ChannelNumberRange: &rng})
+			_, serverErr := NewServer(ServerConfig{ChannelNumberRange: rng})
 			if tt.valid {
 				assert.ErrorIs(t, serverErr, errNoAvailableConns)
 			} else {
@@ -2290,7 +2293,7 @@ func TestChannelNumberRangeValidation(t *testing.T) {
 			assert.NoError(t, err)
 			defer func() { assert.NoError(t, conn.Close()) }()
 
-			_, clientErr := NewClient(&ClientConfig{Conn: conn, ChannelNumberRange: &rng})
+			_, clientErr := NewClient(&ClientConfig{Conn: conn, ChannelNumberRange: rng})
 			if tt.valid {
 				assert.NoError(t, clientErr)
 			} else {

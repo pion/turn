@@ -1122,7 +1122,7 @@ func TestClientChannelNumberRangeEnforcement(t *testing.T) {
 
 	rfc8656Client, err := NewClient(&ClientConfig{
 		Conn: conn,
-		ChannelNumberRange: &ChannelNumberRange{
+		ChannelNumberRange: ChannelNumberRange{
 			Min: 0x4000,
 			Max: 0x4FFF,
 		},

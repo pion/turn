@@ -142,15 +142,6 @@ type ChannelNumberRange struct {
 	Max uint16
 }
 
-// defaultChannelNumberRange is a convenience builder which provides the channel number range
-// defined by RFC5766 (0x4000 - 0x7FFF).
-func defaultChannelNumberRange() *ChannelNumberRange {
-	return &ChannelNumberRange{
-		Min: 0x4000,
-		Max: 0x7FFF,
-	}
-}
-
 // validate checks that the range is not empty.
 func (c *ChannelNumberRange) validate() error {
 	if c.Min > c.Max {
@@ -212,14 +203,12 @@ type ServerConfig struct {
 	InboundMTU int
 
 	// Defines the channel number range that the server must use. Defaults to 0x4000-0x7FFF.
-	ChannelNumberRange *ChannelNumberRange
+	ChannelNumberRange ChannelNumberRange
 }
 
 func (s *ServerConfig) validate() error {
-	if s.ChannelNumberRange != nil {
-		if err := s.ChannelNumberRange.validate(); err != nil {
-			return err
-		}
+	if err := s.ChannelNumberRange.validate(); err != nil {
+		return err
 	}
 
 	if len(s.PacketConnConfigs) == 0 && len(s.ListenerConfigs) == 0 {

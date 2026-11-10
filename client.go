@@ -61,7 +61,7 @@ type ClientConfig struct {
 	// ChannelNumberRange defines the channel number values allowed by
 	// the client when decoding ChannelData received from the server
 	// and allocating new channels. Defaults to 0x4000-0x7FFF if unset.
-	ChannelNumberRange *ChannelNumberRange
+	ChannelNumberRange ChannelNumberRange
 
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
 	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
@@ -239,8 +239,12 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 	}
 
-	if config.ChannelNumberRange == nil {
-		config.ChannelNumberRange = defaultChannelNumberRange()
+	// Every fields being 0 means that the channel number range was not configured.
+	if config.ChannelNumberRange.Min == 0 && config.ChannelNumberRange.Max == 0 {
+		config.ChannelNumberRange = ChannelNumberRange{
+			Min: 0x4000,
+			Max: 0x7FFF,
+		}
 	}
 
 	if err = config.ChannelNumberRange.validate(); err != nil {
