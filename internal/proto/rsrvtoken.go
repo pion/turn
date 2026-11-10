@@ -3,7 +3,7 @@
 
 package proto
 
-import "github.com/pion/stun/v4"
+import "github.com/pion/stun/v5"
 
 // ReservationToken represents RESERVATION-TOKEN attribute.
 //

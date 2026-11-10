@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/stun/v4"
+	"github.com/pion/stun/v5"
 	"github.com/pion/transport/v5/reuseport"
 	"github.com/pion/transport/v5/test"
 	"github.com/pion/transport/v5/vnet"

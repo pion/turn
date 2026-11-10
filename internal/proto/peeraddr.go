@@ -6,7 +6,7 @@ package proto
 import (
 	"net"
 
-	"github.com/pion/stun/v4"
+	"github.com/pion/stun/v5"
 )
 
 // PeerAddress implements XOR-PEER-ADDRESS attribute.

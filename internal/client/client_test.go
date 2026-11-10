@@ -7,7 +7,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/pion/stun/v4"
+	"github.com/pion/stun/v5"
 )
 
 type mockClient struct {

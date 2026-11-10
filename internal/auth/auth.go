@@ -9,7 +9,7 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/pion/stun/v4"
+	"github.com/pion/stun/v5"
 )
 
 // RequestAttributes represents attributes of a TURN request which

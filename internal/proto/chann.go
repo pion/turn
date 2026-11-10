@@ -8,7 +8,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/pion/stun/v4"
+	"github.com/pion/stun/v5"
 )
 
 // ChannelNumber represents CHANNEL-NUMBER attribute.
