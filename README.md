@@ -11,9 +11,9 @@
   <a href="https://github.com/pion/awesome-pion" alt="Awesome Pion"><img src="https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg"></a>
   <br>
   <img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/pion/turn/test.yaml">
-  <a href="https://pkg.go.dev/github.com/pion/turn/v5"><img src="https://pkg.go.dev/badge/github.com/pion/turn/v5.svg" alt="Go Reference"></a>
+  <a href="https://pkg.go.dev/github.com/pion/turn/v6"><img src="https://pkg.go.dev/badge/github.com/pion/turn/v6.svg" alt="Go Reference"></a>
   <a href="https://codecov.io/gh/pion/turn"><img src="https://codecov.io/gh/pion/turn/branch/master/graph/badge.svg" alt="Coverage Status"></a>
-  <a href="https://goreportcard.com/report/github.com/pion/turn/v5"><img src="https://goreportcard.com/badge/github.com/pion/turn/v5" alt="Go Report Card"></a>
+  <a href="https://goreportcard.com/report/github.com/pion/turn/v6"><img src="https://goreportcard.com/badge/github.com/pion/turn/v6" alt="Go Report Card"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 <br>
@@ -35,7 +35,7 @@ if you wish to get started quickly.
 
 The advantage of this is that you don't need to deal with complicated config files, or custom APIs to modify the state of Pion TURN.
 After you instantiate an instance of a Pion TURN server or client you interact with it like any library. The quickest way to get started is to look at the
-[examples](examples) or [GoDoc](https://godoc.org/github.com/pion/turn)
+[examples](examples) or [GoDoc](https://pkg.go.dev/github.com/pion/turn/v6)
 
 ### Examples
 We try to cover most common use cases in [examples](examples). If more examples could be helpful please file an issue, we are always looking

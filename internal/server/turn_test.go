@@ -18,9 +18,9 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v5"
 	"github.com/pion/transport/v5/test"
-	"github.com/pion/turn/v5/internal/allocation"
-	"github.com/pion/turn/v5/internal/auth"
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/pion/turn/v6/internal/allocation"
+	"github.com/pion/turn/v6/internal/auth"
+	"github.com/pion/turn/v6/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 

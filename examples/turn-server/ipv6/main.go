@@ -14,7 +14,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pion/turn/v5"
+	"github.com/pion/turn/v6"
 )
 
 func main() { //nolint:gocyclo,cyclop

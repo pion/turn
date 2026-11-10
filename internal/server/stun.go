@@ -5,7 +5,7 @@ package server
 
 import (
 	"github.com/pion/stun/v5"
-	"github.com/pion/turn/v5/internal/ipnet"
+	"github.com/pion/turn/v6/internal/ipnet"
 )
 
 func handleBindingRequest(req Request, stunMsg *stun.Message) error {

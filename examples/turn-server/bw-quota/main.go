@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5"
+	"github.com/pion/turn/v6"
 	"golang.org/x/time/rate"
 )
 

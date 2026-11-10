@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5"
+	"github.com/pion/turn/v6"
 )
 
 func setupSignalingChannel(addrCh chan string, signaling bool, relayAddr string) {

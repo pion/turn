@@ -14,7 +14,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/stun/v5"
 	"github.com/pion/transport/v5"
-	"github.com/pion/turn/v5/internal/proto"
+	"github.com/pion/turn/v6/internal/proto"
 )
 
 // AllocationConfig is a set of configuration params use by NewUDPConn and NewTCPAllocation.

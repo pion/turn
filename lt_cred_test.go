@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/turn/v5/internal/auth"
+	"github.com/pion/turn/v6/internal/auth"
 	"github.com/stretchr/testify/assert"
 )
 
