@@ -58,9 +58,9 @@ type ClientConfig struct {
 	// local address, falling back to IPv4 if inference fails. See RFC 6156.
 	RequestedAddressFamily RequestedAddressFamily
 
-	// ChannelNumberRange selects which RFC channel-number range (RFC 5766 or
-	// RFC 8656) the client enforces when decoding ChannelData received from
-	// the server. Defaults to RFC5766ChannelNumberRange() (0x4000-0x7FFF) if unset.
+	// ChannelNumberRange defines the channel number values allowed by
+	// the client when decoding ChannelData received from the server
+	// and allocating new channels. Defaults to 0x4000-0x7FFF if unset.
 	ChannelNumberRange *ChannelNumberRange
 
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
@@ -241,6 +241,10 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 
 	if config.ChannelNumberRange == nil {
 		config.ChannelNumberRange = defaultChannelNumberRange()
+	}
+
+	if err = config.ChannelNumberRange.validate(); err != nil {
+		return nil, err
 	}
 
 	client := &Client{
@@ -538,6 +542,7 @@ func (c *Client) AllocateWithContext(ctx context.Context) (net.PacketConn, error
 		PermissionRefreshInterval: c.permissionRefreshInterval,
 		BindingRefreshInterval:    c.bindingRefreshInterval,
 		BindingCheckInterval:      c.bindingCheckInterval,
+		ChannelNumberRange:        c.channelNumberRange,
 	})
 	c.setRelayedUDPConn(relayedConn)
 	c.setReservationToken(reservationToken)

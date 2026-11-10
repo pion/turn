@@ -49,7 +49,8 @@ type Request struct {
 func HandleRequest(r Request) error {
 	r.Log.Debugf("Received %d bytes of udp from %s on %s", len(r.Buff), r.SrcAddr, r.Conn.LocalAddr())
 
-	if proto.IsChannelData(r.Buff) {
+	// IsChannelData does not look at the channel number, so a STUN header would match it too.
+	if !stun.IsMessage(r.Buff) && proto.IsChannelData(r.Buff) {
 		return handleDataPacket(r)
 	}
 

@@ -2258,3 +2258,44 @@ func BenchmarkServer(b *testing.B) {
 		})
 	}
 }
+
+func TestChannelNumberRangeValidation(t *testing.T) {
+	tests := []struct {
+		name  string
+		rng   ChannelNumberRange
+		valid bool
+	}{
+		{"full RFC 5766 range", ChannelNumberRange{Min: 0x4000, Max: 0x7FFF}, true},
+		{"narrower range", ChannelNumberRange{Min: 0x4000, Max: 0x4FFF}, true},
+		{"single channel", ChannelNumberRange{Min: 0x4100, Max: 0x4100}, true},
+		{"range above RFC 5766 range", ChannelNumberRange{Min: 0x8000, Max: 0xFFFF}, true},
+		{"range below RFC 5766 range", ChannelNumberRange{Min: 0x0100, Max: 0x3FFF}, true},
+		{"min greater than max", ChannelNumberRange{Min: 0x4001, Max: 0x4000}, false},
+		{"reversed spec range", ChannelNumberRange{Min: 0x7FFF, Max: 0x4000}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rng := tt.rng
+
+			// Without listeners NewServer still fails, but the range is checked first.
+			_, serverErr := NewServer(ServerConfig{ChannelNumberRange: &rng})
+			if tt.valid {
+				assert.ErrorIs(t, serverErr, errNoAvailableConns)
+			} else {
+				assert.ErrorIs(t, serverErr, errInvalidChannelNumberRange)
+			}
+
+			conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+			assert.NoError(t, err)
+			defer func() { assert.NoError(t, conn.Close()) }()
+
+			_, clientErr := NewClient(&ClientConfig{Conn: conn, ChannelNumberRange: &rng})
+			if tt.valid {
+				assert.NoError(t, clientErr)
+			} else {
+				assert.ErrorIs(t, clientErr, errInvalidChannelNumberRange)
+			}
+		})
+	}
+}

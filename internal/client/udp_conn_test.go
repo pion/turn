@@ -18,6 +18,12 @@ import (
 )
 
 func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
+	// Default channel number range (RFC 5766).
+	channelNumberRange := proto.ChannelNumberRange{
+		Min: proto.MinChannelNumber,
+		Max: proto.MaxChannelNumber,
+	}
+
 	makeConn := func(client *mockClient, bm *bindingManager) UDPConn {
 		return UDPConn{
 			allocation: allocation{
@@ -71,7 +77,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 			t.Run(tt.name, func(t *testing.T) {
 				unblock := make(chan struct{})
 
-				bm := newBindingManager()
+				bm := newBindingManager(channelNumberRange)
 				bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
 				conn := makeConn(&mockClient{
 					performTransaction: func(msg *stun.Message, addr net.Addr, dontWait bool, _ context.Context) (TransactionResult, error) {
@@ -171,7 +177,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				bm := newBindingManager()
+				bm := newBindingManager(channelNumberRange)
 				bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
 				conn := makeConn(&mockClient{performTransaction: tt.transactionFn}, bm)
 
@@ -215,7 +221,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 	t.Run("maybeBind() retries unknown binding after transaction failure", func(t *testing.T) {
 		var failed atomic.Bool
 
-		bm := newBindingManager()
+		bm := newBindingManager(channelNumberRange)
 		bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
 		originalCh := bound.number
 		conn := makeConn(&mockClient{
@@ -283,15 +289,16 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		}
 
 		conn := NewUDPConn(&AllocationConfig{
-			Client:      client,
-			RelayedAddr: relayedAddr,
-			ServerAddr:  serverAddr,
-			Username:    stun.NewUsername("user"),
-			Realm:       stun.NewRealm("realm"),
-			Integrity:   stun.NewShortTermIntegrity("pass"),
-			Nonce:       stun.NewNonce("nonce"),
-			Lifetime:    time.Hour,
-			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+			Client:             client,
+			RelayedAddr:        relayedAddr,
+			ServerAddr:         serverAddr,
+			Username:           stun.NewUsername("user"),
+			Realm:              stun.NewRealm("realm"),
+			Integrity:          stun.NewShortTermIntegrity("pass"),
+			Nonce:              stun.NewNonce("nonce"),
+			Lifetime:           time.Hour,
+			Log:                logging.NewDefaultLoggerFactory().NewLogger("test"),
+			ChannelNumberRange: channelNumberRange,
 		})
 		defer func() { _ = conn.Close() }()
 
@@ -360,14 +367,15 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 					deallocatedCh <- addr
 				},
 			},
-			RelayedAddr: relayedAddr,
-			ServerAddr:  serverAddr,
-			Username:    stun.NewUsername("user"),
-			Realm:       stun.NewRealm("realm"),
-			Integrity:   stun.NewShortTermIntegrity("pass"),
-			Nonce:       stun.NewNonce("nonce"),
-			Lifetime:    time.Hour,
-			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+			RelayedAddr:        relayedAddr,
+			ServerAddr:         serverAddr,
+			Username:           stun.NewUsername("user"),
+			Realm:              stun.NewRealm("realm"),
+			Integrity:          stun.NewShortTermIntegrity("pass"),
+			Nonce:              stun.NewNonce("nonce"),
+			Lifetime:           time.Hour,
+			Log:                logging.NewDefaultLoggerFactory().NewLogger("test"),
+			ChannelNumberRange: channelNumberRange,
 		})
 		defer func() { _ = conn.Close() }()
 
@@ -416,14 +424,15 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 					}
 				},
 			},
-			RelayedAddr: relayedAddr,
-			ServerAddr:  serverAddr,
-			Username:    stun.NewUsername("user"),
-			Realm:       stun.NewRealm("realm"),
-			Integrity:   stun.NewShortTermIntegrity("pass"),
-			Nonce:       stun.NewNonce("nonce"),
-			Lifetime:    time.Hour,
-			Log:         logging.NewDefaultLoggerFactory().NewLogger("test"),
+			RelayedAddr:        relayedAddr,
+			ServerAddr:         serverAddr,
+			Username:           stun.NewUsername("user"),
+			Realm:              stun.NewRealm("realm"),
+			Integrity:          stun.NewShortTermIntegrity("pass"),
+			Nonce:              stun.NewNonce("nonce"),
+			Lifetime:           time.Hour,
+			Log:                logging.NewDefaultLoggerFactory().NewLogger("test"),
+			ChannelNumberRange: channelNumberRange,
 		})
 		defer func() { _ = conn.Close() }()
 
@@ -446,7 +455,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 	})
 
 	t.Run("ChannelBind 400 refresh keeps saved binding", func(t *testing.T) {
-		bm := newBindingManager()
+		bm := newBindingManager(channelNumberRange)
 		bound := bm.create(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234})
 		staleRefreshedAt := time.Now().Add(-(defaultBindingRefreshInterval + time.Minute))
 		var channelBindAttempts atomic.Int32
@@ -492,7 +501,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 			st: permStatePermitted,
 		}))
 
-		bm := newBindingManager()
+		bm := newBindingManager(channelNumberRange)
 		binding := bm.create(addr)
 		binding.setState(bindingStateReady)
 
@@ -542,7 +551,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 				_nonce:     stun.NewNonce("nonce"),
 				log:        logging.NewDefaultLoggerFactory().NewLogger("test"),
 			},
-			bindingMgr: newBindingManager(),
+			bindingMgr: newBindingManager(channelNumberRange),
 		}
 
 		payload := []byte("Hello")
@@ -567,7 +576,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 		pm := newPermissionMap()
 		assert.True(t, pm.insert(addr, &permission{st: permStatePermitted}))
 
-		bm := newBindingManager()
+		bm := newBindingManager(channelNumberRange)
 		bound := bm.create(addr)
 		originalCh := bound.number
 
@@ -629,9 +638,9 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				bm := newBindingManager()
+				bm := newBindingManager(channelNumberRange)
 				// Without a binding, probe the number the first one would be assigned.
-				chNum := minChannelNumber
+				chNum := uint16(channelNumberRange.Min)
 				if tt.bound {
 					bound := bm.create(addr)
 					bound.setState(tt.state)
@@ -656,7 +665,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 	t.Run("closing deactivates the channel", func(t *testing.T) {
 		addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
 
-		bm := newBindingManager()
+		bm := newBindingManager(channelNumberRange)
 		bound := bm.create(addr)
 		bound.setState(bindingStateReady)
 		conn := makeConn(&mockClient{}, bm)
@@ -690,7 +699,7 @@ func TestUDPConn(t *testing.T) { // nolint:maintidx,cyclop,gocyclo
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				bm := newBindingManager()
+				bm := newBindingManager(channelNumberRange)
 				bound := bm.create(addr)
 				bound.setState(bindingStateReady)
 				conn := makeConn(&mockClient{}, bm)

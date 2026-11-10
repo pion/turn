@@ -16,6 +16,7 @@ var (
 	errMaxPortNotZero                = errors.New("turn: MaxPort must be not 0")
 	errMinPortNotZero                = errors.New("turn: MaxPort must be not 0")
 	errInvalidChannelNumber          = errors.New("turn: channel number not in configured range")
+	errInvalidChannelNumberRange     = errors.New("turn: ChannelNumberRange Min must not be greater than Max")
 	errNilConn                       = errors.New("turn: conn cannot not be nil")
 	errAlreadyListening              = errors.New("turn: already listening")
 	errFailedToClose                 = errors.New("turn: Server failed to close")

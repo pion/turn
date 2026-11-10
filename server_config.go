@@ -133,9 +133,10 @@ type EventHandler = allocation.EventHandler
 // rejected and a 486 (Allocation Quota Reached) error is returned to the user.
 type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
 
-// ChannelNumberRange is an enumeration that defines the possible values a channel number can take.
-// In RFC5766 section 11, this range can go from 0x4000 to 0x7FFF.
-// But in RFC8656 it has been redefined to 0x4000 to 0x4FFF.
+// ChannelNumberRange is a structure defining the possible values
+// that a channel number can take in a ChannelData packet (cf. RFC5766 section 11)
+// By default, this range goes from 0x4000 to 0x7FFF.
+// NB: RFC8656 defines this range to be 0x4000 to 0x4FFF.
 type ChannelNumberRange struct {
 	Min uint16
 	Max uint16
@@ -148,6 +149,15 @@ func defaultChannelNumberRange() *ChannelNumberRange {
 		Min: 0x4000,
 		Max: 0x7FFF,
 	}
+}
+
+// validate checks that the range is not empty.
+func (c *ChannelNumberRange) validate() error {
+	if c.Min > c.Max {
+		return fmt.Errorf("%w: [0x%X, 0x%X]", errInvalidChannelNumberRange, c.Min, c.Max)
+	}
+
+	return nil
 }
 
 // toProto converts the public ChannelNumberRange into the wire-decoding
@@ -201,11 +211,17 @@ type ServerConfig struct {
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
 
-	// Defines the channel number range that the server must use
+	// Defines the channel number range that the server must use. Defaults to 0x4000-0x7FFF.
 	ChannelNumberRange *ChannelNumberRange
 }
 
 func (s *ServerConfig) validate() error {
+	if s.ChannelNumberRange != nil {
+		if err := s.ChannelNumberRange.validate(); err != nil {
+			return err
+		}
+	}
+
 	if len(s.PacketConnConfigs) == 0 && len(s.ListenerConfigs) == 0 {
 		return errNoAvailableConns
 	}

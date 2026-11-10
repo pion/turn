@@ -130,20 +130,14 @@ const (
 	channelDataHeaderSize = channelDataLengthSize + channelDataNumberSize
 )
 
-// IsChannelData returns true if buf looks like the ChannelData Message.
+// IsChannelData returns true if buf is shaped like a ChannelData message: a 4-byte header
+// whose length field fits in the buffer. The channel number is deliberately not checked, so
+// callers can use any configured channel number range; Decode enforces that range.
+// A STUN message also has this shape, so callers must rule out STUN (stun.IsMessage) first.
 func IsChannelData(buf []byte) bool {
 	if len(buf) < channelDataHeaderSize {
 		return false
 	}
 
-	if int(binary.BigEndian.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])) > len(buf[channelDataHeaderSize:]) {
-		return false
-	}
-
-	// Quick check for channel number: framing must recognize any syntactically
-	// valid channel number (RFC 5766's full range is a superset of RFC 8656's),
-	// regardless of which range the caller enforces for acceptance.
-	num := binary.BigEndian.Uint16(buf[0:channelNumberSize])
-
-	return (ChannelNumberRange{Min: MinChannelNumber, Max: MaxChannelNumber}).Contains(ChannelNumber(num))
+	return int(binary.BigEndian.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])) <= len(buf[channelDataHeaderSize:])
 }

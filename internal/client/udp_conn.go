@@ -52,7 +52,7 @@ type UDPConn struct {
 // NewUDPConn creates a new instance of UDPConn.
 func NewUDPConn(config *AllocationConfig) *UDPConn {
 	conn := &UDPConn{
-		bindingMgr:             newBindingManager(),
+		bindingMgr:             newBindingManager(config.ChannelNumberRange),
 		readCh:                 make(chan *inboundData, maxReadQueueSize),
 		closeCh:                make(chan struct{}),
 		bindingRefreshInterval: defaultBindingRefreshInterval,

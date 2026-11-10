@@ -22,7 +22,8 @@ func TestChannelData_Encode(t *testing.T) {
 	chanData.Encode()
 	b := &ChannelData{}
 	b.Raw = append(b.Raw, chanData.Raw...)
-	assert.NoError(t, b.Decode(defaultChannelNumberRange()))
+	channelNumberRange := defaultChannelNumberRange()
+	assert.NoError(t, b.Decode(channelNumberRange))
 	assert.True(t, b.Equal(chanData))
 	assert.True(t, IsChannelData(b.Raw) && IsChannelData(chanData.Raw))
 }
@@ -161,11 +162,23 @@ func TestIsChannelData(t *testing.T) {
 			buf:  []byte{1, 2, 3, 4},
 		},
 		{
-			name: "zeroes",
-			buf:  []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			name:  "length exceeds buffer",
+			buf:   []byte{0x40, 0x00, 0x00, 0x08, 1, 2, 3, 4},
+			value: false,
+		},
+		{
+			name:  "channel number inside RFC 5766 range",
+			buf:   []byte{0x40, 0x00, 0x00, 0x04, 1, 2, 3, 4},
+			value: true,
+		},
+		{
+			// Ranges outside of the specifications must still be recognized as ChannelData.
+			name:  "channel number outside RFC 5766 range",
+			buf:   []byte{0x80, 0x00, 0x00, 0x04, 1, 2, 3, 4},
+			value: true,
 		},
 	} {
-		assert.Equal(t, tc.value, IsChannelData(tc.buf))
+		assert.Equal(t, tc.value, IsChannelData(tc.buf), tc.name)
 	}
 }
 
