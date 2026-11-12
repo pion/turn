@@ -1,11 +1,11 @@
-github.com/pion/dtls/v4 v4.0.1 h1:Kf5UJ6/BQ4OwofIa5+CYvt0TbVsSv56L6y6IaF8yvHI=
-github.com/pion/dtls/v4 v4.0.1/go.mod h1:d0wnjVER+gonPBUifSj6ZeGXClyHxYfctzvOELtsNb4=
+github.com/pion/dtls/v4 v4.0.2 h1:BOUlZEl/AOvKMQlnC0VWvh8LHQznTs0ziBfwLaywOxU=
+github.com/pion/dtls/v4 v4.0.2/go.mod h1:2fJZQvjuB/GlMwrtZQiSdJpWhhsxA5w8urFV00aum9E=
 github.com/pion/logging v0.2.4 h1:tTew+7cmQ+Mc1pTBLKH2puKsOvhm32dROumOZ655zB8=
 github.com/pion/logging v0.2.4/go.mod h1:DffhXTKYdNZU+KtJ5pyQDjvOAh/GsNSyv1lbkFbe3so=
 github.com/pion/randutil v0.1.0 h1:CFG1UdESneORglEsnimhUjf33Rwjubwj6xfiOXBa3mA=
 github.com/pion/randutil v0.1.0/go.mod h1:XcJrSMMbbMRhASFVOlj/5hQial/Y8oH/HVo7TBZq+j8=
-github.com/pion/stun/v5 v5.0.0-rc.3 h1:Z1lBWBgRhG89K3WZoiCq+Fb6Y43YSyzxFBtb1zzLZps=
-github.com/pion/stun/v5 v5.0.0-rc.3/go.mod h1:H4hkRX4UFPuIRbPy+hB7q2GsMYfAVLqxYO9lVUfASMA=
+github.com/pion/stun/v5 v5.0.0-rc.4 h1:n9lpC5Ih8kCEqq9rLQPe/Z3lSM3/9d7LXCRED/rB55s=
+github.com/pion/stun/v5 v5.0.0-rc.4/go.mod h1:Nfck/Kt0/OuFH7kF22w5AQ0TOiCF9isbC72Wmp0utIo=
 github.com/pion/transport/v5 v5.1.5 h1:73fa352Y9dq85kCd9rzyBV7wd/qhAiBIuTtwzWO3WS0=
 github.com/pion/transport/v5 v5.1.5/go.mod h1:Qxw6fCEjFWQkRDZOhS4Vf+neJBcihauvA3uyEa1J1F0=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
