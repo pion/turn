@@ -6,6 +6,7 @@ package turn
 import (
 	"context"
 	b64 "encoding/base64"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -360,6 +361,7 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 
 func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Context) ( //nolint:cyclop
 	relayed proto.RelayedAddress,
+	mappedAddr net.Addr,
 	lifetime proto.Lifetime,
 	nonce stun.Nonce,
 	reservationToken proto.ReservationToken,
@@ -383,22 +385,22 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 
 	msg, err := stun.Build(allocationSetters...)
 	if err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 
 	trRes, err := c.PerformTransactionWithContext(msg, c.turnServerAddr, false, ctx)
 	if err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 
 	res := trRes.Msg
 
 	// Anonymous allocate failed, trying to authenticate.
 	if err = nonce.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 	if err = c.realm.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 	c.realm = append([]byte(nil), c.realm...)
 	c.integrity = stun.NewLongTermIntegrity(
@@ -431,12 +433,12 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 
 	msg, err = stun.Build(allocationSetters...)
 	if err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 
 	trRes, err = c.PerformTransactionWithContext(msg, c.turnServerAddr, false, ctx)
 	if err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 	res = trRes.Msg
 
@@ -448,34 +450,46 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Contex
 				ErrorCodeAttr:   code,
 			}
 
-			return relayed, lifetime, nonce, reservationToken, turnError
+			return relayed, mappedAddr, lifetime, nonce, reservationToken, turnError
 		}
 
-		return relayed, lifetime, nonce, reservationToken, fmt.Errorf("%s", res.Type) //nolint:err113
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, fmt.Errorf("%s", res.Type) //nolint:err113
 	}
 
 	// Getting relayed addresses from response.
 	if err := relayed.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
+	}
+
+	// Getting the mapped address from response. A response without one still makes a valid
+	// allocation.
+	var mapped stun.XORMappedAddress
+	switch err := mapped.GetFrom(res); {
+	case err == nil:
+		mappedAddr = &net.UDPAddr{IP: mapped.IP, Port: mapped.Port}
+	case !errors.Is(err, stun.ErrAttributeNotFound):
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 
 	// Getting lifetime from response
 	if err := lifetime.GetFrom(res); err != nil {
-		return relayed, lifetime, nonce, reservationToken, err
+		return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 	}
 
 	// Getting reservation-token from response
 	if c.evenPort {
 		if err := reservationToken.GetFrom(res); err != nil {
-			return relayed, lifetime, nonce, reservationToken, err
+			return relayed, mappedAddr, lifetime, nonce, reservationToken, err
 		}
 	}
 
-	return relayed, lifetime, nonce, reservationToken, nil
+	return relayed, mappedAddr, lifetime, nonce, reservationToken, nil
 }
 
 // AllocateWithContext sends a TURN allocation request to the given transport address.
 // The context controls the lifetime of the allocation request and its response.
+// The returned PacketConn has a MappedAddr method that returns the client's address as the
+// server saw it, or nil if the server didn't send one.
 func (c *Client) AllocateWithContext(ctx context.Context) (net.PacketConn, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
 		return nil, fmt.Errorf("%w: %s", errOneAllocateOnly, err.Error())
@@ -487,7 +501,7 @@ func (c *Client) AllocateWithContext(ctx context.Context) (net.PacketConn, error
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, relayedConn.LocalAddr().String())
 	}
 
-	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoUDP, ctx)
+	relayed, mappedAddr, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoUDP, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -501,6 +515,7 @@ func (c *Client) AllocateWithContext(ctx context.Context) (net.PacketConn, error
 	relayedConn = client.NewUDPConn(&client.AllocationConfig{
 		Client:                    c,
 		RelayedAddr:               relayedAddr,
+		MappedAddr:                mappedAddr,
 		ServerAddr:                c.turnServerAddr,
 		Realm:                     c.realm,
 		Username:                  c.username,
@@ -537,7 +552,7 @@ func (c *Client) AllocateTCPWithContext(ctx context.Context) (*client.TCPAllocat
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, allocation.Addr())
 	}
 
-	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoTCP, ctx)
+	relayed, mappedAddr, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoTCP, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -550,6 +565,7 @@ func (c *Client) AllocateTCPWithContext(ctx context.Context) (*client.TCPAllocat
 	allocation = client.NewTCPAllocation(&client.AllocationConfig{
 		Client:      c,
 		RelayedAddr: relayedAddr,
+		MappedAddr:  mappedAddr,
 		ServerAddr:  c.turnServerAddr,
 		Realm:       c.realm,
 		Username:    c.username,
