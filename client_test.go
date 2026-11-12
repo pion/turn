@@ -1088,12 +1088,19 @@ func TestClientRelaySource(t *testing.T) {
 		indication := stun.MustBuild(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication))
 		require.True(t, turnClient.isTURNServer(trusted))
 		for _, packet := range []struct {
-			data      []byte
-			wantError bool
-		}{{[]byte{0x40, 0, 0, 0}, false}, {indication.Raw, true}} {
+			data             []byte
+			untrustedHandled bool
+			wantError        bool
+		}{
+			// ChannelData-shaped packets from non-TURN sources are application data.
+			{[]byte{0x40, 0, 0, 0}, false, false},
+			// Out-of-range numbers are ChannelData-shaped too but should be rejected.
+			{[]byte{0x80, 0, 0, 0}, false, true},
+			{indication.Raw, true, true},
+		} {
 			for _, from := range []net.Addr{attacker, nil} {
 				handled, inboundErr := turnClient.HandleInbound(packet.data, from)
-				require.True(t, handled)
+				require.Equal(t, packet.untrustedHandled, handled)
 				require.NoError(t, inboundErr)
 			}
 			handled, inboundErr := turnClient.HandleInbound(packet.data, trusted)
