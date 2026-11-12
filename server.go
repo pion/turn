@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
+	"github.com/pion/dtls/v4"
 	"github.com/pion/logging"
 	"github.com/pion/turn/v6/internal/allocation"
 	"github.com/pion/turn/v6/internal/proto"
@@ -19,7 +21,9 @@ import (
 )
 
 const (
-	defaultInboundMTU = 1600
+	defaultInboundMTU      = 1600
+	defaultDTLSIdleTimeout = time.Minute
+	handshakeTimeout       = 10 * time.Second
 )
 
 // Server is an instance of the Pion TURN Server.
@@ -31,6 +35,7 @@ type Server struct {
 	channelBindTimeout  time.Duration
 	permissionTimeout   time.Duration
 	allocationLifetime  time.Duration
+	dtlsIdleTimeout     time.Duration
 	strictAddressFamily bool
 	nonceHash           server.NonceManager
 	eventHandler        EventHandler
@@ -70,6 +75,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		channelBindTimeout:  config.ChannelBindTimeout,
 		permissionTimeout:   config.PermissionTimeout,
 		allocationLifetime:  config.AllocationLifetime,
+		dtlsIdleTimeout:     config.DTLSIdleTimeout,
 		strictAddressFamily: config.StrictAddressFamily,
 		packetConnConfigs:   config.PacketConnConfigs,
 		listenerConfigs:     config.ListenerConfigs,
@@ -78,6 +84,9 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		eventHandler:        config.EventHandler,
 	}
 
+	if server.dtlsIdleTimeout == 0 {
+		server.dtlsIdleTimeout = defaultDTLSIdleTimeout
+	}
 	if server.channelBindTimeout == 0 {
 		server.channelBindTimeout = proto.DefaultLifetime
 	}
@@ -95,7 +104,7 @@ func NewServer(config ServerConfig) (*Server, error) { //nolint:gocognit,cyclop
 		}
 
 		go func(cfg PacketConnConfig, am *allocation.Manager) {
-			server.readLoop(cfg.PacketConn, am, nil)
+			server.readLoop(cfg.PacketConn, am, nil, nil)
 
 			if err := am.Close(); err != nil {
 				server.log.Errorf("Failed to close AllocationManager: %s", err)
@@ -161,48 +170,135 @@ func (s *Server) Close() error {
 	return err
 }
 
-func (s *Server) readListener(l net.Listener, am *allocation.Manager) {
+func (s *Server) readListener(listener net.Listener, am *allocation.Manager) {
+	var (
+		wg      sync.WaitGroup
+		connsMu sync.Mutex
+		conns   = map[*net.Conn]struct{}{}
+	)
+
+	// Closing the listener leaves accepted connections open.
+	defer func() {
+		connsMu.Lock()
+		for conn := range conns {
+			_ = (*conn).Close()
+		}
+		connsMu.Unlock()
+
+		wg.Wait()
+	}()
+
 	for {
-		conn, err := l.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			s.log.Debugf("Failed to accept: %s", err)
 
 			return
 		}
 
+		entry := &conn
+		connsMu.Lock()
+		conns[entry] = struct{}{}
+		connsMu.Unlock()
+
+		wg.Add(1)
 		go func() {
-			var tlsConnectionState *tls.ConnectionState
+			defer wg.Done()
 
-			// Extract tls connection state if possible
-			tlsConn, ok := conn.(*tls.Conn)
-			if ok {
-				// Force TLS handshake to complete before extracting connection state.
-				// Per crypto/tls docs: handshakes are lazy (complete on first I/O).
-				// We must call Handshake() explicitly to populate PeerCertificates.
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-				defer cancel()
-				if err := tlsConn.HandshakeContext(ctx); err != nil {
-					s.log.Errorf("TLS handshake failed: %s", err)
+			s.serveConn(conn, am)
 
-					return
-				}
-				cs := tlsConn.ConnectionState()
-				tlsConnectionState = &cs
-			}
-
-			s.readLoop(NewSTUNConn(conn), am, tlsConnectionState)
-
-			// Delete allocation
-			am.DeleteAllocation(&allocation.FiveTuple{
-				Protocol: allocation.UDP, // fixed UDP
-				SrcAddr:  conn.RemoteAddr(),
-				DstAddr:  conn.LocalAddr(),
-			})
-
-			if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-				s.log.Errorf("Failed to close conn: %s", err)
-			}
+			connsMu.Lock()
+			delete(conns, entry)
+			connsMu.Unlock()
 		}()
+	}
+}
+
+// serveConn handles a connection accepted by a listener until it is closed.
+func (s *Server) serveConn(conn net.Conn, am *allocation.Manager) {
+	defer func() {
+		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) && !errors.Is(err, dtls.ErrConnClosed) {
+			s.log.Errorf("Failed to close conn: %s", err)
+		}
+	}()
+
+	fiveTuple := &allocation.FiveTuple{
+		Protocol: allocation.UDP, // fixed UDP
+		SrcAddr:  conn.RemoteAddr(),
+		DstAddr:  conn.LocalAddr(),
+	}
+
+	var (
+		packetConn net.PacketConn
+		tlsState   *tls.ConnectionState
+		dtlsState  *dtls.State
+	)
+
+	// Bound the handshake and populate peer certificates before authorization.
+	switch typedConn := conn.(type) {
+	case *tls.Conn:
+		ctx, cancel := context.WithTimeout(context.Background(), handshakeTimeout)
+		err := typedConn.HandshakeContext(ctx)
+		cancel()
+		if err != nil {
+			s.log.Errorf("TLS handshake failed: %s", err)
+
+			return
+		}
+
+		state := typedConn.ConnectionState()
+		tlsState = &state
+		packetConn = NewSTUNConn(conn)
+	case *dtls.Conn:
+		ctx, cancel := context.WithTimeout(context.Background(), handshakeTimeout)
+		err := typedConn.HandshakeContext(ctx)
+		cancel()
+		if err != nil {
+			s.log.Errorf("DTLS handshake failed: %s", err)
+
+			return
+		}
+
+		if state, ok := typedConn.ConnectionState(); ok {
+			dtlsState = &state
+		}
+		packetConn = &idleConn{
+			PacketConn: NewDTLSConn(typedConn),
+			timeout:    s.dtlsIdleTimeout,
+			keepAlive: func() bool {
+				return am.GetAllocation(fiveTuple) != nil
+			},
+		}
+	default:
+		packetConn = NewSTUNConn(conn)
+	}
+
+	s.readLoop(packetConn, am, tlsState, dtlsState)
+
+	am.DeleteAllocation(fiveTuple)
+}
+
+// idleConn times out inactive connections unless keepAlive reports an active allocation.
+type idleConn struct {
+	net.PacketConn
+	timeout   time.Duration
+	keepAlive func() bool
+}
+
+func (c *idleConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	for {
+		if err := c.SetReadDeadline(time.Now().Add(c.timeout)); err != nil {
+			return 0, nil, err
+		}
+
+		n, addr, err := c.PacketConn.ReadFrom(p)
+
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() && c.keepAlive() {
+			continue
+		}
+
+		return n, addr, err
 	}
 }
 
@@ -250,7 +346,12 @@ func (s *Server) createAllocationManager(
 	return am, err
 }
 
-func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Manager, tlsState *tls.ConnectionState) {
+func (s *Server) readLoop(
+	conn net.PacketConn,
+	allocationManager *allocation.Manager,
+	tlsState *tls.ConnectionState,
+	dtlsState *dtls.State,
+) {
 	buf := make([]byte, s.inboundMTU)
 	for {
 		n, addr, err := conn.ReadFrom(buf)
@@ -270,6 +371,7 @@ func (s *Server) readLoop(conn net.PacketConn, allocationManager *allocation.Man
 			SrcAddr:             addr,
 			Buff:                buf[:n],
 			TLS:                 tlsState,
+			DTLS:                dtlsState,
 			Log:                 s.log,
 			AuthHandler:         s.authHandler,
 			QuotaHandler:        s.quotaHandler,

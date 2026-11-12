@@ -81,7 +81,12 @@ func (c *PacketConnConfig) validate() error {
 
 // ListenerConfig is a single net.Listener to accept connections on.
 // This will be used for TCP, TLS and DTLS listeners.
+//
+// Use tls.Listen or tls.NewListener for TLS, and dtls.Listen or dtls.ListenAddr
+// for DTLS. Handshakes complete before requests reach AuthHandler, which receives
+// the connection state in RequestAttributes.TLS or RequestAttributes.DTLS.
 type ListenerConfig struct {
+	// Listener and its accepted connections are owned and closed by Server.
 	Listener net.Listener
 
 	// When an allocation is generated the RelayAddressGenerator
@@ -164,6 +169,11 @@ type ServerConfig struct {
 
 	// AllocationLife sets the lifetime of allocation. Defaults to 10 minutes.
 	AllocationLifetime time.Duration
+
+	// DTLSIdleTimeout closes idle DTLS associations without allocations.
+	// Defaults to 1 minute. For DTLS association lifetime rules, see
+	// https://www.rfc-editor.org/rfc/rfc7350#section-3
+	DTLSIdleTimeout time.Duration
 
 	// StrictAddressFamily keeps the RFC 6156 default of IPv4 when
 	// REQUESTED-ADDRESS-FAMILY is omitted. By default, omitted address family

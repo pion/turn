@@ -19,6 +19,7 @@ var (
 	errFailedToCreateChannelData                     = errors.New("failed to create channel data from packet")
 	errRelayAlreadyAllocatedForFiveTuple             = errors.New("relay already allocated for 5-TUPLE")
 	errUnsupportedTransportProtocol                  = errors.New("RequestedTransport must be UDP or TCP")
+	errTCPAllocationOverDatagram                     = errors.New("TCP allocations require a TCP or TLS connection")
 	errNoDontFragmentSupport                         = errors.New("no support for DONT-FRAGMENT")
 	errRequestWithReservationTokenAndEvenPort        = errors.New("Request must not contain RESERVATION-TOKEN and EVEN-PORT")                //nolint:lll
 	errRequestWithReservationTokenAndRequestedFamily = errors.New("Request must not contain RESERVATION-TOKEN and REQUESTED-ADDRESS-FAMILY") //nolint:lll
