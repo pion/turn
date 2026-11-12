@@ -59,6 +59,7 @@ func NewUDPConn(config *AllocationConfig) *UDPConn {
 		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
+			mappedAddr:  config.MappedAddr,
 			serverAddr:  config.ServerAddr,
 			readTimer:   time.NewTimer(time.Duration(math.MaxInt64)),
 			permMap:     newPermissionMap(),

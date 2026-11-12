@@ -43,6 +43,7 @@ func NewTCPAllocation(config *AllocationConfig) *TCPAllocation {
 		allocation: allocation{
 			client:      config.Client,
 			relayedAddr: config.RelayedAddr,
+			mappedAddr:  config.MappedAddr,
 			serverAddr:  config.ServerAddr,
 			username:    config.Username,
 			realm:       config.Realm,
