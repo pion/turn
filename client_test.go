@@ -262,6 +262,85 @@ func TestTCPClient(t *testing.T) {
 	require.NoError(t, server.Close())
 }
 
+// The client's address as the server saw it comes with the allocation.
+func TestClientAllocationMappedAddr(t *testing.T) {
+	authHandler := func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+		return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
+	}
+	loopback := net.IPv4(127, 0, 0, 1)
+	relayAddressGenerator := &RelayAddressGeneratorStatic{RelayAddress: loopback, Address: loopback.String()}
+
+	t.Run("UDP", func(t *testing.T) {
+		serverConn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+		require.NoError(t, err)
+		server, err := NewServer(ServerConfig{
+			AuthHandler: authHandler,
+			PacketConnConfigs: []PacketConnConfig{
+				{PacketConn: serverConn, RelayAddressGenerator: relayAddressGenerator},
+			},
+			Realm: "pion.ly",
+		})
+		require.NoError(t, err)
+		defer func() { require.NoError(t, server.Close()) }()
+
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
+		client, err := NewClient(&ClientConfig{
+			Conn:           conn,
+			TURNServerAddr: serverConn.LocalAddr().String(),
+			Username:       "foo",
+			Password:       "pass",
+		})
+		require.NoError(t, err)
+		require.NoError(t, client.Listen())
+		defer client.Close()
+
+		allocation, err := client.Allocate()
+		require.NoError(t, err)
+		defer func() { require.NoError(t, allocation.Close()) }()
+
+		mapped, ok := allocation.(interface{ MappedAddr() net.Addr })
+		require.True(t, ok)
+		require.NotNil(t, mapped.MappedAddr())
+		require.Equal(t, conn.LocalAddr().String(), mapped.MappedAddr().String())
+	})
+
+	t.Run("TCP", func(t *testing.T) {
+		listener, err := net.Listen("tcp4", "127.0.0.1:0") // nolint: noctx
+		require.NoError(t, err)
+		server, err := NewServer(ServerConfig{
+			AuthHandler: authHandler,
+			ListenerConfigs: []ListenerConfig{
+				{Listener: listener, RelayAddressGenerator: relayAddressGenerator},
+			},
+			Realm: "pion.ly",
+		})
+		require.NoError(t, err)
+		defer func() { require.NoError(t, server.Close()) }()
+
+		conn, err := net.Dial("tcp4", listener.Addr().String()) // nolint: noctx
+		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
+		client, err := NewClient(&ClientConfig{
+			Conn:           NewSTUNConn(conn),
+			TURNServerAddr: listener.Addr().String(),
+			Username:       "foo",
+			Password:       "pass",
+		})
+		require.NoError(t, err)
+		require.NoError(t, client.Listen())
+		defer client.Close()
+
+		allocation, err := client.AllocateTCP()
+		require.NoError(t, err)
+		defer func() { require.NoError(t, allocation.Close()) }()
+
+		require.NotNil(t, allocation.MappedAddr())
+		require.Equal(t, conn.LocalAddr().String(), allocation.MappedAddr().String())
+	})
+}
+
 func TestTCPClientWithoutAddress(t *testing.T) {
 	// Setup server
 	tcpListener, err := net.Listen("tcp4", "0.0.0.0:13478") //nolint: gosec,noctx

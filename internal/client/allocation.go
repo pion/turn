@@ -21,6 +21,7 @@ import (
 type AllocationConfig struct {
 	Client                    Client
 	RelayedAddr               net.Addr
+	MappedAddr                net.Addr
 	ServerAddr                net.Addr
 	Integrity                 stun.MessageIntegrity
 	Nonce                     stun.Nonce
@@ -37,6 +38,7 @@ type AllocationConfig struct {
 type allocation struct {
 	client            Client                // Read-only
 	relayedAddr       net.Addr              // Read-only
+	mappedAddr        net.Addr              // Read-only
 	serverAddr        net.Addr              // Read-only
 	permMap           *permissionMap        // Thread-safe
 	integrity         stun.MessageIntegrity // Read-only
@@ -50,6 +52,12 @@ type allocation struct {
 	readTimer         *time.Timer           // Thread-safe
 	mutex             sync.RWMutex          // Thread-safe
 	log               logging.LeveledLogger // Read-only
+}
+
+// MappedAddr returns the client's address as the server saw it when it made the allocation, from
+// the XOR-MAPPED-ADDRESS of the Allocate response, or nil if the response didn't carry one.
+func (a *allocation) MappedAddr() net.Addr {
+	return a.mappedAddr
 }
 
 func (a *allocation) setNonceFromMsg(msg *stun.Message) {
