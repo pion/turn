@@ -25,7 +25,13 @@ type EventHandler struct {
 		relayAddr net.Addr, requestedPort int)
 	// OnAllocationDeleted is called after an allocation has been removed.
 	OnAllocationDeleted func(srcAddr, dstAddr net.Addr, protocol, userID, realm string)
-	// OnAllocationError is called when the readloop hdndling an allocation exits with an
+	// OnAllocationFailed is called when an Allocate request that passed the QuotaHandler (or
+	// any Allocate request when no QuotaHandler is set) does not result in an allocation. Each
+	// such request ends in exactly one OnAllocationCreated or OnAllocationFailed call, so a
+	// quota reserved in the QuotaHandler can be released here. Unlike OnAllocationError, it is
+	// called only for Allocate requests and carries the user-id and realm.
+	OnAllocationFailed func(srcAddr, dstAddr net.Addr, protocol, userID, realm string, err error)
+	// OnAllocationError is called when the readloop handling an allocation exits with an
 	// error with an error message.
 	OnAllocationError func(srcAddr, dstAddr net.Addr, protocol, message string)
 	// OnPermissionCreated is called after a new permission has been made to an IP address.
