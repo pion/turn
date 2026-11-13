@@ -17,6 +17,7 @@ type PeriodicTimer struct {
 	interval       time.Duration
 	timeoutHandler PeriodicTimerTimeoutHandler
 	stopFunc       func()
+	doneCh         chan struct{}
 	mutex          sync.RWMutex
 }
 
@@ -40,8 +41,10 @@ func (t *PeriodicTimer) Start() bool {
 	}
 
 	cancelCh := make(chan struct{})
+	doneCh := make(chan struct{})
 
 	go func() {
+		defer close(doneCh)
 		canceling := false
 
 		for !canceling {
@@ -60,6 +63,7 @@ func (t *PeriodicTimer) Start() bool {
 	t.stopFunc = func() {
 		close(cancelCh)
 	}
+	t.doneCh = doneCh
 
 	return true
 }
@@ -72,6 +76,22 @@ func (t *PeriodicTimer) Stop() {
 	if t.stopFunc != nil {
 		t.stopFunc()
 		t.stopFunc = nil
+	}
+}
+
+// StopAndWait stops the timer and waits for its handler goroutine to return.
+// It must not be called from the timer's own timeout handler.
+func (t *PeriodicTimer) StopAndWait() {
+	t.mutex.Lock()
+	if t.stopFunc != nil {
+		t.stopFunc()
+		t.stopFunc = nil
+	}
+	doneCh := t.doneCh
+	t.mutex.Unlock()
+
+	if doneCh != nil {
+		<-doneCh
 	}
 }
 

@@ -37,12 +37,52 @@ type binding struct {
 	addr         net.Addr        // Read-only
 	mgr          *bindingManager // Read-only
 	muBind       sync.Mutex      // Thread-safe, for ChannelBind ops
+	attemptDone  chan struct{}   // Protected by muBind; non-nil while a bind attempt is in flight
+	prepared     atomic.Bool     // Thread-safe; peer promised ChannelData-only writes
 	_refreshedAt time.Time       // Protected by mutex
+	_bindErr     error           // Protected by mutex; last failed bind attempt or terminal cause
+	_terminal    bool            // Protected by mutex; binding failed permanently
 	mutex        sync.RWMutex    // Thread-safe
 }
 
 func (b *binding) setState(state bindingState) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b._terminal {
+		state = bindingStateFailed
+	}
 	atomic.StoreInt32((*int32)(&b.st), int32(state))
+}
+
+// terminalize permanently fails the binding: every later setState collapses to
+// bindingStateFailed so an in-flight bind attempt cannot resurrect it.
+func (b *binding) terminalize(err error) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b._terminal {
+		return
+	}
+	b._terminal = true
+	b._bindErr = err
+	atomic.StoreInt32((*int32)(&b.st), int32(bindingStateFailed))
+}
+
+func (b *binding) setBindErr(err error) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if !b._terminal {
+		b._bindErr = err
+	}
+}
+
+func (b *binding) bindErr() error {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b._bindErr
 }
 
 func (b *binding) state() bindingState {
@@ -97,8 +137,18 @@ func (mgr *bindingManager) assignChannelNumber() uint16 {
 }
 
 func (mgr *bindingManager) create(addr net.Addr) *binding {
+	return mgr.getOrCreate(addr)
+}
+
+// getOrCreate returns the existing binding for addr, or creates one, so that
+// concurrent callers for the same peer share a single channel number.
+func (mgr *bindingManager) getOrCreate(addr net.Addr) *binding {
 	mgr.mutex.Lock()
 	defer mgr.mutex.Unlock()
+
+	if b, ok := mgr.addrMap[addr.String()]; ok {
+		return b
+	}
 
 	b := &binding{
 		number:       mgr.assignChannelNumber(),
