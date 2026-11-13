@@ -93,6 +93,7 @@ func FuzzSetters(f *testing.F) {
 
 func FuzzChannelData(f *testing.F) {
 	channelData := &ChannelData{}
+	channelNumberRange := defaultChannelNumberRange() // default number range
 
 	f.Fuzz(func(_ *testing.T, data []byte) {
 		channelData.Reset()
@@ -100,25 +101,27 @@ func FuzzChannelData(f *testing.F) {
 		if len(data) > channelDataHeaderSize {
 			// Make sure the channel id is in the proper range
 			if b := binary.BigEndian.Uint16(data[0:4]); b > 20000 {
-				binary.BigEndian.PutUint16(data[0:4], MinChannelNumber-1)
+				binary.BigEndian.PutUint16(data[0:4], uint16(MinChannelNumber)-1)
 			} else if b > 40000 {
-				binary.BigEndian.PutUint16(data[0:4], MinChannelNumber+(MaxChannelNumber-MinChannelNumber)%b)
+				minChannelNumber := uint16(MinChannelNumber)
+				channelNumber := uint16(channelNumberRange.Max - MinChannelNumber)
+				binary.BigEndian.PutUint16(data[0:4], minChannelNumber+channelNumber%b)
 			}
 		}
 
 		channelData.Raw = append(channelData.Raw, data...)
-		if channelData.Decode() != nil {
+		if channelData.Decode(channelNumberRange) != nil {
 			return
 		}
 
 		channelData.Encode()
-		if !channelData.Number.Valid() {
+		if !channelNumberRange.Contains(channelData.Number) {
 			return
 		}
 
 		d2 := &ChannelData{}
 		d2.Raw = channelData.Raw
-		if err := d2.Decode(); err != nil {
+		if err := d2.Decode(channelNumberRange); err != nil {
 			panic(err) //nolint
 		}
 	})

@@ -58,6 +58,11 @@ type ClientConfig struct {
 	// local address, falling back to IPv4 if inference fails. See RFC 6156.
 	RequestedAddressFamily RequestedAddressFamily
 
+	// ChannelNumberRange defines the channel number values allowed by
+	// the client when decoding ChannelData received from the server
+	// and allocating new channels. Defaults to 0x4000-0x7FFF if unset.
+	ChannelNumberRange ChannelNumberRange
+
 	evenPort               bool   // If EVEN-PORT Attribute should be sent in Allocation
 	reservationToken       []byte // If Server responds with RESERVATION-TOKEN or if Client wishes to send one
 	bindingRefreshInterval time.Duration
@@ -98,6 +103,7 @@ type Client struct {
 	permissionRefreshInterval time.Duration
 	bindingRefreshInterval    time.Duration
 	bindingCheckInterval      time.Duration
+	channelNumberRange        proto.ChannelNumberRange
 }
 
 // inferAddressFamilyFromConn attempts to determine the address
@@ -233,6 +239,18 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		log.Debugf("Resolved TURN server %s to %s", config.TURNServerAddr, turnServ)
 	}
 
+	// Every fields being 0 means that the channel number range was not configured.
+	if config.ChannelNumberRange.Min == 0 && config.ChannelNumberRange.Max == 0 {
+		config.ChannelNumberRange = ChannelNumberRange{
+			Min: 0x4000,
+			Max: 0x7FFF,
+		}
+	}
+
+	if err = config.ChannelNumberRange.validate(); err != nil {
+		return nil, err
+	}
+
 	client := &Client{
 		conn:                      config.Conn,
 		stunServerAddr:            stunServ,
@@ -251,6 +269,7 @@ func NewClient(config *ClientConfig) (*Client, error) { //nolint:gocyclo,cyclop
 		permissionRefreshInterval: config.PermissionRefreshInterval,
 		bindingRefreshInterval:    config.bindingRefreshInterval,
 		bindingCheckInterval:      config.bindingCheckInterval,
+		channelNumberRange:        config.ChannelNumberRange.toProto(),
 	}
 
 	return client, nil
@@ -527,6 +546,7 @@ func (c *Client) AllocateWithContext(ctx context.Context) (net.PacketConn, error
 		PermissionRefreshInterval: c.permissionRefreshInterval,
 		BindingRefreshInterval:    c.bindingRefreshInterval,
 		BindingCheckInterval:      c.bindingCheckInterval,
+		ChannelNumberRange:        c.channelNumberRange,
 	})
 	c.setRelayedUDPConn(relayedConn)
 	c.setReservationToken(reservationToken)
@@ -714,11 +734,7 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	switch {
 	case stun.IsMessage(data):
 		return true, c.handleSTUNMessage(data, from)
-	case proto.IsChannelData(data):
-		if !c.isTURNServer(from) {
-			return true, nil
-		}
-
+	case proto.IsChannelData(data) && c.isTURNServer(from):
 		return true, c.handleChannelData(data)
 	case c.stunServerAddr != nil && from.String() == c.stunServerAddr.String():
 		// Received from STUN server but it is not a STUN message
@@ -854,7 +870,7 @@ func (c *Client) handleChannelData(data []byte) error {
 		Raw: make([]byte, len(data)),
 	}
 	copy(chData.Raw, data)
-	if err := chData.Decode(); err != nil {
+	if err := chData.Decode(c.channelNumberRange); err != nil {
 		return err
 	}
 

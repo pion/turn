@@ -88,18 +88,26 @@ func TestChannelNumber(t *testing.T) {
 	})
 }
 
-func TestChannelNumber_Valid(t *testing.T) {
+// defaultChannelNumberRange is a helper function returning the full RFC 5766
+// channel number range (0x4000-0x7FFF), used by tests that need the full
+// range rather than RFC 8656's narrower subset.
+func defaultChannelNumberRange() ChannelNumberRange {
+	return ChannelNumberRange{MinChannelNumber, MaxChannelNumber, nil}
+}
+
+func TestChannelNumberRange_Contains(t *testing.T) {
 	for _, tc := range []struct {
 		n     ChannelNumber
+		r     ChannelNumberRange
 		value bool
 	}{
-		{MinChannelNumber - 1, false},
-		{MinChannelNumber, true},
-		{MinChannelNumber + 1, true},
-		{MaxChannelNumber, true},
-		{MaxChannelNumber + 1, false},
+		{MinChannelNumber - 1, defaultChannelNumberRange(), false},
+		{MinChannelNumber, defaultChannelNumberRange(), true},
+		{MinChannelNumber + 1, defaultChannelNumberRange(), true},
+		{MaxChannelNumber, defaultChannelNumberRange(), true},
+		{MaxChannelNumber + 1, defaultChannelNumberRange(), false},
 	} {
-		v := tc.n.Valid()
+		v := tc.r.Contains(tc.n)
 		assert.Equalf(t, tc.value, v, "unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)
 	}
 }

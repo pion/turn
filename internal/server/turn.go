@@ -513,6 +513,9 @@ func handleChannelBindRequest(req Request, stunMsg *stun.Message) error { // nol
 	if err = channel.GetFrom(stunMsg); err != nil {
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, badRequestMsg...)
 	}
+	if !req.ChannelNumberRange.Contains(channel) {
+		return buildAndSendErr(req.Conn, req.SrcAddr, req.ChannelNumberRange.ErrInvalidChannelNumber, badRequestMsg...)
+	}
 
 	peerAddr := proto.PeerAddress{}
 	if err = peerAddr.GetFrom(stunMsg); err != nil {

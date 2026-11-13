@@ -8,15 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-)
 
-// Channel number:
-//
-//	0x4000 through 0x7FFF: These values are the allowed channel
-//	numbers (16,383 possible values).
-const (
-	minChannelNumber uint16 = 0x4000
-	maxChannelNumber uint16 = 0x7fff
+	"github.com/pion/turn/v5/internal/proto"
 )
 
 type bindingState int32
@@ -71,24 +64,26 @@ func (b *binding) ok() bool {
 
 // Thread-safe binding map.
 type bindingManager struct {
-	chanMap map[uint16]*binding
-	addrMap map[string]*binding
-	next    uint16
-	mutex   sync.RWMutex
+	chanMap            map[uint16]*binding
+	addrMap            map[string]*binding
+	next               uint16
+	mutex              sync.RWMutex
+	channelNumberRange proto.ChannelNumberRange
 }
 
-func newBindingManager() *bindingManager {
+func newBindingManager(channelNumberRange proto.ChannelNumberRange) *bindingManager {
 	return &bindingManager{
-		chanMap: map[uint16]*binding{},
-		addrMap: map[string]*binding{},
-		next:    minChannelNumber,
+		chanMap:            map[uint16]*binding{},
+		addrMap:            map[string]*binding{},
+		next:               uint16(channelNumberRange.Min),
+		channelNumberRange: channelNumberRange,
 	}
 }
 
 func (mgr *bindingManager) assignChannelNumber() uint16 {
 	n := mgr.next
-	if mgr.next == maxChannelNumber {
-		mgr.next = minChannelNumber
+	if mgr.next == uint16(mgr.channelNumberRange.Max) {
+		mgr.next = uint16(mgr.channelNumberRange.Min)
 	} else {
 		mgr.next++
 	}

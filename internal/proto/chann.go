@@ -5,7 +5,6 @@ package proto
 
 import (
 	"encoding/binary"
-	"errors"
 	"strconv"
 
 	"github.com/pion/stun/v4"
@@ -53,19 +52,16 @@ func (n *ChannelNumber) GetFrom(m *stun.Message) error {
 // 0x4000 through 0x7FFF: These values are the allowed channel
 // numbers (16,383 possible values).
 const (
-	MinChannelNumber = 0x4000
-	MaxChannelNumber = 0x7FFF
+	MinChannelNumber ChannelNumber = 0x4000
+	MaxChannelNumber ChannelNumber = 0x7FFF
 )
 
-// ErrInvalidChannelNumber means that channel number is not valid as by RFC 5766 Section 11.
-var ErrInvalidChannelNumber = errors.New("channel number not in [0x4000, 0x7FFF]")
-
-// isChannelNumberValid returns true if c in [0x4000, 0x7FFF].
-func isChannelNumberValid(c uint16) bool {
-	return c >= MinChannelNumber && c <= MaxChannelNumber
+type ChannelNumberRange struct {
+	Min                     ChannelNumber
+	Max                     ChannelNumber
+	ErrInvalidChannelNumber error
 }
 
-// Valid returns true if channel number has correct value that complies RFC 5766 Section 11 range.
-func (n ChannelNumber) Valid() bool {
-	return isChannelNumberValid(uint16(n))
+func (r ChannelNumberRange) Contains(channelNumber ChannelNumber) bool {
+	return channelNumber >= r.Min && channelNumber <= r.Max
 }

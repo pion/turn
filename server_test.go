@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/binary"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -160,6 +161,26 @@ func TestServerConfig(t *testing.T) {
 		assert.ErrorIs(t, (&ServerConfig{
 			ListenerConfigs: []ListenerConfig{{Listener: tcpListener}},
 		}).validate(), errRelayAddressGeneratorUnset)
+	})
+
+	t.Run("ChannelNumberRange within RFC 5766 bounds", func(t *testing.T) {
+		assert.NoError(t, (&ServerConfig{
+			PacketConnConfigs: []PacketConnConfig{{PacketConn: udpListener}},
+			ChannelNumberRange: ChannelNumberRange{
+				Min: 0x4000,
+				Max: 0x7FFF,
+			},
+		}).validate())
+	})
+
+	t.Run("ChannelNumberRange within RFC 8656 bounds", func(t *testing.T) {
+		assert.NoError(t, (&ServerConfig{
+			PacketConnConfigs: []PacketConnConfig{{PacketConn: udpListener}},
+			ChannelNumberRange: ChannelNumberRange{
+				Min: 0x4000,
+				Max: 0x4FFF,
+			},
+		}).validate())
 	})
 
 	_, _, err = (&RelayAddressGeneratorNone{}).AllocateListener(AllocateListenerConfig{Network: "tcp4"})
@@ -712,6 +733,61 @@ func TestServer(t *testing.T) { //nolint:maintidx
 		relayConn, err := client.Allocate()
 		assert.NoError(t, err)
 		defer relayConn.Close() //nolint:errcheck
+	})
+
+	t.Run("ChannelNumberRange rejects channel numbers outside the configured range", func(t *testing.T) {
+		udpListener, err := net.ListenPacket("udp4", testAddr) // nolint: noctx
+		assert.NoError(t, err)
+
+		errMessage := atomic.Value{}
+		errMessage.Store("")
+
+		server, err := NewServer(ServerConfig{
+			AuthHandler: func(ra *RequestAttributes) (userID string, key []byte, ok bool) {
+				return ra.Username, GenerateAuthKey(ra.Username, ra.Realm, "pass"), true
+			},
+			// RFC 8656 narrows the channel number range to 0x4000-0x4FFF.
+			ChannelNumberRange: ChannelNumberRange{
+				Min: 0x4000,
+				Max: 0x4FFF,
+			},
+			EventHandler: allocation.EventHandler{ // used to observe the rejected ChannelData
+				OnAllocationError: func(_, _ net.Addr, _, message string) {
+					errMessage.Store(message)
+				},
+			},
+			PacketConnConfigs: []PacketConnConfig{
+				{
+					PacketConn: udpListener,
+					RelayAddressGenerator: &RelayAddressGeneratorStatic{
+						RelayAddress: net.ParseIP("127.0.0.1"),
+						Address:      "127.0.0.1",
+					},
+				},
+			},
+			Realm:         "pion.ly",
+			LoggerFactory: loggerFactory,
+		})
+		assert.NoError(t, err)
+		defer server.Close() //nolint:errcheck
+
+		conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+		assert.NoError(t, err)
+		defer conn.Close() //nolint:errcheck
+
+		// Channel number 0x7FFF is syntactically valid ChannelData under RFC 5766
+		// (used to frame-detect incoming packets) but falls outside the server's
+		// configured RFC 8656 range, so it must be rejected during decode.
+		frame := make([]byte, 8)
+		binary.BigEndian.PutUint16(frame[0:2], 0x7FFF)
+		binary.BigEndian.PutUint16(frame[2:4], 4)
+		copy(frame[4:8], "DATA")
+
+		_, err = conn.WriteTo(frame, udpListener.LocalAddr())
+		assert.NoError(t, err)
+
+		assert.Eventually(t, func() bool { return errMessage.Load() != "" }, timeout, interval)
+		assert.Contains(t, errMessage.Load(), "channel number not in configured range: [0x4000, 0x4FFF]")
 	})
 }
 
@@ -2182,6 +2258,47 @@ func BenchmarkServer(b *testing.B) {
 	for i := 1; i <= 4; i++ {
 		b.Run(fmt.Sprintf("client_num_%d", i), func(b *testing.B) {
 			RunBenchmarkServer(b, i)
+		})
+	}
+}
+
+func TestChannelNumberRangeValidation(t *testing.T) {
+	tests := []struct {
+		name  string
+		rng   ChannelNumberRange
+		valid bool
+	}{
+		{"full RFC 5766 range", ChannelNumberRange{Min: 0x4000, Max: 0x7FFF}, true},
+		{"narrower range", ChannelNumberRange{Min: 0x4000, Max: 0x4FFF}, true},
+		{"single channel", ChannelNumberRange{Min: 0x4100, Max: 0x4100}, true},
+		{"range above RFC 5766 range", ChannelNumberRange{Min: 0x8000, Max: 0xFFFF}, true},
+		{"range below RFC 5766 range", ChannelNumberRange{Min: 0x0100, Max: 0x3FFF}, true},
+		{"min greater than max", ChannelNumberRange{Min: 0x4001, Max: 0x4000}, false},
+		{"reversed spec range", ChannelNumberRange{Min: 0x7FFF, Max: 0x4000}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rng := tt.rng
+
+			// Without listeners NewServer still fails, but the range is checked first.
+			_, serverErr := NewServer(ServerConfig{ChannelNumberRange: rng})
+			if tt.valid {
+				assert.ErrorIs(t, serverErr, errNoAvailableConns)
+			} else {
+				assert.ErrorIs(t, serverErr, errInvalidChannelNumberRange)
+			}
+
+			conn, err := net.ListenPacket("udp4", "127.0.0.1:0") // nolint: noctx
+			assert.NoError(t, err)
+			defer func() { assert.NoError(t, conn.Close()) }()
+
+			_, clientErr := NewClient(&ClientConfig{Conn: conn, ChannelNumberRange: rng})
+			if tt.valid {
+				assert.NoError(t, clientErr)
+			} else {
+				assert.ErrorIs(t, clientErr, errInvalidChannelNumberRange)
+			}
 		})
 	}
 }
