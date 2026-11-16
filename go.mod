@@ -3,6 +3,7 @@ module github.com/pion/turn/v6
 go 1.24.0
 
 require (
+	github.com/pion/dtls/v4 v4.0.2
 	github.com/pion/logging v0.2.4
 	github.com/pion/randutil v0.1.0
 	github.com/pion/stun/v5 v5.0.0-rc.4
@@ -13,7 +14,6 @@ require (
 )
 
 require (
-	github.com/pion/dtls/v4 v4.0.2 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.48.0 // indirect

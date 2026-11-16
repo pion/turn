@@ -93,6 +93,12 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		return buildAndSendErr(req.Conn, req.SrcAddr, errUnsupportedTransportProtocol, msg...)
 	}
 
+	// TCP allocations require a TCP or TLS client connection.
+	// See https://www.rfc-editor.org/rfc/rfc6062#section-5.1
+	if _, isStream := req.Conn.(*proto.STUNConn); requestedTransport.Protocol == proto.ProtoTCP && !isStream {
+		return buildAndSendErr(req.Conn, req.SrcAddr, errTCPAllocationOverDatagram, badRequestMsg...)
+	}
+
 	// 4. The request may contain a DONT-FRAGMENT attribute.  If it does,
 	//    but the server does not support sending UDP datagrams with the DF
 	//    bit set to 1 (see Section 12), then the server treats the DONT-

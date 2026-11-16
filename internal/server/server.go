@@ -10,6 +10,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pion/dtls/v4"
 	"github.com/pion/logging"
 	"github.com/pion/stun/v5"
 	"github.com/pion/turn/v6/internal/allocation"
@@ -24,6 +25,7 @@ type Request struct {
 	SrcAddr net.Addr
 	Buff    []byte
 	TLS     *tls.ConnectionState
+	DTLS    *dtls.State
 
 	// Server State
 	AllocationManager *allocation.Manager

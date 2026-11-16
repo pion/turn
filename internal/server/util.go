@@ -109,8 +109,9 @@ func authenticateRequest(req Request, stunMsg *stun.Message, callingMethod stun.
 		Username: usernameAttr.String(),
 		Realm:    realmAttr.String(),
 		SrcAddr:  req.SrcAddr,
-		TLS:      req.TLS,
 		Method:   callingMethod,
+		TLS:      req.TLS,
+		DTLS:     req.DTLS,
 	})
 	if !ok {
 		_, _, _, sendErr := respondWithNonce(stun.CodeUnauthorized)
