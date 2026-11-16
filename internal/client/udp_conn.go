@@ -52,7 +52,7 @@ type UDPConn struct {
 // NewUDPConn creates a new instance of UDPConn.
 func NewUDPConn(config *AllocationConfig) *UDPConn {
 	conn := &UDPConn{
-		bindingMgr:             newBindingManager(),
+		bindingMgr:             newBindingManager(config.ChannelNumberRange),
 		readCh:                 make(chan *inboundData, maxReadQueueSize),
 		closeCh:                make(chan struct{}),
 		bindingRefreshInterval: defaultBindingRefreshInterval,
@@ -227,6 +227,9 @@ func (c *UDPConn) WriteTo(payload []byte, addr net.Addr) (int, error) { //nolint
 	bound, ok := c.bindingMgr.findByAddr(addr)
 	if !ok {
 		bound = c.bindingMgr.create(addr)
+		if bound == nil {
+			return 0, errCannotBindChannel
+		}
 	}
 
 	//nolint:nestif

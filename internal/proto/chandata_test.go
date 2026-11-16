@@ -21,7 +21,7 @@ func TestChannelData_Encode(t *testing.T) {
 	chanData.Encode()
 	b := &ChannelData{}
 	b.Raw = append(b.Raw, chanData.Raw...)
-	assert.NoError(t, b.Decode())
+	assert.NoError(t, b.Decode(defaultChannelNumberRange()))
 	assert.True(t, b.Equal(chanData))
 	assert.True(t, IsChannelData(b.Raw) && IsChannelData(chanData.Raw))
 }
@@ -124,7 +124,7 @@ func TestChannelData_Decode(t *testing.T) {
 		m := &ChannelData{
 			Raw: tc.buf,
 		}
-		assert.ErrorIs(t, m.Decode(), tc.err)
+		assert.ErrorIs(t, m.Decode(defaultChannelNumberRange()), tc.err)
 	}
 }
 
@@ -138,7 +138,7 @@ func TestChannelData_Reset(t *testing.T) {
 	copy(buf, d.Raw)
 	d.Reset()
 	d.Raw = buf
-	assert.NoError(t, d.Decode())
+	assert.NoError(t, d.Decode(defaultChannelNumberRange()))
 }
 
 func TestIsChannelData(t *testing.T) {
@@ -155,11 +155,23 @@ func TestIsChannelData(t *testing.T) {
 			buf:  []byte{1, 2, 3, 4},
 		},
 		{
-			name: "zeroes",
-			buf:  []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			name:  "length exceeds buffer",
+			buf:   []byte{0x40, 0x00, 0x00, 0x08, 1, 2, 3, 4},
+			value: false,
+		},
+		{
+			name:  "channel number inside RFC 5766 range",
+			buf:   []byte{0x40, 0x00, 0x00, 0x04, 1, 2, 3, 4},
+			value: true,
+		},
+		{
+			// Ranges outside of the specifications must still be recognized as ChannelData.
+			name:  "channel number outside RFC 5766 range",
+			buf:   []byte{0x80, 0x00, 0x00, 0x04, 1, 2, 3, 4},
+			value: true,
 		},
 	} {
-		assert.Equal(t, tc.value, IsChannelData(tc.buf))
+		assert.Equal(t, tc.value, IsChannelData(tc.buf), tc.name)
 	}
 }
 
@@ -197,7 +209,7 @@ func BenchmarkChannelData_Decode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		d.Reset()
 		d.Raw = buf
-		assert.NoError(b, d.Decode())
+		assert.NoError(b, d.Decode(defaultChannelNumberRange()))
 	}
 }
 
@@ -220,7 +232,7 @@ func TestChromeChannelData(t *testing.T) {
 	for i, packet := range data {
 		chanData := new(ChannelData)
 		chanData.Raw = packet
-		assert.NoError(t, chanData.Decode(), "Packet %d errored", i)
+		assert.NoError(t, chanData.Decode(defaultChannelNumberRange()), "Packet %d errored", i)
 
 		encoded := &ChannelData{
 			Data:   chanData.Data,
@@ -229,7 +241,7 @@ func TestChromeChannelData(t *testing.T) {
 		encoded.Encode()
 		decoded := new(ChannelData)
 		decoded.Raw = encoded.Raw
-		assert.NoError(t, decoded.Decode())
+		assert.NoError(t, decoded.Decode(defaultChannelNumberRange()))
 		assert.True(t, decoded.Equal(chanData))
 
 		messages = append(messages, chanData)

@@ -88,7 +88,12 @@ func TestChannelNumber(t *testing.T) {
 	})
 }
 
-func TestChannelNumber_Valid(t *testing.T) {
+func defaultChannelNumberRange() ChannelNumberRange {
+	return ChannelNumberRange{MinChannelNumber, MaxChannelNumber}
+}
+
+func TestChannelNumberRange_Contains(t *testing.T) {
+	rng := defaultChannelNumberRange()
 	for _, tc := range []struct {
 		n     ChannelNumber
 		value bool
@@ -99,7 +104,7 @@ func TestChannelNumber_Valid(t *testing.T) {
 		{MaxChannelNumber, true},
 		{MaxChannelNumber + 1, false},
 	} {
-		v := tc.n.Valid()
+		v := rng.Contains(tc.n)
 		assert.Equalf(t, tc.value, v, "unexpected: (%s) %v != %v", tc.n.String(), tc.value, v)
 	}
 }

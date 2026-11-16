@@ -7,33 +7,42 @@ import (
 	"net"
 	"testing"
 
+	"github.com/pion/turn/v6/internal/proto"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBindingManager(t *testing.T) {
+	channelNumberRange := proto.ChannelNumberRange{Min: 0x4000, Max: 0x7FFF}
+
 	t.Run("number assignment", func(t *testing.T) {
-		bm := newBindingManager()
-		var chanNum uint16
-		for i := range uint16(10) {
-			chanNum = bm.assignChannelNumber()
-			assert.Equal(t, minChannelNumber+i, chanNum, "should match")
+		tests := []struct {
+			name string
+			rng  proto.ChannelNumberRange
+		}{
+			{"default range", channelNumberRange},
+			{"narrow range from default min", proto.ChannelNumberRange{Min: 0x4000, Max: 0x4002}},
+			{"range not starting at default min", proto.ChannelNumberRange{Min: 0x4100, Max: 0x4103}},
+			{"single channel", proto.ChannelNumberRange{Min: 0x4200, Max: 0x4200}},
 		}
 
-		bm.next = uint16(0x7ff0)
-		for i := range uint16(16) {
-			chanNum = bm.assignChannelNumber()
-			assert.Equal(t, 0x7ff0+i, chanNum, "should match")
-		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				bm := newBindingManager(tt.rng)
+				size := int(tt.rng.Max-tt.rng.Min) + 1
 
-		// Back to min
-		chanNum = bm.assignChannelNumber()
-		assert.Equal(t, minChannelNumber, chanNum, "should match")
+				// Check wraparound over two full cycles.
+				for i := range 2 * size {
+					want := uint16(tt.rng.Min) + uint16(i%size) // nolint:gosec // G115
+					assert.Equal(t, want, bm.assignChannelNumber(), "should match")
+				}
+			})
+		}
 	})
 
 	t.Run("method test", func(t *testing.T) {
 		lo := net.IPv4(127, 0, 0, 1)
 		count := 100
-		bm := newBindingManager()
+		bm := newBindingManager(channelNumberRange)
 		for i := range count {
 			addr := &net.UDPAddr{IP: lo, Port: 10000 + i}
 			b0 := bm.create(addr)
@@ -61,7 +70,7 @@ func TestBindingManager(t *testing.T) {
 			if i%2 == 0 {
 				assert.True(t, bm.deleteByAddr(addr), "should return true")
 			} else {
-				assert.True(t, bm.deleteByNumber(minChannelNumber+uint16(i)), "should return true") // nolint:gosec // G115
+				assert.True(t, bm.deleteByNumber(uint16(channelNumberRange.Min)+uint16(i)), "should return true") // nolint:gosec // G115
 			}
 		}
 
@@ -72,7 +81,7 @@ func TestBindingManager(t *testing.T) {
 
 	t.Run("failure test", func(t *testing.T) {
 		addr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 7777}
-		m := newBindingManager()
+		m := newBindingManager(channelNumberRange)
 		var ok bool
 		_, ok = m.findByAddr(addr)
 		assert.False(t, ok, "should fail")

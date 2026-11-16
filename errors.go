@@ -15,6 +15,7 @@ var (
 	errMaxRetriesExceeded            = errors.New("turn: max retries exceeded")
 	errMaxPortNotZero                = errors.New("turn: MaxPort must be not 0")
 	errMinPortNotZero                = errors.New("turn: MaxPort must be not 0")
+	errInvalidChannelNumberRange     = errors.New("turn: ChannelNumberRange must satisfy 0x4000 <= Min <= Max")
 	errNilConn                       = errors.New("turn: conn cannot not be nil")
 	errAlreadyListening              = errors.New("turn: already listening")
 	errFailedToClose                 = errors.New("turn: Server failed to close")

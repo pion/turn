@@ -49,7 +49,9 @@ func consumeSingleTURNFrame(b []byte) (int, error) {
 	switch {
 	case stun.IsMessage(b):
 		datagramSize = uint32(binary.BigEndian.Uint16(b[2:4])) + stunHeaderSize
-	case ChannelNumber(binary.BigEndian.Uint16(b[0:2])).Valid():
+	// Keep channel numbers outside STUN's message-type space.
+	// Decode enforces the configured range after framing.
+	case ChannelNumber(binary.BigEndian.Uint16(b[:2])) >= MinChannelNumber:
 		dataLen := uint32(binary.BigEndian.Uint16(b[channelDataNumberSize:channelDataHeaderSize]))
 		// Round up to the nearest multiple of the 4-byte padding.
 		paddedDataLen := (dataLen + channelDataPadding - 1) &^ (channelDataPadding - 1)

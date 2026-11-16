@@ -100,8 +100,11 @@ func (c *ChannelData) WriteHeader() {
 // to actual data length.
 var ErrBadChannelDataLength = errors.New("channelData length != len(Data)")
 
+// ErrInvalidChannelNumber means that the channel number is outside the configured range.
+var ErrInvalidChannelNumber = errors.New("invalid channel number")
+
 // Decode decodes The ChannelData Message from Raw.
-func (c *ChannelData) Decode() error {
+func (c *ChannelData) Decode(channelNumberRange ChannelNumberRange) error {
 	buf := c.Raw
 	if len(buf) < channelDataHeaderSize {
 		return io.ErrUnexpectedEOF
@@ -111,7 +114,7 @@ func (c *ChannelData) Decode() error {
 	l := binary.BigEndian.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])
 	c.Data = buf[channelDataHeaderSize:]
 	c.Length = int(l)
-	if !c.Number.Valid() {
+	if !channelNumberRange.Contains(c.Number) {
 		return ErrInvalidChannelNumber
 	}
 	if int(l) < len(c.Data) {
@@ -130,18 +133,14 @@ const (
 	channelDataHeaderSize = channelDataLengthSize + channelDataNumberSize
 )
 
-// IsChannelData returns true if buf looks like the ChannelData Message.
+// IsChannelData returns true if buf is shaped like a ChannelData message: a 4-byte header
+// whose length field fits in the buffer. The channel number is deliberately not checked, so
+// callers can use any configured channel number range; Decode enforces that range.
+// A STUN message also has this shape, so callers must rule out STUN (stun.IsMessage) first.
 func IsChannelData(buf []byte) bool {
 	if len(buf) < channelDataHeaderSize {
 		return false
 	}
 
-	if int(binary.BigEndian.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])) > len(buf[channelDataHeaderSize:]) {
-		return false
-	}
-
-	// Quick check for channel number.
-	num := binary.BigEndian.Uint16(buf[0:channelNumberSize])
-
-	return isChannelNumberValid(num)
+	return int(binary.BigEndian.Uint16(buf[channelDataNumberSize:channelDataHeaderSize])) <= len(buf[channelDataHeaderSize:])
 }

@@ -42,13 +42,15 @@ type Request struct {
 	PermissionTimeout   time.Duration
 	AllocationLifetime  time.Duration
 	StrictAddressFamily bool
+	ChannelNumberRange  proto.ChannelNumberRange
 }
 
 // HandleRequest processes the give Request.
 func HandleRequest(r Request) error {
 	r.Log.Debugf("Received %d bytes of udp from %s on %s", len(r.Buff), r.SrcAddr, r.Conn.LocalAddr())
 
-	if proto.IsChannelData(r.Buff) {
+	// IsChannelData does not look at the channel number, so a STUN header would match it too.
+	if !stun.IsMessage(r.Buff) && proto.IsChannelData(r.Buff) {
 		return handleDataPacket(r)
 	}
 
@@ -58,7 +60,7 @@ func HandleRequest(r Request) error {
 func handleDataPacket(req Request) error {
 	req.Log.Debugf("Received DataPacket from %s", req.SrcAddr.String())
 	c := proto.ChannelData{Raw: req.Buff}
-	if err := c.Decode(); err != nil {
+	if err := c.Decode(req.ChannelNumberRange); err != nil {
 		return fmt.Errorf("%w: %v", errFailedToCreateChannelData, err) //nolint:errorlint
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/pion/logging"
 	"github.com/pion/turn/v6/internal/allocation"
 	"github.com/pion/turn/v6/internal/auth"
+	"github.com/pion/turn/v6/internal/proto"
 )
 
 // AllocateListenerConfig defines the parameters passed to the relay address allocator.
@@ -132,6 +133,34 @@ type EventHandler = allocation.EventHandler
 // rejected and a 486 (Allocation Quota Reached) error is returned to the user.
 type QuotaHandler func(username, realm string, srcAddr net.Addr) (ok bool)
 
+// ChannelNumberRange is a structure defining the possible values
+// that a channel number can take in a ChannelData packet (cf. RFC5766 section 11)
+// By default, this range goes from 0x4000 to 0x7FFF.
+// NB: RFC8656 defines this range to be 0x4000 to 0x4FFF.
+// Custom ranges must satisfy 0x4000 <= Min <= Max <= 0xFFFF.
+type ChannelNumberRange struct {
+	Min uint16
+	Max uint16
+}
+
+// validate checks that the range is nonempty and does not overlap STUN message types.
+func (c *ChannelNumberRange) validate() error {
+	if (c.Min != 0 && c.Min < uint16(proto.MinChannelNumber)) || c.Min > c.Max {
+		return fmt.Errorf("%w: [0x%X, 0x%X]", errInvalidChannelNumberRange, c.Min, c.Max)
+	}
+
+	return nil
+}
+
+// toProto converts the public ChannelNumberRange into the wire-decoding
+// representation consumed by the internal proto package.
+func (c *ChannelNumberRange) toProto() proto.ChannelNumberRange {
+	return proto.ChannelNumberRange{
+		Min: proto.ChannelNumber(c.Min),
+		Max: proto.ChannelNumber(c.Max),
+	}
+}
+
 // ServerConfig configures the Pion TURN Server.
 type ServerConfig struct {
 	// PacketConnConfigs and ListenerConfigs are a list of all the turn listeners
@@ -172,9 +201,16 @@ type ServerConfig struct {
 
 	// Sets the server inbound MTU(Maximum transmition unit). Defaults to 1600 bytes.
 	InboundMTU int
+
+	// Defines the channel number range that the server must use. Defaults to 0x4000-0x7FFF.
+	ChannelNumberRange ChannelNumberRange
 }
 
 func (s *ServerConfig) validate() error {
+	if err := s.ChannelNumberRange.validate(); err != nil {
+		return err
+	}
+
 	if len(s.PacketConnConfigs) == 0 && len(s.ListenerConfigs) == 0 {
 		return errNoAvailableConns
 	}

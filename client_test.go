@@ -1008,12 +1008,19 @@ func TestClientRelaySource(t *testing.T) {
 		indication := stun.MustBuild(stun.TransactionID, stun.NewType(stun.MethodData, stun.ClassIndication))
 		require.True(t, turnClient.isTURNServer(trusted))
 		for _, packet := range []struct {
-			data      []byte
-			wantError bool
-		}{{[]byte{0x40, 0, 0, 0}, false}, {indication.Raw, true}} {
+			data             []byte
+			untrustedHandled bool
+			wantError        bool
+		}{
+			// ChannelData-shaped packets from non-TURN sources are application data.
+			{[]byte{0x40, 0, 0, 0}, false, false},
+			// Out-of-range numbers are ChannelData-shaped too but should be rejected.
+			{[]byte{0x80, 0, 0, 0}, false, true},
+			{indication.Raw, true, true},
+		} {
 			for _, from := range []net.Addr{attacker, nil} {
 				handled, inboundErr := turnClient.HandleInbound(packet.data, from)
-				require.True(t, handled)
+				require.Equal(t, packet.untrustedHandled, handled)
 				require.NoError(t, inboundErr)
 			}
 			handled, inboundErr := turnClient.HandleInbound(packet.data, trusted)
@@ -1021,5 +1028,30 @@ func TestClientRelaySource(t *testing.T) {
 			require.Equal(t, packet.wantError, inboundErr != nil, "trusted relay packets reach the handler")
 		}
 		turnClient.Close()
+	}
+}
+
+func TestClientChannelNumberRangeEnforcement(t *testing.T) {
+	// 0x7FFF is within the default range but outside RFC 8656's range.
+	frame := []byte{0x7f, 0xff, 0, 4, 'D', 'A', 'T', 'A'}
+
+	conn, err := net.ListenPacket("udp4", "0.0.0.0:0") // nolint: noctx
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	for _, tt := range []struct {
+		name string
+		rng  ChannelNumberRange
+		err  error
+	}{
+		{"default", ChannelNumberRange{}, nil},
+		{"RFC8656", ChannelNumberRange{Min: 0x4000, Max: 0x4FFF}, proto.ErrInvalidChannelNumber},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(&ClientConfig{Conn: conn, ChannelNumberRange: tt.rng})
+			require.NoError(t, err)
+			err = client.handleChannelData(frame)
+			require.ErrorIs(t, err, tt.err)
+		})
 	}
 }

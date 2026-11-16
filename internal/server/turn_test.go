@@ -1019,6 +1019,12 @@ func TestHandleChannelBindRequest(t *testing.T) { // nolint:maintidx
 	staticKey, err := nonceHash.Generate()
 	assert.NoError(t, err)
 
+	// Enforce RFC 8656's narrower range.
+	channelNumberRange := proto.ChannelNumberRange{
+		Min: 0x4000,
+		Max: 0x4FFF,
+	}
+
 	req := Request{
 		AllocationManager:  allocationManager,
 		NonceHash:          nonceHash,
@@ -1027,6 +1033,7 @@ func TestHandleChannelBindRequest(t *testing.T) { // nolint:maintidx
 		Log:                logger,
 		ChannelBindTimeout: 10 * time.Minute,
 		PermissionTimeout:  5 * time.Minute,
+		ChannelNumberRange: channelNumberRange,
 		AuthHandler: func(*auth.RequestAttributes) (userID string, key []byte, ok bool) {
 			return testUser, []byte(staticKey), true
 		},
@@ -1117,6 +1124,60 @@ func TestHandleChannelBindRequest(t *testing.T) { // nolint:maintidx
 
 		err = handleChannelBindRequest(req, m)
 		assert.Error(t, err)
+	})
+
+	t.Run("ChannelNumberOutOfRange", func(t *testing.T) {
+		tests := []struct {
+			name string
+			ch   uint16
+		}{
+			{"below min", 0x3FFF},
+			{"above max", 0x5000},
+		}
+
+		peerIP := "192.168.4.1"
+		peerAddr := &net.UDPAddr{IP: net.ParseIP(peerIP), Port: 8080}
+		alloc := req.AllocationManager.GetAllocationForUserID(fiveTuple, testUser)
+		if !assert.NotNil(t, alloc) {
+			return
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				conn.Reset()
+
+				bindErr := handleChannelBindRequest(req, buildAuthMsg(tt.ch, peerIP, 8080))
+				assert.ErrorIs(t, bindErr, proto.ErrInvalidChannelNumber)
+				assertLastResponse(t, stun.ClassErrorResponse, stun.CodeBadRequest)
+
+				// The rejected request must not leave a binding behind.
+				assert.Nil(t, alloc.GetChannelByNumber(proto.ChannelNumber(tt.ch)))
+				assert.Nil(t, alloc.GetChannelByAddr(peerAddr))
+			})
+		}
+	})
+
+	t.Run("ChannelNumberRangeBoundariesAccepted", func(t *testing.T) {
+		alloc := req.AllocationManager.GetAllocationForUserID(fiveTuple, testUser)
+		if !assert.NotNil(t, alloc) {
+			return
+		}
+
+		tests := []struct {
+			ch     uint16
+			peerIP string
+		}{
+			{uint16(channelNumberRange.Min), "192.168.5.1"},
+			{uint16(channelNumberRange.Max), "192.168.5.2"},
+		}
+
+		for _, tt := range tests {
+			conn.Reset()
+
+			assert.NoError(t, handleChannelBindRequest(req, buildAuthMsg(tt.ch, tt.peerIP, 8080)), "channel 0x%X", tt.ch)
+			assertLastResponse(t, stun.ClassSuccessResponse, 0)
+			assert.NotNil(t, alloc.GetChannelByNumber(proto.ChannelNumber(tt.ch)), "channel 0x%X", tt.ch)
+		}
 	})
 
 	// Peer address family mismatch (IPv6 peer with IPv4 allocation)

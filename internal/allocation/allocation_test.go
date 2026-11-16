@@ -347,13 +347,19 @@ func TestPacketHandler(t *testing.T) {
 	_, _ = peerListener2.WriteTo([]byte(targetText2), relayAddrWithHost)
 	data = <-dataCh
 
+	channelNumberRange := proto.ChannelNumberRange{Min: proto.MinChannelNumber, Max: proto.MaxChannelNumber}
+
 	// Resolve channel data
 	assert.True(t, proto.IsChannelData(data), "should be channel data")
 
 	channelData := proto.ChannelData{
 		Raw: data,
 	}
-	assert.NoError(t, channelData.Decode(), fmt.Sprintf("channel data decode with error: %v", err))
+	assert.NoError(
+		t,
+		channelData.Decode(channelNumberRange),
+		fmt.Sprintf("channel data decode with error: %v", err),
+	)
 	assert.Equal(t, channelBind.Number, channelData.Number, "get channel data's number is invalid")
 	assert.Equal(t, targetText2, string(channelData.Data), "get data doesn't equal the target text.")
 
