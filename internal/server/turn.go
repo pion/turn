@@ -226,6 +226,11 @@ func handleAllocateRequest(req Request, stunMsg *stun.Message) error { //nolint:
 		requestedFamily,
 	)
 	if err != nil {
+		if onFailed := req.AllocationManager.EventHandler.OnAllocationFailed; onFailed != nil {
+			onFailed(fiveTuple.SrcAddr, fiveTuple.DstAddr, fiveTuple.Protocol.String(),
+				userID, realmAttr.String(), err)
+		}
+
 		return buildAndSendErr(req.Conn, req.SrcAddr, err, insufficientCapacityMsg...)
 	}
 
