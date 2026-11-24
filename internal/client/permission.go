@@ -19,9 +19,11 @@ const (
 )
 
 type permission struct {
-	addr  net.Addr
-	st    permState    // Thread-safe (atomic op)
-	mutex sync.RWMutex // Thread-safe
+	addr         net.Addr
+	st           permState    // Thread-safe (atomic op)
+	mutex        sync.RWMutex // Thread-safe
+	refusedUntil atomic.Int64 // Unix nanoseconds; thread-safe (atomic op)
+	refusal      error        // The server's refusal; guarded by mutex
 }
 
 func (p *permission) setState(state permState) {
@@ -67,6 +69,11 @@ func (m *permissionMap) addrs() []net.Addr {
 
 	addrs := []net.Addr{}
 	for _, p := range m.permMap {
+		// A refused permission is kept only to not request it again; one
+		// refused address would fail the refresh of all the others.
+		if p.state() != permStatePermitted && p.refusedUntil.Load() != 0 {
+			continue
+		}
 		addrs = append(addrs, p.addr)
 	}
 
