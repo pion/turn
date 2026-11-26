@@ -52,6 +52,10 @@ type allocation struct {
 	readTimer         *time.Timer           // Thread-safe
 	mutex             sync.RWMutex          // Thread-safe
 	log               logging.LeveledLogger // Read-only
+
+	// onPermRefreshFailure, when set, observes a permission refresh that kept
+	// failing after retries. Read-only after construction.
+	onPermRefreshFailure func(error)
 }
 
 // MappedAddr returns the client's address as the server saw it when it made the allocation, from
@@ -175,6 +179,9 @@ func (a *allocation) onRefreshTimers(id int) {
 		}
 		if err != nil {
 			a.log.Warnf("Failed to refresh permissions: %s", err)
+			if a.onPermRefreshFailure != nil {
+				a.onPermRefreshFailure(err)
+			}
 		}
 	}
 }
