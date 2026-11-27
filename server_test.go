@@ -1392,7 +1392,7 @@ func TestSTUNOnly(t *testing.T) {
 	assert.True(t, ok)
 
 	_, err = client.Allocate()
-	assert.ErrorContains(t, err, "all retransmissions failed")
+	assert.EqualError(t, err, "Allocate error response (error 400: )")
 
 	assert.NoError(t, conn.Close())
 }

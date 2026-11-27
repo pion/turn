@@ -74,7 +74,7 @@ func (t *Transaction) CheckIntegrity(msg *stun.Message) bool {
 	}
 	if !msg.Contains(stun.AttrMessageIntegrity) && msg.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
-		if code.GetFrom(msg) == nil && (code.Code == stun.CodeUnauthorized || code.Code == stun.CodeStaleNonce) {
+		if code.GetFrom(msg) == nil && allowsUnsignedError(code.Code) {
 			return true
 		}
 	}
@@ -82,6 +82,13 @@ func (t *Transaction) CheckIntegrity(msg *stun.Message) bool {
 	value, err := msg.Get(stun.AttrMessageIntegrity)
 
 	return err == nil && len(value) == 20 && t.integrity.Check(msg) == nil
+}
+
+func allowsUnsignedError(code stun.ErrorCode) bool {
+	return code == stun.CodeBadRequest ||
+		code == stun.CodeUnauthorized ||
+		code == stun.CodeAllocMismatch ||
+		code == stun.CodeStaleNonce
 }
 
 // StartRtxTimer starts the transaction timer.
